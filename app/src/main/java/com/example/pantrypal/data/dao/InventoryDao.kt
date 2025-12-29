@@ -1,4 +1,4 @@
-package com.example.kitchenlocal.data.dao
+package com.example.pantrypal.data.dao
 
 import androidx.room.Dao
 import androidx.room.Delete
@@ -6,8 +6,8 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
-import com.example.kitchenlocal.data.entity.InventoryEntity
-import com.example.kitchenlocal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.InventoryEntity
+import com.example.pantrypal.data.entity.ItemEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao

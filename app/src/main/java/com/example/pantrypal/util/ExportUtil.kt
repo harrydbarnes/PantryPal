@@ -1,6 +1,6 @@
-package com.example.kitchenlocal.util
+package com.example.pantrypal.util
 
-import com.example.kitchenlocal.data.repository.ExportData
+import com.example.pantrypal.data.repository.ExportData
 import com.google.gson.Gson
 import java.io.File
 import java.io.FileWriter

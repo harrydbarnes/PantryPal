@@ -1,4 +1,4 @@
-package com.example.kitchenlocal
+package com.example.pantrypal
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,13 +11,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.kitchenlocal.data.database.KitchenDatabase
-import com.example.kitchenlocal.data.repository.KitchenRepository
-import com.example.kitchenlocal.ui.theme.KitchenLocalTheme
-import com.example.kitchenlocal.viewmodel.MainViewModel
-import com.example.kitchenlocal.viewmodel.MainViewModelFactory
-import com.example.kitchenlocal.viewmodel.InventoryUiModel
-import com.example.kitchenlocal.data.entity.ConsumptionType
+import com.example.pantrypal.data.database.KitchenDatabase
+import com.example.pantrypal.data.repository.KitchenRepository
+import com.example.pantrypal.ui.theme.PantryPalTheme
+import com.example.pantrypal.viewmodel.MainViewModel
+import com.example.pantrypal.viewmodel.MainViewModelFactory
+import com.example.pantrypal.viewmodel.InventoryUiModel
+import com.example.pantrypal.data.entity.ConsumptionType
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
         val viewModelFactory = MainViewModelFactory(repository)
 
         setContent {
-            KitchenLocalTheme {
+            PantryPalTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -51,7 +51,7 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
     Scaffold(
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(title = { Text("KitchenLocal") })
+            TopAppBar(title = { Text("PantryPal") })
         },
         floatingActionButton = {
             FloatingActionButton(onClick = {

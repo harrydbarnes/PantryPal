@@ -1,10 +1,10 @@
-package com.example.kitchenlocal.data.dao
+package com.example.pantrypal.data.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
-import com.example.kitchenlocal.data.entity.ConsumptionEntity
-import com.example.kitchenlocal.data.entity.ConsumptionType
+import com.example.pantrypal.data.entity.ConsumptionEntity
+import com.example.pantrypal.data.entity.ConsumptionType
 import kotlinx.coroutines.flow.Flow
 
 @Dao

@@ -1,12 +1,12 @@
-package com.example.kitchenlocal.data.repository
+package com.example.pantrypal.data.repository
 
-import com.example.kitchenlocal.data.dao.ConsumptionDao
-import com.example.kitchenlocal.data.dao.InventoryDao
-import com.example.kitchenlocal.data.dao.ItemDao
-import com.example.kitchenlocal.data.entity.ConsumptionEntity
-import com.example.kitchenlocal.data.entity.ConsumptionType
-import com.example.kitchenlocal.data.entity.InventoryEntity
-import com.example.kitchenlocal.data.entity.ItemEntity
+import com.example.pantrypal.data.dao.ConsumptionDao
+import com.example.pantrypal.data.dao.InventoryDao
+import com.example.pantrypal.data.dao.ItemDao
+import com.example.pantrypal.data.entity.ConsumptionEntity
+import com.example.pantrypal.data.entity.ConsumptionType
+import com.example.pantrypal.data.entity.InventoryEntity
+import com.example.pantrypal.data.entity.ItemEntity
 import kotlinx.coroutines.flow.Flow
 
 class KitchenRepository(

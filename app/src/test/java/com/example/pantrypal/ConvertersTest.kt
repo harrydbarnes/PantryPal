@@ -1,7 +1,7 @@
-package com.example.kitchenlocal
+package com.example.pantrypal
 
-import com.example.kitchenlocal.data.converter.Converters
-import com.example.kitchenlocal.data.entity.ConsumptionType
+import com.example.pantrypal.data.converter.Converters
+import com.example.pantrypal.data.entity.ConsumptionType
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

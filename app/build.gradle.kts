@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.kitchenlocal"
+    namespace = "com.example.pantrypal"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.kitchenlocal"
+        applicationId = "com.example.pantrypal"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

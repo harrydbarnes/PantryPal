@@ -1,14 +1,14 @@
-package com.example.kitchenlocal.viewmodel
+package com.example.pantrypal.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.kitchenlocal.data.dao.InventoryWithItemMap
-import com.example.kitchenlocal.data.entity.ConsumptionEntity
-import com.example.kitchenlocal.data.entity.ConsumptionType
-import com.example.kitchenlocal.data.entity.InventoryEntity
-import com.example.kitchenlocal.data.entity.ItemEntity
-import com.example.kitchenlocal.data.repository.KitchenRepository
+import com.example.pantrypal.data.dao.InventoryWithItemMap
+import com.example.pantrypal.data.entity.ConsumptionEntity
+import com.example.pantrypal.data.entity.ConsumptionType
+import com.example.pantrypal.data.entity.InventoryEntity
+import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.repository.KitchenRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map

@@ -1,4 +1,4 @@
-package com.example.kitchenlocal.ui.theme
+package com.example.pantrypal.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -19,7 +19,7 @@ private val DarkColorScheme = darkColorScheme()
 private val LightColorScheme = lightColorScheme()
 
 @Composable
-fun KitchenLocalTheme(
+fun PantryPalTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit

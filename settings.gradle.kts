@@ -19,5 +19,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "KitchenLocal"
+rootProject.name = "PantryPal"
 include(":app")

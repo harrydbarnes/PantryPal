@@ -1,4 +1,4 @@
-package com.example.kitchenlocal.data.entity
+package com.example.pantrypal.data.entity
 
 import androidx.room.Entity
 import androidx.room.ForeignKey

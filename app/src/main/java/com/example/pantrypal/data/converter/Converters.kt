@@ -1,7 +1,7 @@
-package com.example.kitchenlocal.data.converter
+package com.example.pantrypal.data.converter
 
 import androidx.room.TypeConverter
-import com.example.kitchenlocal.data.entity.ConsumptionType
+import com.example.pantrypal.data.entity.ConsumptionType
 
 class Converters {
     @TypeConverter

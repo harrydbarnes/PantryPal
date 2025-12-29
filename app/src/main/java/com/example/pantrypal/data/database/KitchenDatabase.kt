@@ -1,17 +1,17 @@
-package com.example.kitchenlocal.data.database
+package com.example.pantrypal.data.database
 
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.example.kitchenlocal.data.dao.ConsumptionDao
-import com.example.kitchenlocal.data.dao.InventoryDao
-import com.example.kitchenlocal.data.dao.ItemDao
-import com.example.kitchenlocal.data.entity.ConsumptionEntity
-import com.example.kitchenlocal.data.entity.InventoryEntity
-import com.example.kitchenlocal.data.entity.ItemEntity
+import com.example.pantrypal.data.dao.ConsumptionDao
+import com.example.pantrypal.data.dao.InventoryDao
+import com.example.pantrypal.data.dao.ItemDao
+import com.example.pantrypal.data.entity.ConsumptionEntity
+import com.example.pantrypal.data.entity.InventoryEntity
+import com.example.pantrypal.data.entity.ItemEntity
 import androidx.room.TypeConverters
-import com.example.kitchenlocal.data.converter.Converters
+import com.example.pantrypal.data.converter.Converters
 
 @Database(
     entities = [ItemEntity::class, InventoryEntity::class, ConsumptionEntity::class],
@@ -33,7 +33,7 @@ abstract class KitchenDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     KitchenDatabase::class.java,
-                    "kitchen_local_db"
+                    "pantry_pal_db"
                 ).build()
                 INSTANCE = instance
                 instance

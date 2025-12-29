@@ -1,7 +1,7 @@
-package com.example.kitchenlocal
+package com.example.pantrypal
 
-import com.example.kitchenlocal.data.dao.InventoryWithItemMap
-import com.example.kitchenlocal.viewmodel.toUiModel
+import com.example.pantrypal.data.dao.InventoryWithItemMap
+import com.example.pantrypal.viewmodel.toUiModel
 import org.junit.Test
 import org.junit.Assert.*
 
