@@ -47,6 +47,10 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            keepDebugSymbols += "**/libbarhopper_v3.so"
+            keepDebugSymbols += "**/libimage_processing_util_jni.so"
+        }
     }
 }
 
