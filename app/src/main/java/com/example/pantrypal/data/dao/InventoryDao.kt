@@ -25,6 +25,12 @@ interface InventoryDao {
 
     @Query("SELECT * FROM inventory")
     suspend fun getAllInventorySnapshot(): List<InventoryEntity>
+
+    @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE inventory.expirationDate IS NOT NULL AND inventory.expirationDate > :currentTime ORDER BY inventory.expirationDate ASC")
+    fun getExpiringItems(currentTime: Long): Flow<List<InventoryWithItemMap>>
+
+    @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE items.barcode = :barcode")
+    suspend fun getInventoryByBarcode(barcode: String): List<InventoryWithItemMap>
 }
 
 // Helper class for the join query

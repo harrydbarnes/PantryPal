@@ -25,6 +25,10 @@ class KitchenRepository(
     // Note: This matches the raw query return type in DAO
     val currentInventory = inventoryDao.getInventoryJoined()
 
+    fun getExpiringItems(currentTime: Long) = inventoryDao.getExpiringItems(currentTime)
+
+    suspend fun getInventoryByBarcode(barcode: String) = inventoryDao.getInventoryByBarcode(barcode)
+
     suspend fun addInventory(inventory: InventoryEntity) = inventoryDao.insertInventory(inventory)
     suspend fun removeInventory(inventory: InventoryEntity) = inventoryDao.deleteInventory(inventory)
 
