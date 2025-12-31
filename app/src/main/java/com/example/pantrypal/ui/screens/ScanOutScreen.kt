@@ -32,7 +32,7 @@ fun ScanOutScreen(
 
     // Refactored to use java.time API
     val dateFormat = remember { DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.SHORT) }
-    val notFoundMessage = stringResource(R.string.item_not_found_in_inventory)
+    val notFoundMessage by rememberUpdatedState(stringResource(R.string.item_not_found_in_inventory))
 
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
