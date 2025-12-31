@@ -5,10 +5,10 @@ plugins {
 }
 
 import java.io.ByteArrayOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.TimeZone
 
 fun getGitCommitHash(): String {
     return try {
@@ -24,10 +24,8 @@ fun getGitCommitHash(): String {
 }
 
 fun getBuildDate(): String {
-    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
-    }
-    return dateFormat.format(Date())
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+    return LocalDate.now(ZoneOffset.UTC).format(formatter)
 }
 
 android {

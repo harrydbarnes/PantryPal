@@ -25,6 +25,9 @@ fun AddScreen(
     var name by remember { mutableStateOf("") }
     var qtyText by remember { mutableStateOf("1.0") }
     var unit by remember { mutableStateOf("pcs") }
+    var category by remember { mutableStateOf("General") }
+    var isVegetarian by remember { mutableStateOf(false) }
+    var isGlutenFree by remember { mutableStateOf(false) }
     var expirationDate by remember { mutableStateOf<LocalDate?>(null) }
 
     // Form scrolling
@@ -77,6 +80,16 @@ fun AddScreen(
             value = name,
             onValueChange = { name = it },
             label = { Text("Product Name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = category,
+            onValueChange = { category = it },
+            label = { Text("Category") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -137,6 +150,27 @@ fun AddScreen(
             )
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Flags
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Vegetarian")
+            Switch(checked = isVegetarian, onCheckedChange = { isVegetarian = it })
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Gluten Free")
+            Switch(checked = isGlutenFree, onCheckedChange = { isGlutenFree = it })
+        }
+
         Spacer(modifier = Modifier.height(32.dp))
 
         Row(
@@ -156,7 +190,7 @@ fun AddScreen(
             Button(
                 onClick = {
                     val expDateMillis = expirationDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
-                    onAdd(name, qtyText.toDoubleOrNull() ?: 1.0, unit, "General", false, false, expDateMillis)
+                    onAdd(name, qtyText.toDoubleOrNull() ?: 1.0, unit, category, isVegetarian, isGlutenFree, expDateMillis)
                 },
                 modifier = Modifier.weight(1f)
             ) {
