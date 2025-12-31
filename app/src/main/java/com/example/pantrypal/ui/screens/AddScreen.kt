@@ -1,10 +1,11 @@
 package com.example.pantrypal.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -134,21 +135,18 @@ fun AddScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Expiration Date
-        Box(modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) ?: "",
-                onValueChange = {}, // Read only
-                label = { Text("Expiration Date (Optional)") },
-                modifier = Modifier.fillMaxWidth(),
-                readOnly = true
-            )
-            // Mask the click to the box to ensure it triggers
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clickable { showDatePicker = true }
-            )
-        }
+        OutlinedTextField(
+            value = expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) ?: "",
+            onValueChange = {}, // Read only
+            label = { Text("Expiration Date (Optional)") },
+            modifier = Modifier.fillMaxWidth(),
+            readOnly = true,
+            trailingIcon = {
+                IconButton(onClick = { showDatePicker = true }) {
+                    Icon(Icons.Default.DateRange, contentDescription = "Select Date")
+                }
+            }
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -192,7 +190,8 @@ fun AddScreen(
                     val expDateMillis = expirationDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
                     onAdd(name, qtyText.toDoubleOrNull() ?: 1.0, unit, category, isVegetarian, isGlutenFree, expDateMillis)
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = name.isNotBlank()
             ) {
                 Text("Save Item")
             }

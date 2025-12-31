@@ -25,7 +25,7 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun PastItemsScreen(viewModel: MainViewModel) {
-    val pastItems by viewModel.pastItemsState.collectAsState(initial = emptyList())
+    val pastItems by viewModel.pastItemsState.collectAsState()
     val dateFormat = remember { DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.SHORT) }
 
     Column(modifier = Modifier.padding(16.dp)) {
