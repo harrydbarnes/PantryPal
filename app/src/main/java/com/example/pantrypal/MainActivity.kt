@@ -37,6 +37,9 @@ import com.example.pantrypal.ui.BarcodeScanner
 import kotlinx.coroutines.launch
 import com.example.pantrypal.data.dao.InventoryWithItemMap
 import com.example.pantrypal.data.entity.ItemEntity
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.Date
 
 sealed class AppScreen {
     data object Dashboard : AppScreen()
@@ -75,6 +78,9 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
     var showScanIn by remember { mutableStateOf(false) }
     var showScanOut by remember { mutableStateOf(false) }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     // Permission handling
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -93,10 +99,21 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
         }
     )
 
+    fun checkCameraPermission(onGranted: () -> Unit) {
+        if (hasCameraPermission) {
+            onGranted()
+        } else {
+            launcher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     Scaffold(
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(title = { Text("PantryPal") })
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
         },
         bottomBar = {
             NavigationBar {
@@ -117,11 +134,7 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                     label = { Text("Scan In") },
                     selected = showScanIn,
                     onClick = {
-                        if (hasCameraPermission) {
-                            showScanIn = true
-                        } else {
-                            launcher.launch(Manifest.permission.CAMERA)
-                        }
+                        checkCameraPermission { showScanIn = true }
                     }
                 )
                  NavigationBarItem(
@@ -129,11 +142,7 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                     label = { Text("Scan Out") },
                     selected = showScanOut,
                     onClick = {
-                        if (hasCameraPermission) {
-                            showScanOut = true
-                        } else {
-                            launcher.launch(Manifest.permission.CAMERA)
-                        }
+                        checkCameraPermission { showScanOut = true }
                     }
                 )
             }
@@ -157,6 +166,9 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                 showScanOut -> {
                      ScanOutScreen(
                         onDismiss = { showScanOut = false },
+                        onShowSnackbar = { msg ->
+                            scope.launch { snackbarHostState.showSnackbar(msg) }
+                        },
                         viewModel = viewModel
                     )
                 }
@@ -297,10 +309,16 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
+fun ScanOutScreen(
+    onDismiss: () -> Unit,
+    onShowSnackbar: (String) -> Unit,
+    viewModel: MainViewModel
+) {
     var detectedBarcode by remember { mutableStateOf<String?>(null) }
     var foundInventory by remember { mutableStateOf<List<InventoryWithItemMap>?>(null) }
-    val context = LocalContext.current
+
+    // Optimization: Hoist SimpleDateFormat
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
 
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
@@ -308,7 +326,7 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
              if (inv.isNotEmpty()) {
                  foundInventory = inv
              } else {
-                 android.widget.Toast.makeText(context, "Item not found in inventory", android.widget.Toast.LENGTH_SHORT).show()
+                 onShowSnackbar("Item not found in inventory")
                  detectedBarcode = null
              }
         }
@@ -336,7 +354,7 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
                              Column(modifier = Modifier.padding(12.dp)) {
                                  Text("Qty: ${item.quantity} ${item.unit}")
                                  item.expirationDate?.let {
-                                     Text("Exp: ${java.text.SimpleDateFormat("dd/MM/yyyy").format(java.util.Date(it))}", style = MaterialTheme.typography.bodySmall)
+                                     Text("Exp: ${dateFormat.format(Date(it))}", style = MaterialTheme.typography.bodySmall)
                                  }
                                  Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                      Button(
