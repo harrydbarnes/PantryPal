@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">PantryPal</string>
+    <string name="item_not_found_in_inventory">Item not found in inventory</string>
 </resources>
