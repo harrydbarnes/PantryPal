@@ -191,7 +191,7 @@ fun AddScreen(
                     onAdd(name, qtyText.toDoubleOrNull() ?: 1.0, unit, category, isVegetarian, isGlutenFree, expDateMillis)
                 },
                 modifier = Modifier.weight(1f),
-                enabled = name.isNotBlank()
+                enabled = name.isNotBlank() && (qtyText.toDoubleOrNull() ?: 0.0) > 0.0
             ) {
                 Text("Save Item")
             }
