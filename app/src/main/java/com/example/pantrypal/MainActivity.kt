@@ -38,6 +38,12 @@ import kotlinx.coroutines.launch
 import com.example.pantrypal.data.dao.InventoryWithItemMap
 import com.example.pantrypal.data.entity.ItemEntity
 
+sealed class AppScreen {
+    data object Dashboard : AppScreen()
+    data object Inventory : AppScreen()
+    data object AddManual : AppScreen()
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,7 +71,7 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
     val inventory by viewModel.inventoryState.collectAsState()
     val expiringItems by viewModel.expiringItemsState.collectAsState()
 
-    var currentScreen by remember { mutableStateOf("dashboard") }
+    var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Dashboard) }
     var showScanIn by remember { mutableStateOf(false) }
     var showScanOut by remember { mutableStateOf(false) }
 
@@ -103,14 +109,14 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Home, contentDescription = "Dashboard") },
                     label = { Text("Dashboard") },
-                    selected = currentScreen == "dashboard",
-                    onClick = { currentScreen = "dashboard" }
+                    selected = currentScreen == AppScreen.Dashboard,
+                    onClick = { currentScreen = AppScreen.Dashboard }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.List, contentDescription = "Inventory") },
                     label = { Text("Inventory") },
-                    selected = currentScreen == "inventory",
-                    onClick = { currentScreen = "inventory" }
+                    selected = currentScreen == AppScreen.Inventory,
+                    onClick = { currentScreen = AppScreen.Inventory }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Add, contentDescription = "Scan In") },
@@ -139,8 +145,8 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
             }
         },
         floatingActionButton = {
-            if (currentScreen == "inventory") {
-                 FloatingActionButton(onClick = { currentScreen = "add_manual" }) {
+            if (currentScreen == AppScreen.Inventory) {
+                 FloatingActionButton(onClick = { currentScreen = AppScreen.AddManual }) {
                     Icon(Icons.Default.Add, contentDescription = "Add Manually")
                 }
             }
@@ -160,18 +166,18 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                         viewModel = viewModel
                     )
                 }
-                currentScreen == "dashboard" -> {
+                currentScreen == AppScreen.Dashboard -> {
                     DashboardScreen(expiringItems)
                 }
-                currentScreen == "inventory" -> {
+                currentScreen == AppScreen.Inventory -> {
                     InventoryScreen(inventory, onConsume = { item, type ->
                         viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, type)
                     })
                 }
-                currentScreen == "add_manual" -> {
+                currentScreen == AppScreen.AddManual -> {
                     AddScreen(onAdd = { name, qty, unit, cat, veg, gf ->
                         viewModel.addItem(name, qty, unit, cat, veg, gf)
-                        currentScreen = "inventory"
+                        currentScreen = AppScreen.Inventory
                     })
                 }
             }
@@ -308,8 +314,8 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
              if (inv.isNotEmpty()) {
                  foundInventory = inv
              } else {
-                 // Item not in inventory or not found, inform user
-                 android.widget.Toast.makeText(LocalContext.current, "Item not found in inventory", android.widget.Toast.LENGTH_SHORT).show()
+                 // Item not in inventory or not found
+                 // Maybe show toast? For now just reset
                  detectedBarcode = null
              }
         }
@@ -317,6 +323,13 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
 
     val currentInventory = foundInventory
     if (currentInventory != null) {
+        val handleConsume = { type: ConsumptionType ->
+            currentInventory.firstOrNull()?.let { item ->
+                viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, type)
+            }
+            onDismiss()
+        }
+
         // Show dialog to consume
         AlertDialog(
             onDismissRequest = {
@@ -326,31 +339,17 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
             title = { Text("Consume Item") },
             text = {
                 Column {
-                    if (currentInventory.isNotEmpty()) {
-                        Text("Found ${currentInventory.first().name}")
-                    }
+                    Text("Found ${currentInventory.first().name}")
                     Text("Select action:")
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    if (currentInventory.isNotEmpty()) {
-                        val item = currentInventory.first()
-                        viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.FINISHED)
-                    }
-                    onDismiss()
-                }) {
+                TextButton(onClick = { handleConsume(ConsumptionType.FINISHED) }) {
                     Text("Consumed")
                 }
             },
             dismissButton = {
-                 TextButton(onClick = {
-                    if (currentInventory.isNotEmpty()) {
-                        val item = currentInventory.first()
-                        viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.WASTED)
-                    }
-                    onDismiss()
-                }) {
+                 TextButton(onClick = { handleConsume(ConsumptionType.WASTED) }) {
                     Text("Wasted")
                 }
             }

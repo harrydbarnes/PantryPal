@@ -54,10 +54,6 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
 
     fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean, barcode: String? = null, expirationDate: Long? = null) {
         viewModelScope.launch {
-            // Check if item exists (simple check by name for now, in real app, better check)
-            // For now, assume new item creation every time or user selects existing.
-            // Simplified: Create Item then Inventory
-
             var itemId: Long = -1
 
             if (!barcode.isNullOrEmpty()) {

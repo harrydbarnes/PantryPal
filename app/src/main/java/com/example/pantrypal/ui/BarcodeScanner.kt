@@ -98,8 +98,8 @@ private fun processImageProxy(
                     }
                 }
             }
-            .addOnFailureListener { e ->
-                Log.e("BarcodeScanner", "Barcode scanning failed", e)
+            .addOnFailureListener {
+                // Handle failure
             }
             .addOnCompleteListener {
                 imageProxy.close()
