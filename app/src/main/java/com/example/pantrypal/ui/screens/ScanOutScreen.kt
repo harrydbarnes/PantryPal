@@ -29,7 +29,7 @@ fun ScanOutScreen(
     var foundInventory by remember { mutableStateOf<List<InventoryWithItemMap>?>(null) }
 
     // Refactored to use java.time API
-    val dateFormat = remember { DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault()) }
+    val dateFormat = remember { DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.SHORT) }
 
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
