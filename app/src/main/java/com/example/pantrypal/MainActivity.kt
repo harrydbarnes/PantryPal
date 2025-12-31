@@ -37,9 +37,7 @@ import com.example.pantrypal.ui.BarcodeScanner
 import kotlinx.coroutines.launch
 import com.example.pantrypal.data.dao.InventoryWithItemMap
 import com.example.pantrypal.data.entity.ItemEntity
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.Date
+import com.example.pantrypal.ui.screens.ScanOutScreen
 
 sealed class AppScreen {
     data object Dashboard : AppScreen()
@@ -292,97 +290,6 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         }
     } else {
         Box(modifier = Modifier.fillMaxSize()) {
-            BarcodeScanner(onBarcodeDetected = { code ->
-                if (detectedBarcode == null) {
-                    detectedBarcode = code
-                }
-            })
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
-            ) {
-                Text("Cancel")
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ScanOutScreen(
-    onDismiss: () -> Unit,
-    onShowSnackbar: (String) -> Unit,
-    viewModel: MainViewModel
-) {
-    var detectedBarcode by remember { mutableStateOf<String?>(null) }
-    var foundInventory by remember { mutableStateOf<List<InventoryWithItemMap>?>(null) }
-
-    // Optimization: Hoist SimpleDateFormat
-    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
-
-    LaunchedEffect(detectedBarcode) {
-        detectedBarcode?.let { code ->
-             val inv = viewModel.getInventoryByBarcode(code)
-             if (inv.isNotEmpty()) {
-                 foundInventory = inv
-             } else {
-                 onShowSnackbar("Item not found in inventory")
-                 detectedBarcode = null
-             }
-        }
-    }
-
-    val currentInventory = foundInventory
-    if (currentInventory != null) {
-        ModalBottomSheet(onDismissRequest = {
-             foundInventory = null
-             detectedBarcode = null
-        }) {
-             Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                 Text("Found: ${currentInventory.firstOrNull()?.name ?: "Unknown"}", style = MaterialTheme.typography.headlineSmall)
-                 Spacer(modifier = Modifier.height(16.dp))
-
-                 Text("Select batch to consume:", style = MaterialTheme.typography.titleSmall)
-                 LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-                     items(currentInventory) { item ->
-                         Card(
-                             modifier = Modifier
-                                 .fillMaxWidth()
-                                 .padding(vertical = 4.dp),
-                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                         ) {
-                             Column(modifier = Modifier.padding(12.dp)) {
-                                 Text("Qty: ${item.quantity} ${item.unit}")
-                                 item.expirationDate?.let {
-                                     Text("Exp: ${dateFormat.format(Date(it))}", style = MaterialTheme.typography.bodySmall)
-                                 }
-                                 Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                                     Button(
-                                         onClick = {
-                                             viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.FINISHED)
-                                             onDismiss()
-                                         },
-                                         modifier = Modifier.padding(end = 8.dp)
-                                     ) {
-                                         Text("Consume")
-                                     }
-                                     OutlinedButton(
-                                         onClick = {
-                                              viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.WASTED)
-                                              onDismiss()
-                                         }
-                                     ) {
-                                         Text("Waste")
-                                     }
-                                 }
-                             }
-                         }
-                     }
-                 }
-             }
-        }
-    } else {
-         Box(modifier = Modifier.fillMaxSize()) {
             BarcodeScanner(onBarcodeDetected = { code ->
                 if (detectedBarcode == null) {
                     detectedBarcode = code
