@@ -308,8 +308,8 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
              if (inv.isNotEmpty()) {
                  foundInventory = inv
              } else {
-                 // Item not in inventory or not found
-                 // Maybe show toast? For now just reset
+                 // Item not in inventory or not found, inform user
+                 android.widget.Toast.makeText(LocalContext.current, "Item not found in inventory", android.widget.Toast.LENGTH_SHORT).show()
                  detectedBarcode = null
              }
         }
