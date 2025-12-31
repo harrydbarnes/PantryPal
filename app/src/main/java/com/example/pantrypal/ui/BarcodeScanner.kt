@@ -74,7 +74,7 @@ fun BarcodeScanner(
                         imageAnalysis
                     )
                 } catch (exc: Exception) {
-                    android.util.Log.e("BarcodeScanner", "Use case binding failed", exc)
+                    exc.printStackTrace()
                 }
             }, ContextCompat.getMainExecutor(ctx))
             previewView
@@ -98,8 +98,8 @@ private fun processImageProxy(
                     }
                 }
             }
-            .addOnFailureListener { exc ->
-                android.util.Log.e("BarcodeScanner", "Barcode processing failed", exc)
+            .addOnFailureListener {
+                // Handle failure
             }
             .addOnCompleteListener {
                 imageProxy.close()

@@ -36,6 +36,7 @@ import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.ui.BarcodeScanner
 import kotlinx.coroutines.launch
 import com.example.pantrypal.data.dao.InventoryWithItemMap
+import com.example.pantrypal.data.entity.ItemEntity
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -225,7 +226,7 @@ fun DashboardScreen(expiringItems: List<InventoryUiModel>) {
 fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
     var detectedBarcode by remember { mutableStateOf<String?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
-    var foundItemName by remember { mutableStateOf<String?>(null) }
+    var foundItem by remember { mutableStateOf<ItemEntity?>(null) }
     var showManualAdd by remember { mutableStateOf(false) }
 
     // Logic to handle detection
@@ -233,7 +234,7 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         detectedBarcode?.let { code ->
             val item = viewModel.getItemByBarcode(code)
             if (item != null) {
-                foundItemName = item.name
+                foundItem = item
                 showAddSheet = true
             } else {
                 showManualAdd = true
@@ -256,11 +257,22 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
             detectedBarcode = null // Reset scanning
         }) {
             Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Found: $foundItemName", style = MaterialTheme.typography.headlineSmall)
+                val item = foundItem
+                Text("Found: ${item?.name ?: "Unknown"}", style = MaterialTheme.typography.headlineSmall)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = {
-                    // Add +1 quantity
-                    viewModel.addItem(foundItemName ?: "", 1.0, "pcs", "General", false, false, barcode = detectedBarcode)
+                    // Add +1 quantity using item defaults
+                    if (item != null) {
+                         viewModel.addItem(
+                             item.name,
+                             1.0,
+                             item.defaultUnit,
+                             item.category,
+                             item.isVegetarian,
+                             item.isGlutenFree,
+                             barcode = detectedBarcode
+                         )
+                    }
                     showAddSheet = false
                     onDismiss()
                 }) {
@@ -303,7 +315,8 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         }
     }
 
-    if (foundInventory != null) {
+    val currentInventory = foundInventory
+    if (currentInventory != null) {
         // Show dialog to consume
         AlertDialog(
             onDismissRequest = {
@@ -313,14 +326,18 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
             title = { Text("Consume Item") },
             text = {
                 Column {
-                    Text("Found ${foundInventory!!.first().name}")
+                    if (currentInventory.isNotEmpty()) {
+                        Text("Found ${currentInventory.first().name}")
+                    }
                     Text("Select action:")
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val item = foundInventory!!.first()
-                    viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.FINISHED)
+                    if (currentInventory.isNotEmpty()) {
+                        val item = currentInventory.first()
+                        viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.FINISHED)
+                    }
                     onDismiss()
                 }) {
                     Text("Consumed")
@@ -328,8 +345,10 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
             },
             dismissButton = {
                  TextButton(onClick = {
-                    val item = foundInventory!!.first()
-                    viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.WASTED)
+                    if (currentInventory.isNotEmpty()) {
+                        val item = currentInventory.first()
+                        viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.WASTED)
+                    }
                     onDismiss()
                 }) {
                     Text("Wasted")

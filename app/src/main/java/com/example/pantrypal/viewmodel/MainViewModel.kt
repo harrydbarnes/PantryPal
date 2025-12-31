@@ -9,11 +9,23 @@ import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.data.repository.KitchenRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+// Helper flow for periodic updates
+fun tickerFlow(period: Long, initialDelay: Long = 0) = flow {
+    delay(initialDelay)
+    while (true) {
+        emit(Unit)
+        delay(period)
+    }
+}
 
 class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
 
@@ -29,7 +41,8 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
         )
 
     // UI State for Expiring Items
-    val expiringItemsState: StateFlow<List<InventoryUiModel>> = repository.getExpiringItems(System.currentTimeMillis())
+    val expiringItemsState: StateFlow<List<InventoryUiModel>> = tickerFlow(60_000L) // Check every minute
+        .flatMapLatest { repository.getExpiringItems(System.currentTimeMillis()) }
         .map { list ->
             list.map { it.toUiModel() }
         }
