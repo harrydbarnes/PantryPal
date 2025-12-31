@@ -7,16 +7,11 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -33,6 +28,10 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
+
+private val VIEWFINDER_BOX_SIZE = 250.dp
+private val VIEWFINDER_CORNER_RADIUS = 16.dp
+private val VIEWFINDER_STROKE_WIDTH = 4.dp
 
 @Composable
 fun BarcodeScanner(
@@ -94,13 +93,10 @@ fun BarcodeScanner(
 
         // Viewfinder overlay
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val boxSizeDp = 250.dp
-            val cornerRadiusDp = 16.dp
-            val strokeWidthDp = 4.dp
-
             val width = size.width
             val height = size.height
-            val boxSize = boxSizeDp.toPx()
+
+            val boxSize = VIEWFINDER_BOX_SIZE.toPx()
             val left = (width - boxSize) / 2
             val top = (height - boxSize) / 2
 
@@ -108,8 +104,8 @@ fun BarcodeScanner(
                 color = Color.White,
                 topLeft = Offset(left, top),
                 size = Size(boxSize, boxSize),
-                cornerRadius = CornerRadius(cornerRadiusDp.toPx()),
-                style = Stroke(width = strokeWidthDp.toPx())
+                cornerRadius = CornerRadius(VIEWFINDER_CORNER_RADIUS.toPx()),
+                style = Stroke(width = VIEWFINDER_STROKE_WIDTH.toPx())
             )
         }
     }

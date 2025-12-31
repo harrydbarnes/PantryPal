@@ -292,28 +292,18 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
 
     if (showManualAdd && detectedBarcode != null) {
         // Navigate to add screen pre-filled
-        Box(modifier = Modifier.fillMaxSize()) {
-            AddScreen(
-                barcode = detectedBarcode,
-                onAdd = { name, qty, unit, cat, veg, gf, exp ->
-                    viewModel.addItem(name, qty, unit, cat, veg, gf, barcode = detectedBarcode, expirationDate = exp)
-                    onDismiss()
-                }
-            )
-
-            // Cancel button overlay for the Add Screen
-             Button(
-                onClick = {
-                     // Reset state to go back to the scanner view
-                     showManualAdd = false
-                     detectedBarcode = null
-                },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-            ) {
-                Text("Cancel")
+        AddScreen(
+            barcode = detectedBarcode,
+            onAdd = { name, qty, unit, cat, veg, gf, exp ->
+                viewModel.addItem(name, qty, unit, cat, veg, gf, barcode = detectedBarcode, expirationDate = exp)
+                onDismiss()
+            },
+            onCancel = {
+                 // Reset state to go back to the scanner view
+                 showManualAdd = false
+                 detectedBarcode = null
             }
-        }
+        )
     } else if (showAddSheet) {
         ModalBottomSheet(onDismissRequest = {
             showAddSheet = false

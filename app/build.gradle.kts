@@ -8,6 +8,7 @@ import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 fun getGitCommitHash(): String {
     return try {
@@ -23,7 +24,9 @@ fun getGitCommitHash(): String {
 }
 
 fun getBuildDate(): String {
-    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
     return dateFormat.format(Date())
 }
 

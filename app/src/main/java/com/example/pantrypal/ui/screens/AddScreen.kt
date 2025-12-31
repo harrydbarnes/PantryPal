@@ -13,15 +13,17 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.ZoneOffset
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddScreen(
     barcode: String? = null,
-    onAdd: (String, Double, String, String, Boolean, Boolean, Long?) -> Unit
+    onAdd: (String, Double, String, String, Boolean, Boolean, Long?) -> Unit,
+    onCancel: (() -> Unit)? = null
 ) {
     var name by remember { mutableStateOf("") }
-    var qty by remember { mutableStateOf(1.0) }
+    var qtyText by remember { mutableStateOf("1.0") }
     var unit by remember { mutableStateOf("pcs") }
     var expirationDate by remember { mutableStateOf<LocalDate?>(null) }
 
@@ -39,7 +41,7 @@ fun AddScreen(
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
                         expirationDate = java.time.Instant.ofEpochMilli(millis)
-                            .atZone(java.time.ZoneId.systemDefault())
+                            .atZone(ZoneOffset.UTC)
                             .toLocalDate()
                     }
                     showDatePicker = false
@@ -81,16 +83,26 @@ fun AddScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Quantity Buttons
+        // Quantity Input and Chips
         Text("Quantity", style = MaterialTheme.typography.titleSmall)
-        Row(
+
+        OutlinedTextField(
+            value = qtyText,
+            onValueChange = { qtyText = it },
+            label = { Text("Quantity") },
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             for (i in 1..5) {
                 FilterChip(
-                    selected = qty == i.toDouble(),
-                    onClick = { qty = i.toDouble() },
+                    selected = (qtyText.toDoubleOrNull() ?: 0.0) == i.toDouble(),
+                    onClick = { qtyText = i.toDouble().toString() },
                     label = { Text("$i") }
                 )
             }
@@ -127,14 +139,29 @@ fun AddScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Button(
-            onClick = {
-                val expDateMillis = expirationDate?.atStartOfDay(java.time.ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
-                onAdd(name, qty, unit, "General", false, false, expDateMillis)
-            },
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Save Item")
+            if (onCancel != null) {
+                OutlinedButton(
+                    onClick = onCancel,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Cancel")
+                }
+            }
+
+            Button(
+                onClick = {
+                    val expDateMillis = expirationDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
+                    onAdd(name, qtyText.toDoubleOrNull() ?: 1.0, unit, "General", false, false, expDateMillis)
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Save Item")
+            }
         }
     }
 }
