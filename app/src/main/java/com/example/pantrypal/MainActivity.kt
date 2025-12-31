@@ -93,12 +93,6 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
         }
     )
 
-    LaunchedEffect(key1 = true) {
-        if (!hasCameraPermission) {
-            launcher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
     Scaffold(
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
@@ -194,36 +188,34 @@ fun DashboardScreen(expiringItems: List<InventoryUiModel>) {
         Text("Expiring Soon", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
 
-        LazyVerticalStaggeredGrid(
-            columns = StaggeredGridCells.Fixed(2),
-            verticalItemSpacing = 8.dp,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            content = {
-                items(expiringItems) { item ->
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(text = item.name, style = MaterialTheme.typography.titleMedium)
-                            Text(text = "Qty: ${item.quantity}")
-                            Text(text = "Expiring soon!", style = MaterialTheme.typography.bodySmall)
+        if (expiringItems.isEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("No expiring items", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        } else {
+            LazyVerticalStaggeredGrid(
+                columns = StaggeredGridCells.Fixed(2),
+                verticalItemSpacing = 8.dp,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                content = {
+                    items(expiringItems) { item ->
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(text = item.name, style = MaterialTheme.typography.titleMedium)
+                                Text(text = "Qty: ${item.quantity}")
+                                Text(text = "Expiring soon!", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
-                // Add dummy items if empty to show layout
-                if (expiringItems.isEmpty()) {
-                   item {
-                       Card {
-                           Column(modifier = Modifier.padding(16.dp)) {
-                               Text("No expiring items", style = MaterialTheme.typography.bodyMedium)
-                           }
-                       }
-                   }
-                }
-            }
-        )
+            )
+        }
     }
 }
 
@@ -303,10 +295,12 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
     var detectedBarcode by remember { mutableStateOf<String?>(null) }
     var foundInventory by remember { mutableStateOf<List<InventoryWithItemMap>?>(null) }
+    val context = LocalContext.current
 
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
@@ -314,8 +308,7 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
              if (inv.isNotEmpty()) {
                  foundInventory = inv
              } else {
-                 // Item not in inventory or not found
-                 // Maybe show toast? For now just reset
+                 android.widget.Toast.makeText(context, "Item not found in inventory", android.widget.Toast.LENGTH_SHORT).show()
                  detectedBarcode = null
              }
         }
@@ -323,37 +316,53 @@ fun ScanOutScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
 
     val currentInventory = foundInventory
     if (currentInventory != null) {
-        val handleConsume = { type: ConsumptionType ->
-            currentInventory.firstOrNull()?.let { item ->
-                viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, type)
-            }
-            onDismiss()
-        }
+        ModalBottomSheet(onDismissRequest = {
+             foundInventory = null
+             detectedBarcode = null
+        }) {
+             Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                 Text("Found: ${currentInventory.firstOrNull()?.name ?: "Unknown"}", style = MaterialTheme.typography.headlineSmall)
+                 Spacer(modifier = Modifier.height(16.dp))
 
-        // Show dialog to consume
-        AlertDialog(
-            onDismissRequest = {
-                foundInventory = null
-                detectedBarcode = null
-            },
-            title = { Text("Consume Item") },
-            text = {
-                Column {
-                    Text("Found ${currentInventory.first().name}")
-                    Text("Select action:")
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { handleConsume(ConsumptionType.FINISHED) }) {
-                    Text("Consumed")
-                }
-            },
-            dismissButton = {
-                 TextButton(onClick = { handleConsume(ConsumptionType.WASTED) }) {
-                    Text("Wasted")
-                }
-            }
-        )
+                 Text("Select batch to consume:", style = MaterialTheme.typography.titleSmall)
+                 LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
+                     items(currentInventory) { item ->
+                         Card(
+                             modifier = Modifier
+                                 .fillMaxWidth()
+                                 .padding(vertical = 4.dp),
+                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                         ) {
+                             Column(modifier = Modifier.padding(12.dp)) {
+                                 Text("Qty: ${item.quantity} ${item.unit}")
+                                 item.expirationDate?.let {
+                                     Text("Exp: ${java.text.SimpleDateFormat("dd/MM/yyyy").format(java.util.Date(it))}", style = MaterialTheme.typography.bodySmall)
+                                 }
+                                 Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                     Button(
+                                         onClick = {
+                                             viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.FINISHED)
+                                             onDismiss()
+                                         },
+                                         modifier = Modifier.padding(end = 8.dp)
+                                     ) {
+                                         Text("Consume")
+                                     }
+                                     OutlinedButton(
+                                         onClick = {
+                                              viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.WASTED)
+                                              onDismiss()
+                                         }
+                                     ) {
+                                         Text("Waste")
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 }
+             }
+        }
     } else {
          Box(modifier = Modifier.fillMaxSize()) {
             BarcodeScanner(onBarcodeDetected = { code ->

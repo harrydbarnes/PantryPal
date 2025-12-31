@@ -41,7 +41,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
         )
 
     // UI State for Expiring Items
-    val expiringItemsState: StateFlow<List<InventoryUiModel>> = tickerFlow(EXPIRING_ITEMS_REFRESH_INTERVAL_MS) // Check every minute
+    val expiringItemsState: StateFlow<List<InventoryUiModel>> = tickerFlow(60_000L) // Check every minute
         .flatMapLatest { repository.getExpiringItems(System.currentTimeMillis()) }
         .map { list ->
             list.map { it.toUiModel() }
