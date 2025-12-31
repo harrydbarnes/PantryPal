@@ -74,7 +74,7 @@ fun BarcodeScanner(
                         imageAnalysis
                     )
                 } catch (exc: Exception) {
-                    exc.printStackTrace()
+                    android.util.Log.e("BarcodeScanner", "Use case binding failed", exc)
                 }
             }, ContextCompat.getMainExecutor(ctx))
             previewView
