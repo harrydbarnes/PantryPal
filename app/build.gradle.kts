@@ -10,22 +10,31 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-fun getGitCommitHash(): String {
-    return try {
-        val stdout = ByteArrayOutputStream()
-        exec {
-            commandLine("git", "rev-parse", "--short", "HEAD")
-            standardOutput = stdout
+// ValueSource to fetch Git Hash
+abstract class GitHashValueSource : ValueSource<String, ValueSourceParameters.None> {
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    override fun obtain(): String {
+        return try {
+            val output = ByteArrayOutputStream()
+            execOperations.exec {
+                commandLine("git", "rev-parse", "--short", "HEAD")
+                standardOutput = output
+            }
+            output.toString().trim()
+        } catch (e: Exception) {
+            "Unknown"
         }
-        stdout.toString().trim()
-    } catch (e: Exception) {
-        "Unknown"
     }
 }
 
-fun getBuildDate(): String {
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
-    return LocalDate.now(ZoneOffset.UTC).format(formatter)
+// ValueSource to fetch Build Date
+abstract class BuildDateValueSource : ValueSource<String, ValueSourceParameters.None> {
+    override fun obtain(): String {
+         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+         return LocalDate.now(ZoneOffset.UTC).format(formatter)
+    }
 }
 
 android {
@@ -44,8 +53,12 @@ android {
             useSupportLibrary = true
         }
 
-        buildConfigField("String", "GIT_HASH", "\"${getGitCommitHash()}\"")
-        buildConfigField("String", "BUILD_DATE", "\"${getBuildDate()}\"")
+        // Use providers to fetch values, making it compatible with configuration cache
+        val gitHashProvider = providers.of(GitHashValueSource::class) {}
+        val buildDateProvider = providers.of(BuildDateValueSource::class) {}
+
+        buildConfigField("String", "GIT_HASH", "\"${gitHashProvider.get()}\"")
+        buildConfigField("String", "BUILD_DATE", "\"${buildDateProvider.get()}\"")
     }
 
     buildTypes {

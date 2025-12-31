@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -16,6 +17,24 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.ZoneOffset
 
+class AddItemState {
+    var name by mutableStateOf("")
+    var qtyText by mutableStateOf("1.0")
+    var unit by mutableStateOf("pcs")
+    var category by mutableStateOf("General")
+    var isVegetarian by mutableStateOf(false)
+    var isGlutenFree by mutableStateOf(false)
+    var expirationDate by mutableStateOf<LocalDate?>(null)
+
+    val isValid: Boolean
+        get() = name.isNotBlank() && (qtyText.toDoubleOrNull() ?: 0.0) > 0.0
+}
+
+@Composable
+fun rememberAddItemState(): AddItemState {
+    return remember { AddItemState() }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddScreen(
@@ -23,13 +42,7 @@ fun AddScreen(
     onAdd: (String, Double, String, String, Boolean, Boolean, Long?) -> Unit,
     onCancel: (() -> Unit)? = null
 ) {
-    var name by remember { mutableStateOf("") }
-    var qtyText by remember { mutableStateOf("1.0") }
-    var unit by remember { mutableStateOf("pcs") }
-    var category by remember { mutableStateOf("General") }
-    var isVegetarian by remember { mutableStateOf(false) }
-    var isGlutenFree by remember { mutableStateOf(false) }
-    var expirationDate by remember { mutableStateOf<LocalDate?>(null) }
+    val state = rememberAddItemState()
 
     // Form scrolling
     val scrollState = rememberScrollState()
@@ -44,7 +57,7 @@ fun AddScreen(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        expirationDate = java.time.Instant.ofEpochMilli(millis)
+                        state.expirationDate = java.time.Instant.ofEpochMilli(millis)
                             .atZone(ZoneOffset.UTC)
                             .toLocalDate()
                     }
@@ -78,8 +91,8 @@ fun AddScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
+            value = state.name,
+            onValueChange = { state.name = it },
             label = { Text("Product Name") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
@@ -88,8 +101,8 @@ fun AddScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
-            value = category,
-            onValueChange = { category = it },
+            value = state.category,
+            onValueChange = { state.category = it },
             label = { Text("Category") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
@@ -101,8 +114,8 @@ fun AddScreen(
         Text("Quantity", style = MaterialTheme.typography.titleSmall)
 
         OutlinedTextField(
-            value = qtyText,
-            onValueChange = { qtyText = it },
+            value = state.qtyText,
+            onValueChange = { state.qtyText = it },
             label = { Text("Quantity") },
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -115,8 +128,8 @@ fun AddScreen(
         ) {
             for (i in 1..5) {
                 FilterChip(
-                    selected = (qtyText.toDoubleOrNull() ?: 0.0) == i.toDouble(),
-                    onClick = { qtyText = i.toDouble().toString() },
+                    selected = (state.qtyText.toDoubleOrNull() ?: 0.0) == i.toDouble(),
+                    onClick = { state.qtyText = i.toDouble().toString() },
                     label = { Text("$i") }
                 )
             }
@@ -125,8 +138,8 @@ fun AddScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
-            value = unit,
-            onValueChange = { unit = it },
+            value = state.unit,
+            onValueChange = { state.unit = it },
             label = { Text("Size (Unit)") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
@@ -136,7 +149,7 @@ fun AddScreen(
 
         // Expiration Date
         OutlinedTextField(
-            value = expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) ?: "",
+            value = state.expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) ?: "",
             onValueChange = {}, // Read only
             label = { Text("Expiration Date (Optional)") },
             modifier = Modifier.fillMaxWidth(),
@@ -157,7 +170,7 @@ fun AddScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text("Vegetarian")
-            Switch(checked = isVegetarian, onCheckedChange = { isVegetarian = it })
+            Switch(checked = state.isVegetarian, onCheckedChange = { state.isVegetarian = it })
         }
 
         Row(
@@ -166,7 +179,7 @@ fun AddScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text("Gluten Free")
-            Switch(checked = isGlutenFree, onCheckedChange = { isGlutenFree = it })
+            Switch(checked = state.isGlutenFree, onCheckedChange = { state.isGlutenFree = it })
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -187,11 +200,11 @@ fun AddScreen(
 
             Button(
                 onClick = {
-                    val expDateMillis = expirationDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
-                    onAdd(name, qtyText.toDoubleOrNull() ?: 1.0, unit, category, isVegetarian, isGlutenFree, expDateMillis)
+                    val expDateMillis = state.expirationDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
+                    onAdd(state.name, state.qtyText.toDoubleOrNull() ?: 1.0, state.unit, state.category, state.isVegetarian, state.isGlutenFree, expDateMillis)
                 },
                 modifier = Modifier.weight(1f),
-                enabled = name.isNotBlank() && (qtyText.toDoubleOrNull() ?: 0.0) > 0.0
+                enabled = state.isValid
             ) {
                 Text("Save Item")
             }
