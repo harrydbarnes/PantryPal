@@ -52,6 +52,13 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
             initialValue = emptyList()
         )
 
+    val pastItemsState: StateFlow<List<ConsumptionEntity>> = repository.allConsumptionHistory
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean, barcode: String? = null, expirationDate: Long? = null) {
         viewModelScope.launch {
             var itemId: Long = -1

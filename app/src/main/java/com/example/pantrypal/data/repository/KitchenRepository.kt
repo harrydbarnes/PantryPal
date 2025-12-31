@@ -37,6 +37,8 @@ class KitchenRepository(
 
     suspend fun getUsageHistory(itemId: Long): List<ConsumptionEntity> = consumptionDao.getHistoryForItem(itemId)
 
+    val allConsumptionHistory: Flow<List<ConsumptionEntity>> = consumptionDao.getAllHistoryFlow()
+
     // Export Data (Fetch all)
     suspend fun getAllDataForExport(): ExportData {
         return ExportData(

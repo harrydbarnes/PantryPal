@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -38,11 +39,18 @@ import kotlinx.coroutines.launch
 import com.example.pantrypal.data.dao.InventoryWithItemMap
 import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.ui.screens.ScanOutScreen
+import com.example.pantrypal.ui.screens.SettingsScreen
+import com.example.pantrypal.ui.screens.PastItemsScreen
+import com.example.pantrypal.ui.screens.AddScreen
 
 sealed class AppScreen {
     data object Dashboard : AppScreen()
     data object Inventory : AppScreen()
     data object AddManual : AppScreen()
+    data object ScanIn : AppScreen()
+    data object ScanOut : AppScreen()
+    data object Settings : AppScreen()
+    data object PastItems : AppScreen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -73,8 +81,6 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
     val expiringItems by viewModel.expiringItemsState.collectAsState()
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Dashboard) }
-    var showScanIn by remember { mutableStateOf(false) }
-    var showScanOut by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -105,10 +111,38 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
         }
     }
 
+    var showMenu by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(title = { Text("PantryPal") })
+            TopAppBar(
+                title = { Text("PantryPal") },
+                actions = {
+                    IconButton(onClick = { showMenu = !showMenu }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                         DropdownMenuItem(
+                            text = { Text("Past Items Log") },
+                            onClick = {
+                                currentScreen = AppScreen.PastItems
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Settings") },
+                            onClick = {
+                                currentScreen = AppScreen.Settings
+                                showMenu = false
+                            }
+                        )
+                    }
+                }
+            )
         },
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState)
@@ -130,17 +164,17 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Add, contentDescription = "Scan In") },
                     label = { Text("Scan In") },
-                    selected = showScanIn,
+                    selected = currentScreen == AppScreen.ScanIn,
                     onClick = {
-                        checkCameraPermission { showScanIn = true }
+                        checkCameraPermission { currentScreen = AppScreen.ScanIn }
                     }
                 )
                  NavigationBarItem(
                     icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan Out") },
                     label = { Text("Scan Out") },
-                    selected = showScanOut,
+                    selected = currentScreen == AppScreen.ScanOut,
                     onClick = {
-                        checkCameraPermission { showScanOut = true }
+                        checkCameraPermission { currentScreen = AppScreen.ScanOut }
                     }
                 )
             }
@@ -154,35 +188,41 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            when {
-                showScanIn -> {
+            when (currentScreen) {
+                AppScreen.ScanIn -> {
                     ScanInScreen(
-                        onDismiss = { showScanIn = false },
+                        onDismiss = { currentScreen = AppScreen.Inventory },
                         viewModel = viewModel
                     )
                 }
-                showScanOut -> {
+                AppScreen.ScanOut -> {
                      ScanOutScreen(
-                        onDismiss = { showScanOut = false },
+                        onDismiss = { currentScreen = AppScreen.Inventory },
                         onShowSnackbar = { msg ->
                             scope.launch { snackbarHostState.showSnackbar(msg) }
                         },
                         viewModel = viewModel
                     )
                 }
-                currentScreen == AppScreen.Dashboard -> {
+                AppScreen.Dashboard -> {
                     DashboardScreen(expiringItems)
                 }
-                currentScreen == AppScreen.Inventory -> {
+                AppScreen.Inventory -> {
                     InventoryScreen(inventory, onConsume = { item, type ->
                         viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, type)
                     })
                 }
-                currentScreen == AppScreen.AddManual -> {
-                    AddScreen(onAdd = { name, qty, unit, cat, veg, gf ->
-                        viewModel.addItem(name, qty, unit, cat, veg, gf)
+                AppScreen.AddManual -> {
+                    AddScreen(onAdd = { name, qty, unit, cat, veg, gf, exp ->
+                        viewModel.addItem(name, qty, unit, cat, veg, gf, expirationDate = exp)
                         currentScreen = AppScreen.Inventory
                     })
+                }
+                AppScreen.Settings -> {
+                    SettingsScreen()
+                }
+                AppScreen.PastItems -> {
+                    PastItemsScreen(viewModel)
                 }
             }
         }
@@ -252,13 +292,30 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
 
     if (showManualAdd && detectedBarcode != null) {
         // Navigate to add screen pre-filled
-        AddScreen(
-            barcode = detectedBarcode,
-            onAdd = { name, qty, unit, cat, veg, gf ->
-                viewModel.addItem(name, qty, unit, cat, veg, gf, barcode = detectedBarcode)
-                onDismiss()
+        Box(modifier = Modifier.fillMaxSize()) {
+            AddScreen(
+                barcode = detectedBarcode,
+                onAdd = { name, qty, unit, cat, veg, gf, exp ->
+                    viewModel.addItem(name, qty, unit, cat, veg, gf, barcode = detectedBarcode, expirationDate = exp)
+                    onDismiss()
+                }
+            )
+
+            // Cancel button overlay for the Add Screen
+             Button(
+                onClick = {
+                     // Reset state to go back to scanner or dismiss
+                     // onDismiss() would go back to Inventory.
+                     // Maybe we want to go back to scanner?
+                     // Request: "Once scanned, needs to be a back button to cancel adding something."
+                     onDismiss()
+                },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) {
+                Text("Cancel")
             }
-        )
+        }
     } else if (showAddSheet) {
         ModalBottomSheet(onDismissRequest = {
             showAddSheet = false
@@ -336,32 +393,4 @@ fun InventoryItemRow(item: InventoryUiModel, onConsume: (InventoryUiModel, Consu
     }
 }
 
-@Composable
-fun AddScreen(
-    barcode: String? = null,
-    onAdd: (String, Double, String, String, Boolean, Boolean) -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var qty by remember { mutableStateOf("1.0") }
-    var unit by remember { mutableStateOf("pcs") }
-
-    Column(modifier = Modifier.padding(16.dp)) {
-        Text("Add New Item", style = MaterialTheme.typography.titleLarge)
-        if (barcode != null) {
-             Text("Barcode: $barcode", style = MaterialTheme.typography.bodySmall)
-        }
-
-        TextField(value = name, onValueChange = { name = it }, label = { Text("Name") })
-        TextField(value = qty, onValueChange = { qty = it }, label = { Text("Quantity") })
-        TextField(value = unit, onValueChange = { unit = it }, label = { Text("Unit") })
-
-        Button(
-            onClick = {
-                onAdd(name, qty.toDoubleOrNull() ?: 1.0, unit, "General", false, false)
-            },
-            modifier = Modifier.padding(top = 16.dp)
-        ) {
-            Text("Save Item")
-        }
-    }
-}
+// AddScreen moved to ui/screens/AddScreen.kt

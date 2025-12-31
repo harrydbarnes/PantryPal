@@ -4,6 +4,29 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+import java.io.ByteArrayOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+fun getGitCommitHash(): String {
+    return try {
+        val stdout = ByteArrayOutputStream()
+        exec {
+            commandLine("git", "rev-parse", "--short", "HEAD")
+            standardOutput = stdout
+        }
+        stdout.toString().trim()
+    } catch (e: Exception) {
+        "Unknown"
+    }
+}
+
+fun getBuildDate(): String {
+    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    return dateFormat.format(Date())
+}
+
 android {
     namespace = "com.example.pantrypal"
     compileSdk = 34
@@ -19,6 +42,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        buildConfigField("String", "GIT_HASH", "\"${getGitCommitHash()}\"")
+        buildConfigField("String", "BUILD_DATE", "\"${getBuildDate()}\"")
     }
 
     buildTypes {
@@ -39,6 +65,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.10"
