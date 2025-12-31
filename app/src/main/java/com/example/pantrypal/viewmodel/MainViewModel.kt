@@ -9,11 +9,23 @@ import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.data.repository.KitchenRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+// Helper flow for periodic updates
+fun tickerFlow(period: Long, initialDelay: Long = 0) = flow {
+    delay(initialDelay)
+    while (true) {
+        emit(Unit)
+        delay(period)
+    }
+}
 
 class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
 
@@ -28,43 +40,62 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
             initialValue = emptyList()
         )
 
-    fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean) {
+    // UI State for Expiring Items
+    val expiringItemsState: StateFlow<List<InventoryUiModel>> = tickerFlow(60_000L) // Check every minute
+        .flatMapLatest { repository.getExpiringItems(System.currentTimeMillis()) }
+        .map { list ->
+            list.map { it.toUiModel() }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean, barcode: String? = null, expirationDate: Long? = null) {
         viewModelScope.launch {
-            // Check if item exists (simple check by name for now, in real app, better check)
-            // For now, assume new item creation every time or user selects existing.
-            // Simplified: Create Item then Inventory
-            val item = ItemEntity(
-                name = name,
-                defaultUnit = unit,
-                category = category,
-                isVegetarian = isVeg,
-                isGlutenFree = isGlutenFree
-            )
-            var itemId = repository.insertItem(item)
-            if (itemId == -1L) {
-                // Item exists (assuming barcode conflict, though simplified logic here uses name)
-                // In real app we would check barcode. Here we might need to fetch by name or barcode.
-                // Since our simplified 'addItem' doesn't take barcode, we assume unique name/category for now or just fetch valid one.
-                // Wait, name is NOT unique in DB schema. Only barcode is unique.
-                // If insert returns -1, it means unique constraint violation.
-                // But without barcode in input, what violated it? nothing.
-                // Ah, unless we add unique constraint on name? No.
-                // So insert will always succeed for non-barcode items.
-                // But if we extend this to use barcode, we need this check.
-                // For safety, let's keep it robust.
+            var itemId: Long = -1
+
+            if (!barcode.isNullOrEmpty()) {
+                 val existingItem = repository.getItemByBarcode(barcode)
+                 if (existingItem != null) {
+                     itemId = existingItem.itemId
+                 }
             }
 
-            // NOTE: Ideally we should fetch the ID if it exists.
-            // Since we don't have barcode in this specific function signature, we assume new item.
-            // But if we did have barcode...
+            if (itemId == -1L) {
+                val item = ItemEntity(
+                    name = name,
+                    defaultUnit = unit,
+                    category = category,
+                    isVegetarian = isVeg,
+                    isGlutenFree = isGlutenFree,
+                    barcode = barcode
+                )
+                itemId = repository.insertItem(item)
+            }
 
-            val inventory = InventoryEntity(
-                itemId = itemId,
-                quantity = quantity,
-                unit = unit
-            )
-            repository.addInventory(inventory)
+            // If still -1, it means insertion failed (probably conflict), but we should have found it above.
+            // If barcode was null, we just inserted a new item.
+
+            if (itemId != -1L) {
+                val inventory = InventoryEntity(
+                    itemId = itemId,
+                    quantity = quantity,
+                    unit = unit,
+                    expirationDate = expirationDate
+                )
+                repository.addInventory(inventory)
+            }
         }
+    }
+
+    suspend fun getItemByBarcode(barcode: String): ItemEntity? {
+        return repository.getItemByBarcode(barcode)
+    }
+
+    suspend fun getInventoryByBarcode(barcode: String): List<InventoryWithItemMap> {
+        return repository.getInventoryByBarcode(barcode)
     }
 
     fun consumeItem(inventoryId: Long, itemId: Long, quantity: Double, type: ConsumptionType, reason: String? = null) {
