@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.pantrypal.R
 import com.example.pantrypal.data.dao.InventoryWithItemMap
@@ -31,7 +32,7 @@ fun ScanOutScreen(
 
     // Refactored to use java.time API
     val dateFormat = remember { DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.SHORT) }
-    val context = LocalContext.current
+    val notFoundMessage = stringResource(R.string.item_not_found_in_inventory)
 
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
@@ -39,7 +40,7 @@ fun ScanOutScreen(
              if (inv.isNotEmpty()) {
                  foundInventory = inv
              } else {
-                 onShowSnackbar(context.getString(R.string.item_not_found_in_inventory))
+                 onShowSnackbar(notFoundMessage)
                  detectedBarcode = null
              }
         }
