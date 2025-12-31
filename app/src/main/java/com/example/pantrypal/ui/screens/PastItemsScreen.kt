@@ -16,9 +16,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.example.pantrypal.data.entity.ConsumptionEntity
+import com.example.pantrypal.data.dao.ConsumptionWithItem
 import com.example.pantrypal.viewmodel.MainViewModel
 import java.time.Instant
 import java.time.ZoneId
@@ -44,14 +43,14 @@ fun PastItemsScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-fun PastItemRow(item: ConsumptionEntity, dateFormat: DateTimeFormatter) {
+fun PastItemRow(item: ConsumptionWithItem, dateFormat: DateTimeFormatter) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Item ID: ${item.itemId}", style = MaterialTheme.typography.titleMedium)
-            Text(text = "Type: ${item.type}", style = MaterialTheme.typography.bodyMedium)
+            Text(text = item.name, style = MaterialTheme.typography.titleMedium)
+            Text(text = "${item.quantity} - ${item.type} (${item.category})", style = MaterialTheme.typography.bodyMedium)
 
             val date = Instant.ofEpochMilli(item.date).atZone(ZoneId.systemDefault())
             Text(text = "Date: ${dateFormat.format(date)}", style = MaterialTheme.typography.bodySmall)

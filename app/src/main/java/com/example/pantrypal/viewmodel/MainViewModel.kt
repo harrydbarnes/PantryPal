@@ -3,6 +3,7 @@ package com.example.pantrypal.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.pantrypal.data.dao.ConsumptionWithItem
 import com.example.pantrypal.data.dao.InventoryWithItemMap
 import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.ConsumptionType
@@ -52,7 +53,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
             initialValue = emptyList()
         )
 
-    val pastItemsState: StateFlow<List<ConsumptionEntity>> = repository.allConsumptionHistory
+    val pastItemsState: StateFlow<List<ConsumptionWithItem>> = repository.allConsumptionHistory
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),

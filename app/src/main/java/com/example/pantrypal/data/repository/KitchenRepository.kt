@@ -1,6 +1,7 @@
 package com.example.pantrypal.data.repository
 
 import com.example.pantrypal.data.dao.ConsumptionDao
+import com.example.pantrypal.data.dao.ConsumptionWithItem
 import com.example.pantrypal.data.dao.InventoryDao
 import com.example.pantrypal.data.dao.ItemDao
 import com.example.pantrypal.data.entity.ConsumptionEntity
@@ -37,7 +38,7 @@ class KitchenRepository(
 
     suspend fun getUsageHistory(itemId: Long): List<ConsumptionEntity> = consumptionDao.getHistoryForItem(itemId)
 
-    val allConsumptionHistory: Flow<List<ConsumptionEntity>> = consumptionDao.getAllHistoryFlow()
+    val allConsumptionHistory: Flow<List<ConsumptionWithItem>> = consumptionDao.getAllHistoryWithItemFlow()
 
     // Export Data (Fetch all)
     suspend fun getAllDataForExport(): ExportData {

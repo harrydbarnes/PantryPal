@@ -94,9 +94,13 @@ fun BarcodeScanner(
 
         // Viewfinder overlay
         Canvas(modifier = Modifier.fillMaxSize()) {
+            val boxSizeDp = 250.dp
+            val cornerRadiusDp = 16.dp
+            val strokeWidthDp = 4.dp
+
             val width = size.width
             val height = size.height
-            val boxSize = 250.dp.toPx()
+            val boxSize = boxSizeDp.toPx()
             val left = (width - boxSize) / 2
             val top = (height - boxSize) / 2
 
@@ -104,8 +108,8 @@ fun BarcodeScanner(
                 color = Color.White,
                 topLeft = Offset(left, top),
                 size = Size(boxSize, boxSize),
-                cornerRadius = CornerRadius(16.dp.toPx()),
-                style = Stroke(width = 4.dp.toPx())
+                cornerRadius = CornerRadius(cornerRadiusDp.toPx()),
+                style = Stroke(width = strokeWidthDp.toPx())
             )
         }
     }

@@ -95,12 +95,6 @@ fun AddScreen(
                 )
             }
         }
-        // Manual quantity override if needed > 5 or fractional
-        // For simplicity based on request "clickable buttons up to 5", keeping it simple.
-        // But let's add a small text field for custom if they want?
-        // Request just said "Change quantity to be clickable buttons up to 5".
-        // I'll stick to that but maybe allow manual edit via text field if I kept it?
-        // I'll remove the text field for now as requested, or maybe show selected value.
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -115,29 +109,21 @@ fun AddScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Expiration Date
-        OutlinedTextField(
-            value = expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) ?: "",
-            onValueChange = {}, // Read only
-            label = { Text("Expiration Date (Optional)") },
-            modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true },
-            enabled = false, // Disable typing, handle click on parent or overlay
-            colors = OutlinedTextFieldDefaults.colors(
-                disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                disabledBorderColor = MaterialTheme.colorScheme.outline,
-                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                //Forcing content color to look enabled
-                disabledLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) ?: "",
+                onValueChange = {}, // Read only
+                label = { Text("Expiration Date (Optional)") },
+                modifier = Modifier.fillMaxWidth(),
+                readOnly = true
             )
-        )
-        // Workaround for clickable disabled textfield: Use a Box over it or trailing icon
-        // Actually, easiest is just a clickable Box wrapping the TextField or a Row.
-
-        Button(onClick = { showDatePicker = true }, modifier = Modifier.padding(top = 8.dp)) {
-            Text("Select Date")
+            // Mask the click to the box to ensure it triggers
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable { showDatePicker = true }
+            )
         }
-
 
         Spacer(modifier = Modifier.height(32.dp))
 

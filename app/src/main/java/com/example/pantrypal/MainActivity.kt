@@ -304,11 +304,9 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
             // Cancel button overlay for the Add Screen
              Button(
                 onClick = {
-                     // Reset state to go back to scanner or dismiss
-                     // onDismiss() would go back to Inventory.
-                     // Maybe we want to go back to scanner?
-                     // Request: "Once scanned, needs to be a back button to cancel adding something."
-                     onDismiss()
+                     // Reset state to go back to the scanner view
+                     showManualAdd = false
+                     detectedBarcode = null
                 },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
