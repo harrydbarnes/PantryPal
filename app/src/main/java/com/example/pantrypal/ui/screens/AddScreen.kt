@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,11 +29,40 @@ class AddItemState {
 
     val isValid: Boolean
         get() = name.isNotBlank() && (qtyText.toDoubleOrNull() ?: 0.0) > 0.0
+
+    companion object {
+        val Saver: Saver<AddItemState, *> = Saver(
+            save = { state ->
+                listOf(
+                    state.name,
+                    state.qtyText,
+                    state.unit,
+                    state.category,
+                    state.isVegetarian,
+                    state.isGlutenFree,
+                    state.expirationDate?.toEpochDay()
+                )
+            },
+            restore = { stored ->
+                val list = stored as List<*>
+                val state = AddItemState()
+                state.name = list[0] as String
+                state.qtyText = list[1] as String
+                state.unit = list[2] as String
+                state.category = list[3] as String
+                state.isVegetarian = list[4] as Boolean
+                state.isGlutenFree = list[5] as Boolean
+                val dateEpoch = list[6] as Long?
+                state.expirationDate = dateEpoch?.let { LocalDate.ofEpochDay(it) }
+                state
+            }
+        )
+    }
 }
 
 @Composable
 fun rememberAddItemState(): AddItemState {
-    return remember { AddItemState() }
+    return rememberSaveable(saver = AddItemState.Saver) { AddItemState() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
