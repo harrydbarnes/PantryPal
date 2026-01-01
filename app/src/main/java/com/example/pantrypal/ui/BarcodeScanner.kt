@@ -115,7 +115,7 @@ fun BarcodeScanner(
             val rectWidth = width - (padding * 2)
             val rectHeight = rectWidth * VIEWFINDER_ASPECT_RATIO // Aspect ratio example
             val left = (width - rectWidth) / 2
-            val top = (height - rectHeight) / 2
+            val top = (height * VIEWFINDER_TOP_OFFSET_PERCENT) - (rectHeight / 2)
             val rect = Rect(left, top, left + rectWidth, top + rectHeight)
 
             // Update config for analyzer
