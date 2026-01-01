@@ -53,7 +53,8 @@ android {
             useSupportLibrary = true
         }
 
-        // Use providers to fetch values, making it compatible with configuration cache
+        // Use providers to fetch values. Note: Calling .get() forces resolution at configuration time,
+        // which has limitations with configuration caching but is currently required for buildConfigField.
         val gitHashProvider = providers.of(GitHashValueSource::class) {}
         val buildDateProvider = providers.of(BuildDateValueSource::class) {}
 

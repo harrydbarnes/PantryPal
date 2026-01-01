@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,30 +32,37 @@ class AddItemState {
         get() = name.isNotBlank() && (qtyText.toDoubleOrNull() ?: 0.0) > 0.0
 
     companion object {
-        val Saver: Saver<AddItemState, *> = Saver(
+        private const val KEY_NAME = "name"
+        private const val KEY_QTY_TEXT = "qtyText"
+        private const val KEY_UNIT = "unit"
+        private const val KEY_CATEGORY = "category"
+        private const val KEY_IS_VEGETARIAN = "isVegetarian"
+        private const val KEY_IS_GLUTEN_FREE = "isGlutenFree"
+        private const val KEY_EXPIRATION_DATE = "expirationDate"
+
+        val Saver: Saver<AddItemState, *> = mapSaver(
             save = { state ->
-                listOf(
-                    state.name,
-                    state.qtyText,
-                    state.unit,
-                    state.category,
-                    state.isVegetarian,
-                    state.isGlutenFree,
-                    state.expirationDate?.toEpochDay()
+                mapOf(
+                    KEY_NAME to state.name,
+                    KEY_QTY_TEXT to state.qtyText,
+                    KEY_UNIT to state.unit,
+                    KEY_CATEGORY to state.category,
+                    KEY_IS_VEGETARIAN to state.isVegetarian,
+                    KEY_IS_GLUTEN_FREE to state.isGlutenFree,
+                    KEY_EXPIRATION_DATE to state.expirationDate?.toEpochDay()
                 )
             },
-            restore = { stored ->
-                val list = stored as List<*>
-                val state = AddItemState()
-                state.name = list[0] as String
-                state.qtyText = list[1] as String
-                state.unit = list[2] as String
-                state.category = list[3] as String
-                state.isVegetarian = list[4] as Boolean
-                state.isGlutenFree = list[5] as Boolean
-                val dateEpoch = list[6] as Long?
-                state.expirationDate = dateEpoch?.let { LocalDate.ofEpochDay(it) }
-                state
+            restore = { map ->
+                AddItemState().apply {
+                    name = map[KEY_NAME] as String
+                    qtyText = map[KEY_QTY_TEXT] as String
+                    unit = map[KEY_UNIT] as String
+                    category = map[KEY_CATEGORY] as String
+                    isVegetarian = map[KEY_IS_VEGETARIAN] as Boolean
+                    isGlutenFree = map[KEY_IS_GLUTEN_FREE] as Boolean
+                    val dateEpoch = map[KEY_EXPIRATION_DATE] as Long?
+                    expirationDate = dateEpoch?.let { LocalDate.ofEpochDay(it) }
+                }
             }
         )
     }
