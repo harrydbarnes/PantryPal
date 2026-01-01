@@ -78,9 +78,21 @@ fun rememberAddItemState(): AddItemState {
 fun AddScreen(
     barcode: String? = null,
     onAdd: (String, Double, String, String, Boolean, Boolean, Long?) -> Unit,
-    onCancel: (() -> Unit)? = null
+    onCancel: (() -> Unit)? = null,
+    preFillItem: com.example.pantrypal.data.entity.ItemEntity? = null
 ) {
     val state = rememberAddItemState()
+
+    // Pre-fill if item provided
+    LaunchedEffect(preFillItem) {
+        preFillItem?.let { item ->
+            state.name = item.name
+            state.unit = item.defaultUnit
+            state.category = item.category
+            state.isVegetarian = item.isVegetarian
+            state.isGlutenFree = item.isGlutenFree
+        }
+    }
 
     // Form scrolling
     val scrollState = rememberScrollState()

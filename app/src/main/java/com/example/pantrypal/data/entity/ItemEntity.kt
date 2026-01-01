@@ -17,5 +17,6 @@ data class ItemEntity(
     val isVegetarian: Boolean = false,
     val isGlutenFree: Boolean = false,
     val isUsual: Boolean = false,
+    val imageUrl: String? = null,
     val createdAt: Long = System.currentTimeMillis()
 )

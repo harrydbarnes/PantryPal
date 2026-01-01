@@ -125,6 +125,16 @@ dependencies {
     // MLKit
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
 
+    // Retrofit
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    // Coil
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
     // Gson for backup
     implementation("com.google.code.gson:gson:2.10.1")
 
