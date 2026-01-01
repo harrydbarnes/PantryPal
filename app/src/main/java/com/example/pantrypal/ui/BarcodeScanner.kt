@@ -109,9 +109,9 @@ fun BarcodeScanner(
             val height = size.height
 
             // Calculate viewfinder rect (wider and rectangular)
-            val padding = 24.dp.toPx()
+            val padding = VIEWFINDER_PADDING.toPx()
             val rectWidth = width - (padding * 2)
-            val rectHeight = rectWidth * 0.6f // Aspect ratio example
+            val rectHeight = rectWidth * VIEWFINDER_ASPECT_RATIO // Aspect ratio example
             val left = (width - rectWidth) / 2
             val top = (height - rectHeight) / 2
             val rect = Rect(left, top, left + rectWidth, top + rectHeight)
