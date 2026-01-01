@@ -39,6 +39,7 @@ private val VIEWFINDER_CORNER_RADIUS = 16.dp
 private val VIEWFINDER_STROKE_WIDTH = 4.dp
 private val VIEWFINDER_PADDING = 32.dp
 private val VIEWFINDER_ASPECT_RATIO = 0.6f
+private val VIEWFINDER_TOP_OFFSET_PERCENT = 0.3f
 
 // Helper class to pass data to analyzer
 private data class ScannerConfig(
