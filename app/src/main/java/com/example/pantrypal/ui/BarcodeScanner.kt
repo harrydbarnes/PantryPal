@@ -198,23 +198,23 @@ private fun isBarcodeInViewfinder(barcode: Barcode, imageProxy: ImageProxy, conf
     val offsetY = (viewH - scaledH) / 2
 
     // 3. Map the barcode bounding box to view coordinates
-    val corners = barcode.cornerPoints
-    if (corners == null || corners.isEmpty()) {
-        // Fallback to center point check if corner points are not available
-        val centerX = box.centerX().toFloat()
-        val centerY = box.centerY().toFloat()
-        val (rotatedX, rotatedY) = rotatePoint(centerX, centerY, rotation, imgW, imgH)
-        val viewX = rotatedX * scale + offsetX
-        val viewY = rotatedY * scale + offsetY
-        return config.viewfinderRect.contains(Offset(viewX, viewY))
-    }
-
-    val mappedCorners = corners.map { point ->
-        val (rotatedX, rotatedY) = rotatePoint(point.x.toFloat(), point.y.toFloat(), rotation, imgW, imgH)
+    val transformPoint: (Float, Float) -> Offset = { x, y ->
+        val (rotatedX, rotatedY) = rotatePoint(x, y, rotation, imgW, imgH)
         Offset(
             x = rotatedX * scale + offsetX,
             y = rotatedY * scale + offsetY
         )
+    }
+
+    val corners = barcode.cornerPoints
+    if (corners.isNullOrEmpty()) {
+        // Fallback to center point check if corner points are not available
+        val centerInView = transformPoint(box.centerX().toFloat(), box.centerY().toFloat())
+        return config.viewfinderRect.contains(centerInView)
+    }
+
+    val mappedCorners = corners.map { point ->
+        transformPoint(point.x.toFloat(), point.y.toFloat())
     }
 
     val mappedBoundingBox = Rect(
