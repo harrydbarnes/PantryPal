@@ -15,8 +15,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -28,10 +32,17 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.max
 
-private val VIEWFINDER_BOX_SIZE = 250.dp
 private val VIEWFINDER_CORNER_RADIUS = 16.dp
 private val VIEWFINDER_STROKE_WIDTH = 4.dp
+
+// Helper class to pass data to analyzer
+private data class ScannerConfig(
+    val viewSize: Size = Size.Zero,
+    val viewfinderRect: Rect = Rect.Zero
+)
 
 @Composable
 fun BarcodeScanner(
@@ -41,6 +52,7 @@ fun BarcodeScanner(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    val scannerConfig = remember { AtomicReference(ScannerConfig()) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -71,7 +83,7 @@ fun BarcodeScanner(
                         .build()
                         .also {
                             it.setAnalyzer(cameraExecutor) { imageProxy ->
-                                processImageProxy(scanner, imageProxy, onBarcodeDetected)
+                                processImageProxy(scanner, imageProxy, onBarcodeDetected, scannerConfig.get())
                             }
                         }
 
@@ -96,14 +108,33 @@ fun BarcodeScanner(
             val width = size.width
             val height = size.height
 
-            val boxSize = VIEWFINDER_BOX_SIZE.toPx()
-            val left = (width - boxSize) / 2
-            val top = (height - boxSize) / 2
+            // Calculate viewfinder rect (wider and rectangular)
+            val padding = 24.dp.toPx()
+            val rectWidth = width - (padding * 2)
+            val rectHeight = rectWidth * 0.6f // Aspect ratio example
+            val left = (width - rectWidth) / 2
+            val top = (height - rectHeight) / 2
+            val rect = Rect(left, top, left + rectWidth, top + rectHeight)
+
+            // Update config for analyzer
+            scannerConfig.set(ScannerConfig(Size(width, height), rect))
+
+            // Draw dimmed background
+            val path = Path().apply {
+                addRect(Rect(0f, 0f, width, height))
+            }
+            val holePath = Path().apply {
+                addRoundRect(RoundRect(rect, CornerRadius(VIEWFINDER_CORNER_RADIUS.toPx())))
+            }
+            val difference = Path()
+            difference.op(path, holePath, PathOperation.Difference)
+
+            drawPath(difference, Color.Black.copy(alpha = 0.5f))
 
             drawRoundRect(
                 color = Color.White,
                 topLeft = Offset(left, top),
-                size = Size(boxSize, boxSize),
+                size = Size(rectWidth, rectHeight),
                 cornerRadius = CornerRadius(VIEWFINDER_CORNER_RADIUS.toPx()),
                 style = Stroke(width = VIEWFINDER_STROKE_WIDTH.toPx())
             )
@@ -114,7 +145,8 @@ fun BarcodeScanner(
 private fun processImageProxy(
     scanner: com.google.mlkit.vision.barcode.BarcodeScanner,
     imageProxy: ImageProxy,
-    onBarcodeDetected: (String) -> Unit
+    onBarcodeDetected: (String) -> Unit,
+    config: ScannerConfig
 ) {
     val mediaImage = imageProxy.image
     if (mediaImage != null) {
@@ -122,8 +154,10 @@ private fun processImageProxy(
         scanner.process(image)
             .addOnSuccessListener { barcodes ->
                 for (barcode in barcodes) {
-                    barcode.rawValue?.let {
-                        onBarcodeDetected(it)
+                    if (isBarcodeInViewfinder(barcode, imageProxy, config)) {
+                        barcode.rawValue?.let {
+                            onBarcodeDetected(it)
+                        }
                     }
                 }
             }
@@ -135,5 +169,53 @@ private fun processImageProxy(
             }
     } else {
         imageProxy.close()
+    }
+}
+
+private fun isBarcodeInViewfinder(barcode: Barcode, imageProxy: ImageProxy, config: ScannerConfig): Boolean {
+    val box = barcode.boundingBox ?: return false
+    if (config.viewSize == Size.Zero) return true // default allow if UI not ready
+
+    // Map box to View coordinates
+    // 1. Get rotated image dimensions
+    val rotation = imageProxy.imageInfo.rotationDegrees
+    val imgW = imageProxy.width.toFloat()
+    val imgH = imageProxy.height.toFloat()
+    val (rotatedW, rotatedH) = if (rotation == 90 || rotation == 270) {
+        imgH to imgW
+    } else {
+        imgW to imgH
+    }
+
+    // 2. Calculate Scale and Offset for FILL_VIEWPORT (CenterCrop)
+    val viewW = config.viewSize.width
+    val viewH = config.viewSize.height
+    val scale = max(viewW / rotatedW, viewH / rotatedH)
+    val scaledW = rotatedW * scale
+    val scaledH = rotatedH * scale
+    val offsetX = (viewW - scaledW) / 2
+    val offsetY = (viewH - scaledH) / 2
+
+    // 3. Map the box center
+    // box is in UNROTATED image coordinates
+    // We need to rotate the point first.
+    val centerX = box.centerX().toFloat()
+    val centerY = box.centerY().toFloat()
+
+    val (rotatedX, rotatedY) = rotatePoint(centerX, centerY, rotation, imgW, imgH)
+
+    val viewX = rotatedX * scale + offsetX
+    val viewY = rotatedY * scale + offsetY
+
+    // 4. Check if point is inside viewfinderRect
+    return config.viewfinderRect.contains(Offset(viewX, viewY))
+}
+
+private fun rotatePoint(x: Float, y: Float, rotation: Int, width: Float, height: Float): Pair<Float, Float> {
+    return when (rotation) {
+        90 -> (height - y) to x
+        180 -> (width - x) to (height - y)
+        270 -> y to (width - x)
+        else -> x to y
     }
 }
