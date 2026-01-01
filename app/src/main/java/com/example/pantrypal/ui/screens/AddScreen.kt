@@ -54,13 +54,13 @@ class AddItemState {
             },
             restore = { map ->
                 AddItemState().apply {
-                    name = map[KEY_NAME] as String
-                    qtyText = map[KEY_QTY_TEXT] as String
-                    unit = map[KEY_UNIT] as String
-                    category = map[KEY_CATEGORY] as String
-                    isVegetarian = map[KEY_IS_VEGETARIAN] as Boolean
-                    isGlutenFree = map[KEY_IS_GLUTEN_FREE] as Boolean
-                    val dateEpoch = map[KEY_EXPIRATION_DATE] as Long?
+                    name = map[KEY_NAME] as? String ?: ""
+                    qtyText = map[KEY_QTY_TEXT] as? String ?: "1.0"
+                    unit = map[KEY_UNIT] as? String ?: "pcs"
+                    category = map[KEY_CATEGORY] as? String ?: "General"
+                    isVegetarian = map[KEY_IS_VEGETARIAN] as? Boolean ?: false
+                    isGlutenFree = map[KEY_IS_GLUTEN_FREE] as? Boolean ?: false
+                    val dateEpoch = map[KEY_EXPIRATION_DATE] as? Long
                     expirationDate = dateEpoch?.let { LocalDate.ofEpochDay(it) }
                 }
             }
