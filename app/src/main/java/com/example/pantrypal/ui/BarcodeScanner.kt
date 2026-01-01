@@ -224,8 +224,8 @@ private fun isBarcodeInViewfinder(barcode: Barcode, imageProxy: ImageProxy, conf
         bottom = mappedCorners.maxOf { it.y }
     )
 
-    // 4. Check if the mapped bounding box overlaps with the viewfinder
-    return config.viewfinderRect.overlaps(mappedBoundingBox)
+    // 4. Check if the center of the mapped bounding box is inside the viewfinder
+    return config.viewfinderRect.contains(mappedBoundingBox.center)
 }
 
 private fun rotatePoint(x: Float, y: Float, rotation: Int, width: Float, height: Float): Pair<Float, Float> {
