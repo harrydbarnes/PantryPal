@@ -37,6 +37,8 @@ import kotlin.math.max
 
 private val VIEWFINDER_CORNER_RADIUS = 16.dp
 private val VIEWFINDER_STROKE_WIDTH = 4.dp
+private val VIEWFINDER_PADDING = 32.dp
+private val VIEWFINDER_ASPECT_RATIO = 0.6f
 
 // Helper class to pass data to analyzer
 private data class ScannerConfig(
@@ -195,19 +197,35 @@ private fun isBarcodeInViewfinder(barcode: Barcode, imageProxy: ImageProxy, conf
     val offsetX = (viewW - scaledW) / 2
     val offsetY = (viewH - scaledH) / 2
 
-    // 3. Map the box center
-    // box is in UNROTATED image coordinates
-    // We need to rotate the point first.
-    val centerX = box.centerX().toFloat()
-    val centerY = box.centerY().toFloat()
+    // 3. Map the barcode bounding box to view coordinates
+    val transformPoint: (Float, Float) -> Offset = { x, y ->
+        val (rotatedX, rotatedY) = rotatePoint(x, y, rotation, imgW, imgH)
+        Offset(
+            x = rotatedX * scale + offsetX,
+            y = rotatedY * scale + offsetY
+        )
+    }
 
-    val (rotatedX, rotatedY) = rotatePoint(centerX, centerY, rotation, imgW, imgH)
+    val corners = barcode.cornerPoints
+    if (corners.isNullOrEmpty()) {
+        // Fallback to center point check if corner points are not available
+        val centerInView = transformPoint(box.centerX().toFloat(), box.centerY().toFloat())
+        return config.viewfinderRect.contains(centerInView)
+    }
 
-    val viewX = rotatedX * scale + offsetX
-    val viewY = rotatedY * scale + offsetY
+    val mappedCorners = corners.map { point ->
+        transformPoint(point.x.toFloat(), point.y.toFloat())
+    }
 
-    // 4. Check if point is inside viewfinderRect
-    return config.viewfinderRect.contains(Offset(viewX, viewY))
+    val mappedBoundingBox = Rect(
+        left = mappedCorners.minOf { it.x },
+        top = mappedCorners.minOf { it.y },
+        right = mappedCorners.maxOf { it.x },
+        bottom = mappedCorners.maxOf { it.y }
+    )
+
+    // 4. Check if the center of the mapped bounding box is inside the viewfinder
+    return config.viewfinderRect.contains(mappedBoundingBox.center)
 }
 
 private fun rotatePoint(x: Float, y: Float, rotation: Int, width: Float, height: Float): Pair<Float, Float> {
