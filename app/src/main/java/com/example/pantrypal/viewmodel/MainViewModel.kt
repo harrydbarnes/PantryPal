@@ -3,6 +3,7 @@ package com.example.pantrypal.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.pantrypal.data.dao.ConsumptionWithItem
 import com.example.pantrypal.data.dao.InventoryWithItemMap
 import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.ConsumptionType
@@ -52,6 +53,13 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
             initialValue = emptyList()
         )
 
+    val pastItemsState: StateFlow<List<ConsumptionWithItem>> = repository.allConsumptionHistory
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean, barcode: String? = null, expirationDate: Long? = null) {
         viewModelScope.launch {
             var itemId: Long = -1
@@ -74,9 +82,6 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
                 )
                 itemId = repository.insertItem(item)
             }
-
-            // If still -1, it means insertion failed (probably conflict), but we should have found it above.
-            // If barcode was null, we just inserted a new item.
 
             if (itemId != -1L) {
                 val inventory = InventoryEntity(
@@ -109,13 +114,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
             )
             repository.logConsumption(consumption)
 
-            // Update inventory (Assuming full consumption of that specific entry for simplicity)
-            // In a real app, we'd decrement quantity and delete if 0.
-            // Here, let's assume the UI passes the specific InventoryEntity to remove.
-            // But we only have IDs here.
-
-            // Note: Ideally, we fetch the inventory item first to check quantity.
-            // For this exercise, I'll assume we just delete the row (consumed all).
+             // For this exercise, I'll assume we just delete the row (consumed all).
              val inv = InventoryEntity(inventoryId = inventoryId, itemId = itemId, quantity = quantity, unit = "") // Dummy unit/qty for delete
              repository.removeInventory(inv)
         }
@@ -125,8 +124,6 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
     fun exportData() {
         viewModelScope.launch {
             val data = repository.getAllDataForExport()
-            // In a real app, we would write this to a file using ContentResolver/Storage Access Framework
-            // Here we just simulate the data gathering.
             println("Exporting: $data")
         }
     }
@@ -138,7 +135,7 @@ data class InventoryUiModel(
     val name: String,
     val quantity: String,
     val tags: List<String>,
-    val isRestockNeeded: Boolean = false // Placeholder for logic
+    val isRestockNeeded: Boolean = false
 )
 
 fun InventoryWithItemMap.toUiModel(): InventoryUiModel {

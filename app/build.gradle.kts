@@ -4,6 +4,39 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+import java.io.ByteArrayOutputStream
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+// ValueSource to fetch Git Hash
+abstract class GitHashValueSource : ValueSource<String, ValueSourceParameters.None> {
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    override fun obtain(): String {
+        return try {
+            val output = ByteArrayOutputStream()
+            execOperations.exec {
+                commandLine("git", "rev-parse", "--short", "HEAD")
+                standardOutput = output
+            }
+            output.toString().trim()
+        } catch (e: Exception) {
+            "Unknown"
+        }
+    }
+}
+
+// ValueSource to fetch Build Date
+abstract class BuildDateValueSource : ValueSource<String, ValueSourceParameters.None> {
+    override fun obtain(): String {
+         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+         return LocalDate.now(ZoneOffset.UTC).format(formatter)
+    }
+}
+
 android {
     namespace = "com.example.pantrypal"
     compileSdk = 34
@@ -19,6 +52,13 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Use providers to fetch values, making it compatible with configuration cache
+        val gitHashProvider = providers.of(GitHashValueSource::class) {}
+        val buildDateProvider = providers.of(BuildDateValueSource::class) {}
+
+        buildConfigField("String", "GIT_HASH", "\"${gitHashProvider.get()}\"")
+        buildConfigField("String", "BUILD_DATE", "\"${buildDateProvider.get()}\"")
     }
 
     buildTypes {
@@ -39,6 +79,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.10"

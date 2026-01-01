@@ -18,6 +18,12 @@ interface ConsumptionDao {
     @Query("SELECT * FROM consumption_history WHERE itemId = :itemId ORDER BY date DESC")
     suspend fun getHistoryForItem(itemId: Long): List<ConsumptionEntity>
 
+    @Query("SELECT ch.*, i.name, i.category FROM consumption_history ch INNER JOIN items i ON ch.itemId = i.itemId ORDER BY ch.date DESC")
+    fun getAllHistoryWithItemFlow(): Flow<List<ConsumptionWithItem>>
+
+    @Query("SELECT * FROM consumption_history ORDER BY date DESC")
+    fun getAllHistoryFlow(): Flow<List<ConsumptionEntity>>
+
     @Query("SELECT * FROM consumption_history")
     suspend fun getAllHistory(): List<ConsumptionEntity>
 }
