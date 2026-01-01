@@ -39,6 +39,7 @@ private val VIEWFINDER_CORNER_RADIUS = 16.dp
 private val VIEWFINDER_STROKE_WIDTH = 4.dp
 private val VIEWFINDER_PADDING = 32.dp
 private val VIEWFINDER_ASPECT_RATIO = 0.6f
+private val VIEWFINDER_CENTER_Y_PERCENT = 0.3f
 
 // Helper class to pass data to analyzer
 private data class ScannerConfig(
@@ -115,7 +116,7 @@ fun BarcodeScanner(
             val rectWidth = width - (padding * 2)
             val rectHeight = rectWidth * VIEWFINDER_ASPECT_RATIO // Aspect ratio example
             val left = (width - rectWidth) / 2
-            val top = (height * VIEWFINDER_TOP_OFFSET_PERCENT) - (rectHeight / 2)
+            val top = (height * VIEWFINDER_CENTER_Y_PERCENT) - (rectHeight / 2)
             val rect = Rect(left, top, left + rectWidth, top + rectHeight)
 
             // Update config for analyzer
