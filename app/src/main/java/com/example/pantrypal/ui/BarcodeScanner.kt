@@ -126,8 +126,7 @@ fun BarcodeScanner(
             val holePath = Path().apply {
                 addRoundRect(RoundRect(rect, CornerRadius(VIEWFINDER_CORNER_RADIUS.toPx())))
             }
-            val difference = Path()
-            difference.op(path, holePath, PathOperation.Difference)
+            val difference = Path.combine(PathOperation.Difference, path, holePath)
 
             drawPath(difference, Color.Black.copy(alpha = 0.5f))
 
