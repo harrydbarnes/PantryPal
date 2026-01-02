@@ -134,16 +134,16 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
 
     // Notification Permission (Android 13+)
     var hasNotificationPermission by remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            mutableStateOf(
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 ContextCompat.checkSelfPermission(
                     context,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED
-            )
-        } else {
-            mutableStateOf(true) // Always true for older versions
-        }
+            } else {
+                true
+            }
+        )
     }
 
     val notificationLauncher = rememberLauncherForActivityResult(
