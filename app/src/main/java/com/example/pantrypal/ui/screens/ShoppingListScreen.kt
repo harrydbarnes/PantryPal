@@ -62,6 +62,7 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
     if (showAddItemDialog) {
         var newItemName by remember { mutableStateOf("") }
         var newItemQty by remember { mutableStateOf("1.0") }
+        var newItemUnit by remember { mutableStateOf("pcs") }
 
         AlertDialog(
             onDismissRequest = { showAddItemDialog = false },
@@ -79,12 +80,18 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
                         onValueChange = { newItemQty = it },
                         label = { Text("Quantity") }
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newItemUnit,
+                        onValueChange = { newItemUnit = it },
+                        label = { Text("Unit") }
+                    )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     if (newItemName.isNotBlank()) {
-                        viewModel.addShoppingItem(newItemName, newItemQty.toDoubleOrNull() ?: 1.0)
+                        viewModel.addShoppingItem(newItemName, newItemQty.toDoubleOrNull() ?: 1.0, newItemUnit)
                         showAddItemDialog = false
                     }
                 }) {

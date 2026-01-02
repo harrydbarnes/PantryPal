@@ -13,6 +13,8 @@ import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.pantrypal.data.converter.Converters
 
 @Database(
@@ -31,6 +33,25 @@ abstract class KitchenDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: KitchenDatabase? = null
 
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add imageUrl to items table
+                db.execSQL("ALTER TABLE items ADD COLUMN imageUrl TEXT DEFAULT NULL")
+
+                // Create shopping_list table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `shopping_list` (
+                        `shoppingId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `quantity` REAL NOT NULL,
+                        `unit` TEXT NOT NULL,
+                        `isChecked` INTEGER NOT NULL,
+                        `addedAt` INTEGER NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun getDatabase(context: Context): KitchenDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -38,7 +59,7 @@ abstract class KitchenDatabase : RoomDatabase() {
                     KitchenDatabase::class.java,
                     "pantry_pal_db"
                 )
-                .fallbackToDestructiveMigration() // For development simplicity
+                .addMigrations(MIGRATION_1_2)
                 .build()
                 INSTANCE = instance
                 instance

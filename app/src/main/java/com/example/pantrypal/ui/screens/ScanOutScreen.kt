@@ -67,7 +67,7 @@ fun ScanOutScreen(
                  Spacer(modifier = Modifier.height(16.dp))
 
                  LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-                     items(duplicateBatches.orEmpty()) { item ->
+                     items(duplicateBatches!!) { item ->
                          Card(
                              modifier = Modifier
                                  .fillMaxWidth()

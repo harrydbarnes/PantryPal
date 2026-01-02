@@ -19,7 +19,7 @@ class KitchenRepository(
     private val itemDao: ItemDao,
     private val inventoryDao: InventoryDao,
     private val consumptionDao: ConsumptionDao,
-    private val shoppingDao: ShoppingDao
+    private val shoppingDao: ShoppingDao? = null
 ) {
     private val api: OpenFoodFactsApi by lazy {
         Retrofit.Builder()
@@ -55,7 +55,7 @@ class KitchenRepository(
                 null
             }
         } catch (e: Exception) {
-            android.util.Log.e("KitchenRepository", "API call failed for barcode: $barcode", e)
+            e.printStackTrace()
             null
         }
     }

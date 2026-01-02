@@ -3,6 +3,7 @@ package com.example.pantrypal
 import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -128,6 +129,35 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
             onGranted()
         } else {
             launcher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // Notification Permission (Android 13+)
+    var hasNotificationPermission by remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            mutableStateOf(
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            )
+        } else {
+            mutableStateOf(true) // Always true for older versions
+        }
+    }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted ->
+            hasNotificationPermission = granted
+        }
+    )
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (!hasNotificationPermission) {
+                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
     }
 
@@ -260,61 +290,64 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
 
 @Composable
 fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: List<ItemEntity>) {
-    Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
+    LazyColumn(contentPadding = PaddingValues(16.dp)) {
+        item {
+            Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Expiring Soon", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (expiringItems.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("No expiring items", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        } else {
-            // LazyVerticalStaggeredGrid inside Column with vertical scroll is tricky.
-            // Since Dashboard is main screen, maybe we can just list them or use a fixed height grid if list is small.
-            // For simplicity, let's just render them in a Column or FlowRow if possible, or nested loop.
-            // Or change the root Column to not scroll and put this in a lazy column?
-            // Actually, let's keep it simple: Render a few cards.
-
-             FlowRow(
-                 modifier = Modifier.fillMaxWidth(),
-                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                 verticalArrangement = Arrangement.spacedBy(8.dp)
-             ) {
-                expiringItems.forEach { item ->
-                     Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        ),
-                        modifier = Modifier.width(160.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(text = item.name, style = MaterialTheme.typography.titleMedium)
-                            Text(text = "Qty: ${item.quantity}")
-                            Text(text = "Expiring soon!", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-             }
+            Text("Expiring Soon", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("Suggested Restock", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (restockSuggestions.isEmpty()) {
-             Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("No suggestions yet.", style = MaterialTheme.typography.bodyMedium)
+        if (expiringItems.isEmpty()) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("No expiring items", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         } else {
-            restockSuggestions.forEach { item ->
+            item {
+                 FlowRow(
+                     modifier = Modifier.fillMaxWidth(),
+                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                     verticalArrangement = Arrangement.spacedBy(8.dp)
+                 ) {
+                    expiringItems.forEach { item ->
+                         Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ),
+                            modifier = Modifier.width(160.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(text = item.name, style = MaterialTheme.typography.titleMedium)
+                                Text(text = "Qty: ${item.quantity}")
+                                Text(text = "Expiring soon!", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                 }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Suggested Restock", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        if (restockSuggestions.isEmpty()) {
+            item {
+                 Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("No suggestions yet.", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        } else {
+            items(restockSuggestions) { item ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(text = item.name, style = MaterialTheme.typography.titleMedium)
@@ -352,20 +385,6 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         AddScreen(
             barcode = detectedBarcode,
             onAdd = { name, qty, unit, cat, veg, gf, exp ->
-                // foundItem might be null if manually adding an unknown barcode, but if the API found it, it was set in LaunchedEffect.
-                // However, the logic above says: if item != null -> showAddSheet.
-                // So showManualAdd is only true if item == null (locally OR api returned null)
-                // BUT, wait. My implementation of getItemByBarcode now returns a temp item from API.
-                // So if API finds it, `item` is NOT null, so `showAddSheet` becomes true.
-                // We want to use AddScreen for API results too?
-                // The requirements say: "Map the JSON response to a temporary ItemEntity ... to pre-fill the AddScreen fields."
-                // Currently, if item is found (local or API), we show "Add 1" bottom sheet.
-                // We might want to give the user the option to Edit/Add Details if it's from API (since unit/category are placeholders).
-
-                // Let's pass the foundItem to AddScreen if it exists but we are in this block?
-                // Wait, if foundItem is not null, we are in the `else if (showAddSheet)` block.
-                // I need to change the logic: If item is found but has ID=0 (temp from API), go to AddScreen instead of Quick Add.
-
                 viewModel.addItem(name, qty, unit, cat, veg, gf, barcode = detectedBarcode, expirationDate = exp)
                 onDismiss()
             },

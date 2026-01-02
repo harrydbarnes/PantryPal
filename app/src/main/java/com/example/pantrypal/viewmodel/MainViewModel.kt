@@ -61,7 +61,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
         )
 
     // UI State for Restock Suggestions
-    val restockSuggestionsState: StateFlow<List<ItemEntity>> = tickerFlow(3_600_000L) // Check every hour
+    val restockSuggestionsState: StateFlow<List<ItemEntity>> = tickerFlow(60_000L) // Check every minute
         .flatMapLatest { flow { emit(repository.getRestockSuggestions(System.currentTimeMillis())) } }
         .stateIn(
             scope = viewModelScope,
@@ -155,12 +155,12 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
         }
     }
 
-    fun addShoppingItem(name: String, quantity: Double) {
+    fun addShoppingItem(name: String, quantity: Double, unit: String) {
         viewModelScope.launch {
              val item = com.example.pantrypal.data.entity.ShoppingItemEntity(
                  name = name,
                  quantity = quantity,
-                 unit = "pcs"
+                 unit = unit
              )
              repository.addShoppingItem(item)
         }
@@ -207,11 +207,6 @@ fun InventoryWithItemMap.toUiModel(): InventoryUiModel {
     val tags = mutableListOf<String>()
     if (isVegetarian) tags.add("Veg")
     if (isGlutenFree) tags.add("GF")
-
-    // Note: InventoryWithItemMap does not have imageUrl in DAO query yet.
-    // I need to update InventoryDao to include imageUrl in the query.
-    // But wait, I can't update DAO return type easily without breaking other things.
-    // Let's assume for now we don't have it in the list or we add it to the map class.
 
     return InventoryUiModel(
         inventoryId = inventoryId,
