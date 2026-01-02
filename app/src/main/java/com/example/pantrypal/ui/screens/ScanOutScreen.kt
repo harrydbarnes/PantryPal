@@ -91,25 +91,6 @@ fun ScanOutScreen(
                                          val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
                                          Text("Exp: ${dateFormat.format(date)}", style = MaterialTheme.typography.bodySmall)
                                      }
-                                     Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                                         Button(
-                                             onClick = {
-                                                 viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.FINISHED)
-                                                 onDismiss()
-                                             },
-                                             modifier = Modifier.padding(end = 8.dp)
-                                         ) {
-                                             Text("Consume")
-                                         }
-                                         OutlinedButton(
-                                             onClick = {
-                                                  viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.WASTED)
-                                                  onDismiss()
-                                             }
-                                         ) {
-                                             Text("Waste")
-                                         }
-                                     }
                                  }
                              }
                          }
@@ -119,21 +100,29 @@ fun ScanOutScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         // Scanner taking up most space
-        Box(modifier = Modifier.fillMaxSize().padding(bottom = if (scanQueue.isNotEmpty()) 150.dp else 0.dp)) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             BarcodeScanner(onBarcodeDetected = { code ->
                 if (detectedBarcode == null && duplicateBatches == null) {
                     detectedBarcode = code
                 }
             })
+
+            if (scanQueue.isEmpty()) {
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
+                ) {
+                    Text("Cancel")
+                }
+            }
         }
 
         // Queue UI Overlay
         if (scanQueue.isNotEmpty()) {
             Card(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(200.dp)
                     .padding(16.dp),
@@ -173,13 +162,6 @@ fun ScanOutScreen(
                          }
                     }
                 }
-            }
-        } else {
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
-            ) {
-                Text("Cancel")
             }
         }
     }
