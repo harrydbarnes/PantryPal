@@ -61,7 +61,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
         )
 
     // UI State for Restock Suggestions
-    val restockSuggestionsState: StateFlow<List<ItemEntity>> = tickerFlow(60_000L) // Check every minute
+    val restockSuggestionsState: StateFlow<List<ItemEntity>> = tickerFlow(3_600_000L) // Check every hour
         .flatMapLatest { flow { emit(repository.getRestockSuggestions(System.currentTimeMillis())) } }
         .stateIn(
             scope = viewModelScope,
