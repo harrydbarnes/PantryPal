@@ -71,24 +71,26 @@ fun ScanOutScreen(
                  Text("Multiple batches found:", style = MaterialTheme.typography.headlineSmall)
                  Spacer(modifier = Modifier.height(16.dp))
 
-                 LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-                     items(duplicateBatches!!) { item ->
-                         Card(
-                             modifier = Modifier
-                                 .fillMaxWidth()
-                                 .padding(vertical = 4.dp)
-                                 .clickable {
-                                     scanQueue.add(item)
-                                     duplicateBatches = null
-                                 },
-                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                         ) {
-                             Column(modifier = Modifier.padding(12.dp)) {
-                                 Text(item.name, style = MaterialTheme.typography.titleMedium)
-                                 Text("Qty: ${item.quantity} ${item.unit}")
-                                 item.expirationDate?.let {
-                                     val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
-                                     Text("Exp: ${dateFormat.format(date)}", style = MaterialTheme.typography.bodySmall)
+                 duplicateBatches?.let { batches ->
+                     LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
+                         items(batches) { item ->
+                             Card(
+                                 modifier = Modifier
+                                     .fillMaxWidth()
+                                     .padding(vertical = 4.dp)
+                                     .clickable {
+                                         scanQueue.add(item)
+                                         duplicateBatches = null
+                                     },
+                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                             ) {
+                                 Column(modifier = Modifier.padding(12.dp)) {
+                                     Text(item.name, style = MaterialTheme.typography.titleMedium)
+                                     Text("Qty: ${item.quantity} ${item.unit}")
+                                     item.expirationDate?.let {
+                                         val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                                         Text("Exp: ${dateFormat.format(date)}", style = MaterialTheme.typography.bodySmall)
+                                     }
                                  }
                              }
                          }
