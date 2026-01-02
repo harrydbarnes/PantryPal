@@ -11,7 +11,7 @@ interface OpenFoodFactsApi {
 data class ProductResponse(val product: ProductData?)
 
 data class ProductData(
-    val product_name: String?,
+    @com.google.gson.annotations.SerializedName("product_name") val productName: String?,
     val brands: String?,
-    val image_url: String?
+    @com.google.gson.annotations.SerializedName("image_url") val imageUrl: String?
 )
