@@ -288,6 +288,7 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: List<ItemEntity>) {
     LazyColumn(contentPadding = PaddingValues(16.dp)) {
@@ -366,11 +367,14 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
     var showAddSheet by remember { mutableStateOf(false) }
     var foundItem by remember { mutableStateOf<ItemEntity?>(null) }
     var showManualAdd by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
     // Logic to handle detection
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
+            isLoading = true
             val item = viewModel.getItemByBarcode(code)
+            isLoading = false
             if (item != null) {
                 foundItem = item
                 showAddSheet = true
@@ -380,7 +384,11 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         }
     }
 
-    if (showManualAdd && detectedBarcode != null) {
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else if (showManualAdd && detectedBarcode != null) {
         // Navigate to add screen pre-filled
         AddScreen(
             barcode = detectedBarcode,

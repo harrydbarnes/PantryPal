@@ -26,9 +26,7 @@ class ExpirationWorker(
             database.shoppingDao()
         )
 
-        // Check for items expiring in the next 2 days (48 hours)
-        val twoDaysInMillis = 2 * 24 * 60 * 60 * 1000L
-        val threshold = System.currentTimeMillis() + twoDaysInMillis
+        val threshold = System.currentTimeMillis() + TWO_DAYS_IN_MILLIS
 
         // Since getExpiringItems returns a Flow, we take the first emission
         val expiringItems = repository.getExpiringItems(System.currentTimeMillis()).first()
@@ -81,7 +79,12 @@ class ExpirationWorker(
                  notify(notificationId, builder.build())
              }
         } catch (e: SecurityException) {
-            // Permission not granted
+            // Permission not granted. Log this for debugging purposes.
+            android.util.Log.w("ExpirationWorker", "Notification permission not granted. Cannot show expiration alert.")
         }
+    }
+
+    companion object {
+        private const val TWO_DAYS_IN_MILLIS = 2 * 24 * 60 * 60 * 1000L
     }
 }

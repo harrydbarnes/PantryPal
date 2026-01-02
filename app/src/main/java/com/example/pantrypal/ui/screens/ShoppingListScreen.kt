@@ -47,7 +47,7 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
                 }
             }
 
-            LazyColumn(contentPadding = PaddingValues(16.dp)) {
+            LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(16.dp)) {
                 items(shoppingList) { item ->
                     ShoppingListItemRow(
                         item = item,

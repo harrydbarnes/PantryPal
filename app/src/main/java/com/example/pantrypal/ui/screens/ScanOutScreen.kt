@@ -38,22 +38,27 @@ fun ScanOutScreen(
     val dateFormat = remember { DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.SHORT) }
     val notFoundMessage by rememberUpdatedState(stringResource(R.string.item_not_found_in_inventory))
 
+    var lastScanTime by remember { mutableLongStateOf(0L) }
+
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
-             val inv = viewModel.getInventoryByBarcode(code)
-             if (inv.isNotEmpty()) {
-                 // If only one batch, add to queue immediately
-                 if (inv.size == 1) {
-                     scanQueue.add(inv[0])
+             val currentTime = System.currentTimeMillis()
+             if (currentTime - lastScanTime > 2000) { // 2 second debounce
+                 val inv = viewModel.getInventoryByBarcode(code)
+                 if (inv.isNotEmpty()) {
+                     // If only one batch, add to queue immediately
+                     if (inv.size == 1) {
+                         scanQueue.add(inv[0])
+                     } else {
+                         // Multiple batches found, let user select
+                         duplicateBatches = inv
+                     }
                  } else {
-                     // Multiple batches found, let user select
-                     duplicateBatches = inv
+                     onShowSnackbar(notFoundMessage)
                  }
-             } else {
-                 onShowSnackbar(notFoundMessage)
+                 lastScanTime = currentTime
              }
-             // Reset barcode detection immediately to allow continuous scanning
-             // But we need a delay or debounce in real app, here we just clear it
+             // Reset barcode detection
              detectedBarcode = null
         }
     }
@@ -67,7 +72,7 @@ fun ScanOutScreen(
                  Spacer(modifier = Modifier.height(16.dp))
 
                  LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-                     items(duplicateBatches.orEmpty()) { item ->
+                     items(duplicateBatches!!) { item ->
                          Card(
                              modifier = Modifier
                                  .fillMaxWidth()

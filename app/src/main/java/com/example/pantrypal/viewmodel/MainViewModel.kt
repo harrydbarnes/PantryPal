@@ -144,7 +144,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
              if (type == ConsumptionType.FINISHED) {
                  val item = repository.getItemById(itemId)
                  if (item != null && item.isUsual) {
-                     val shoppingItem = ShoppingItemEntity(
+                     val shoppingItem = com.example.pantrypal.data.entity.ShoppingItemEntity(
                          name = item.name,
                          quantity = 1.0, // Default to 1
                          unit = item.defaultUnit
