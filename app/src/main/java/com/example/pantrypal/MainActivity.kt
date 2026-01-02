@@ -3,6 +3,7 @@ package com.example.pantrypal
 import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -42,10 +43,19 @@ import com.example.pantrypal.ui.screens.ScanOutScreen
 import com.example.pantrypal.ui.screens.SettingsScreen
 import com.example.pantrypal.ui.screens.PastItemsScreen
 import com.example.pantrypal.ui.screens.AddScreen
+import com.example.pantrypal.ui.screens.ShoppingListScreen
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.ExistingPeriodicWorkPolicy
+import java.util.concurrent.TimeUnit
+import com.example.pantrypal.util.ExpirationWorker
+import coil.compose.AsyncImage
 
 sealed class AppScreen {
     data object Dashboard : AppScreen()
     data object Inventory : AppScreen()
+    data object ShoppingList : AppScreen()
     data object AddManual : AppScreen()
     data object ScanIn : AppScreen()
     data object ScanOut : AppScreen()
@@ -57,9 +67,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val database = KitchenDatabase.getDatabase(this)
-        val repository = KitchenRepository(database.itemDao(), database.inventoryDao(), database.consumptionDao())
+        val app = application as PantryPalApplication
+        val repository = app.repository
         val viewModelFactory = MainViewModelFactory(repository)
+
+        // Schedule background work
+        val workRequest = PeriodicWorkRequestBuilder<ExpirationWorker>(1, TimeUnit.DAYS)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "ExpirationCheck",
+            ExistingPeriodicWorkPolicy.REPLACE,
+            workRequest
+        )
 
         setContent {
             PantryPalTheme {
@@ -79,6 +99,7 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
     val viewModel: MainViewModel = viewModel(factory = viewModelFactory)
     val inventory by viewModel.inventoryState.collectAsState()
     val expiringItems by viewModel.expiringItemsState.collectAsState()
+    val restockSuggestions by viewModel.restockSuggestionsState.collectAsState()
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Dashboard) }
 
@@ -108,6 +129,35 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
             onGranted()
         } else {
             launcher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // Notification Permission (Android 13+)
+    var hasNotificationPermission by remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            mutableStateOf(
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            )
+        } else {
+            mutableStateOf(true) // Always true for older versions
+        }
+    }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted ->
+            hasNotificationPermission = granted
+        }
+    )
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (!hasNotificationPermission) {
+                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
     }
 
@@ -162,6 +212,12 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                     onClick = { currentScreen = AppScreen.Inventory }
                 )
                 NavigationBarItem(
+                    icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Shopping") },
+                    label = { Text("Shopping") },
+                    selected = currentScreen == AppScreen.ShoppingList,
+                    onClick = { currentScreen = AppScreen.ShoppingList }
+                )
+                NavigationBarItem(
                     icon = { Icon(Icons.Default.Add, contentDescription = "Scan In") },
                     label = { Text("Scan In") },
                     selected = currentScreen == AppScreen.ScanIn,
@@ -205,12 +261,15 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                     )
                 }
                 AppScreen.Dashboard -> {
-                    DashboardScreen(expiringItems)
+                    DashboardScreen(expiringItems, restockSuggestions)
                 }
                 AppScreen.Inventory -> {
                     InventoryScreen(inventory, onConsume = { item, type ->
                         viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, type)
                     })
+                }
+                AppScreen.ShoppingList -> {
+                    ShoppingListScreen(viewModel)
                 }
                 AppScreen.AddManual -> {
                     AddScreen(onAdd = { name, qty, unit, cat, veg, gf, exp ->
@@ -229,32 +288,39 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DashboardScreen(expiringItems: List<InventoryUiModel>) {
-    Column(modifier = Modifier.padding(16.dp)) {
-        Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
+fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: List<ItemEntity>) {
+    LazyColumn(contentPadding = PaddingValues(16.dp)) {
+        item {
+            Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Expiring Soon", style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
+            Text("Expiring Soon", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         if (expiringItems.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("No expiring items", style = MaterialTheme.typography.bodyMedium)
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("No expiring items", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         } else {
-            LazyVerticalStaggeredGrid(
-                columns = StaggeredGridCells.Fixed(2),
-                verticalItemSpacing = 8.dp,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                content = {
-                    items(expiringItems) { item ->
-                        Card(
+            item {
+                 FlowRow(
+                     modifier = Modifier.fillMaxWidth(),
+                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                     verticalArrangement = Arrangement.spacedBy(8.dp)
+                 ) {
+                    expiringItems.forEach { item ->
+                         Card(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
+                            ),
+                            modifier = Modifier.width(160.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text(text = item.name, style = MaterialTheme.typography.titleMedium)
@@ -263,8 +329,33 @@ fun DashboardScreen(expiringItems: List<InventoryUiModel>) {
                             }
                         }
                     }
+                 }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Suggested Restock", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        if (restockSuggestions.isEmpty()) {
+            item {
+                 Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("No suggestions yet.", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
-            )
+            }
+        } else {
+            items(restockSuggestions) { item ->
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(text = item.name, style = MaterialTheme.typography.titleMedium)
+                        Text(text = "Seems you are out of this.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
         }
     }
 }
@@ -276,11 +367,14 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
     var showAddSheet by remember { mutableStateOf(false) }
     var foundItem by remember { mutableStateOf<ItemEntity?>(null) }
     var showManualAdd by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
     // Logic to handle detection
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
+            isLoading = true
             val item = viewModel.getItemByBarcode(code)
+            isLoading = false
             if (item != null) {
                 foundItem = item
                 showAddSheet = true
@@ -290,7 +384,11 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         }
     }
 
-    if (showManualAdd && detectedBarcode != null) {
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else if (showManualAdd && detectedBarcode != null) {
         // Navigate to add screen pre-filled
         AddScreen(
             barcode = detectedBarcode,
@@ -305,31 +403,51 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
             }
         )
     } else if (showAddSheet) {
-        ModalBottomSheet(onDismissRequest = {
-            showAddSheet = false
-            detectedBarcode = null // Reset scanning
-        }) {
-            Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                val item = foundItem
-                Text("Found: ${item?.name ?: "Unknown"}", style = MaterialTheme.typography.headlineSmall)
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = {
-                    // Add +1 quantity using item defaults
-                    if (item != null) {
-                         viewModel.addItem(
-                             item.name,
-                             1.0,
-                             item.defaultUnit,
-                             item.category,
-                             item.isVegetarian,
-                             item.isGlutenFree,
-                             barcode = detectedBarcode
-                         )
-                    }
-                    showAddSheet = false
+        // Check if it is a temporary item from API (itemId == 0)
+        val isTempItem = foundItem?.itemId == ItemEntity.TEMP_ID
+
+        if (isTempItem) {
+             // Redirect to AddScreen with pre-filled data
+             AddScreen(
+                barcode = detectedBarcode,
+                onAdd = { name, qty, unit, cat, veg, gf, exp ->
+                    viewModel.addItem(name, qty, unit, cat, veg, gf, barcode = detectedBarcode, expirationDate = exp, imageUrl = foundItem?.imageUrl)
                     onDismiss()
-                }) {
-                    Text("Add 1")
+                },
+                onCancel = {
+                     showAddSheet = false
+                     detectedBarcode = null
+                },
+                preFillItem = foundItem
+            )
+        } else {
+            ModalBottomSheet(onDismissRequest = {
+                showAddSheet = false
+                detectedBarcode = null // Reset scanning
+            }) {
+                Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val item = foundItem
+                    Text("Found: ${item?.name ?: "Unknown"}", style = MaterialTheme.typography.headlineSmall)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = {
+                        // Add +1 quantity using item defaults
+                        if (item != null) {
+                             viewModel.addItem(
+                                 item.name,
+                                 1.0,
+                                 item.defaultUnit,
+                                 item.category,
+                                 item.isVegetarian,
+                                 item.isGlutenFree,
+                                 barcode = detectedBarcode,
+                                 imageUrl = item.imageUrl
+                             )
+                        }
+                        showAddSheet = false
+                        onDismiss()
+                    }) {
+                        Text("Add 1")
+                    }
                 }
             }
         }
@@ -362,19 +480,31 @@ fun InventoryScreen(items: List<InventoryUiModel>, onConsume: (InventoryUiModel,
 @Composable
 fun InventoryItemRow(item: InventoryUiModel, onConsume: (InventoryUiModel, ConsumptionType) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = item.name, style = MaterialTheme.typography.titleMedium)
-            Text(text = "Qty: ${item.quantity}")
-            if (item.tags.isNotEmpty()) {
-                Text(text = "Tags: ${item.tags.joinToString()}", style = MaterialTheme.typography.bodySmall)
+        Row(modifier = Modifier.padding(16.dp)) {
+            if (item.imageUrl != null) {
+                AsyncImage(
+                    model = item.imageUrl,
+                    contentDescription = item.name,
+                    modifier = Modifier.size(80.dp).padding(end = 16.dp),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
             }
-            Row {
-                Button(onClick = { onConsume(item, ConsumptionType.FINISHED) }) {
-                    Text("Finished")
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = item.name, style = MaterialTheme.typography.titleMedium)
+                Text(text = "Qty: ${item.quantity}")
+                if (item.tags.isNotEmpty()) {
+                    Text(text = "Tags: ${item.tags.joinToString()}", style = MaterialTheme.typography.bodySmall)
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = { onConsume(item, ConsumptionType.WASTED) }) {
-                    Text("Wasted")
+                Spacer(modifier = Modifier.height(8.dp))
+                Row {
+                    Button(onClick = { onConsume(item, ConsumptionType.FINISHED) }) {
+                        Text("Finished")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = { onConsume(item, ConsumptionType.WASTED) }) {
+                        Text("Wasted")
+                    }
                 }
             }
         }

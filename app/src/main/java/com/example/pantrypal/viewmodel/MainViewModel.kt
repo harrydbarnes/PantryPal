@@ -9,6 +9,7 @@ import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.repository.KitchenRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
@@ -60,7 +61,24 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
             initialValue = emptyList()
         )
 
-    fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean, barcode: String? = null, expirationDate: Long? = null) {
+    // UI State for Restock Suggestions
+    val restockSuggestionsState: StateFlow<List<ItemEntity>> = tickerFlow(3_600_000L) // Check every hour
+        .flatMapLatest { flow { emit(repository.getRestockSuggestions(System.currentTimeMillis())) } }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    // UI State for Shopping List
+    val shoppingListState: StateFlow<List<ShoppingItemEntity>> = repository.shoppingList
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean, barcode: String? = null, expirationDate: Long? = null, imageUrl: String? = null) {
         viewModelScope.launch {
             var itemId: Long = -1
 
@@ -78,7 +96,8 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
                     category = category,
                     isVegetarian = isVeg,
                     isGlutenFree = isGlutenFree,
-                    barcode = barcode
+                    barcode = barcode,
+                    imageUrl = imageUrl
                 )
                 itemId = repository.insertItem(item)
             }
@@ -96,27 +115,81 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
     }
 
     suspend fun getItemByBarcode(barcode: String): ItemEntity? {
-        return repository.getItemByBarcode(barcode)
+        return repository.getItemByBarcode(barcode) ?: repository.getItemByBarcodeFromApi(barcode)
     }
 
     suspend fun getInventoryByBarcode(barcode: String): List<InventoryWithItemMap> {
         return repository.getInventoryByBarcode(barcode)
     }
 
+    private suspend fun consumeItemSuspend(inventoryId: Long, itemId: Long, quantity: Double, type: ConsumptionType, reason: String? = null) {
+        // Log consumption
+        val consumption = ConsumptionEntity(
+            itemId = itemId,
+            quantity = quantity,
+            type = type,
+            wasteReason = reason
+        )
+        repository.logConsumption(consumption)
+
+        // For this exercise, I'll assume we just delete the row (consumed all).
+        val inv = InventoryEntity(inventoryId = inventoryId, itemId = itemId, quantity = quantity, unit = "") // Dummy unit/qty for delete
+        repository.removeInventory(inv)
+
+        // Auto-add to shopping list if "Usual"
+        if (type == ConsumptionType.FINISHED) {
+            val item = repository.getItemById(itemId)
+            if (item != null && item.isUsual) {
+                val shoppingItem = ShoppingItemEntity(
+                    name = item.name,
+                    quantity = 1.0, // Default to 1
+                    unit = item.defaultUnit
+                )
+                repository.addShoppingItem(shoppingItem)
+            }
+        }
+    }
+
     fun consumeItem(inventoryId: Long, itemId: Long, quantity: Double, type: ConsumptionType, reason: String? = null) {
         viewModelScope.launch {
-            // Log consumption
-            val consumption = ConsumptionEntity(
-                itemId = itemId,
-                quantity = quantity,
-                type = type,
-                wasteReason = reason
-            )
-            repository.logConsumption(consumption)
+            consumeItemSuspend(inventoryId, itemId, quantity, type, reason)
+        }
+    }
 
-             // For this exercise, I'll assume we just delete the row (consumed all).
-             val inv = InventoryEntity(inventoryId = inventoryId, itemId = itemId, quantity = quantity, unit = "") // Dummy unit/qty for delete
-             repository.removeInventory(inv)
+    fun consumeItems(items: List<InventoryWithItemMap>, type: ConsumptionType) {
+        viewModelScope.launch {
+            items.map { item ->
+                async { consumeItemSuspend(item.inventoryId, item.itemId, 1.0, type) }
+            }.awaitAll()
+        }
+    }
+
+    fun addShoppingItem(name: String, quantity: Double, unit: String) {
+        viewModelScope.launch {
+             val item = ShoppingItemEntity(
+                 name = name,
+                 quantity = quantity,
+                 unit = unit
+             )
+             repository.addShoppingItem(item)
+        }
+    }
+
+    fun toggleShoppingItem(item: ShoppingItemEntity) {
+        viewModelScope.launch {
+            repository.updateShoppingItem(item.copy(isChecked = !item.isChecked))
+        }
+    }
+
+    fun deleteShoppingItem(item: ShoppingItemEntity) {
+        viewModelScope.launch {
+            repository.deleteShoppingItem(item)
+        }
+    }
+
+    fun clearCheckedShoppingItems() {
+        viewModelScope.launch {
+            repository.deleteCheckedShoppingItems()
         }
     }
 
@@ -135,6 +208,7 @@ data class InventoryUiModel(
     val name: String,
     val quantity: String,
     val tags: List<String>,
+    val imageUrl: String? = null,
     val isRestockNeeded: Boolean = false
 )
 
@@ -148,7 +222,8 @@ fun InventoryWithItemMap.toUiModel(): InventoryUiModel {
         itemId = itemId,
         name = name,
         quantity = "$quantity $unit",
-        tags = tags
+        tags = tags,
+        imageUrl = imageUrl
     )
 }
 

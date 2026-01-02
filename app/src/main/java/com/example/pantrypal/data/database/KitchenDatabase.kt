@@ -7,15 +7,19 @@ import androidx.room.RoomDatabase
 import com.example.pantrypal.data.dao.ConsumptionDao
 import com.example.pantrypal.data.dao.InventoryDao
 import com.example.pantrypal.data.dao.ItemDao
+import com.example.pantrypal.data.dao.ShoppingDao
 import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.ShoppingItemEntity
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.pantrypal.data.converter.Converters
 
 @Database(
-    entities = [ItemEntity::class, InventoryEntity::class, ConsumptionEntity::class],
-    version = 1,
+    entities = [ItemEntity::class, InventoryEntity::class, ConsumptionEntity::class, ShoppingItemEntity::class],
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -23,10 +27,30 @@ abstract class KitchenDatabase : RoomDatabase() {
     abstract fun itemDao(): ItemDao
     abstract fun inventoryDao(): InventoryDao
     abstract fun consumptionDao(): ConsumptionDao
+    abstract fun shoppingDao(): ShoppingDao
 
     companion object {
         @Volatile
         private var INSTANCE: KitchenDatabase? = null
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add imageUrl to items table
+                db.execSQL("ALTER TABLE items ADD COLUMN imageUrl TEXT DEFAULT NULL")
+
+                // Create shopping_list table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `shopping_list` (
+                        `shoppingId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `quantity` REAL NOT NULL,
+                        `unit` TEXT NOT NULL,
+                        `isChecked` INTEGER NOT NULL,
+                        `addedAt` INTEGER NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
 
         fun getDatabase(context: Context): KitchenDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -34,7 +58,9 @@ abstract class KitchenDatabase : RoomDatabase() {
                     context.applicationContext,
                     KitchenDatabase::class.java,
                     "pantry_pal_db"
-                ).build()
+                )
+                .addMigrations(MIGRATION_1_2)
+                .build()
                 INSTANCE = instance
                 instance
             }

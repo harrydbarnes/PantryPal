@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,6 +21,8 @@ import java.util.Locale
 import java.time.Instant
 import java.time.ZoneId
 
+private const val SCAN_DEBOUNCE_MS = 2000L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanOutScreen(
@@ -28,66 +31,67 @@ fun ScanOutScreen(
     viewModel: MainViewModel
 ) {
     var detectedBarcode by remember { mutableStateOf<String?>(null) }
-    var foundInventory by remember { mutableStateOf<List<InventoryWithItemMap>?>(null) }
+    // Batch mode: Queue of items to consume
+    val scanQueue = remember { mutableStateListOf<InventoryWithItemMap>() }
+    // State to show selection dialog for duplicate batches
+    var duplicateBatches by remember { mutableStateOf<List<InventoryWithItemMap>?>(null) }
 
     // Refactored to use java.time API
     val dateFormat = remember { DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.SHORT) }
     val notFoundMessage by rememberUpdatedState(stringResource(R.string.item_not_found_in_inventory))
 
+    var lastScanTime by remember { mutableLongStateOf(0L) }
+
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
-             val inv = viewModel.getInventoryByBarcode(code)
-             if (inv.isNotEmpty()) {
-                 foundInventory = inv
-             } else {
-                 onShowSnackbar(notFoundMessage)
-                 detectedBarcode = null
+             val currentTime = System.currentTimeMillis()
+             if (currentTime - lastScanTime > SCAN_DEBOUNCE_MS) { // 2 second debounce
+                 val inv = viewModel.getInventoryByBarcode(code)
+                 if (inv.isNotEmpty()) {
+                     // If only one batch, add to queue immediately
+                     if (inv.size == 1) {
+                         scanQueue.add(inv[0])
+                     } else {
+                         // Multiple batches found, let user select
+                         duplicateBatches = inv
+                     }
+                 } else {
+                     onShowSnackbar(notFoundMessage)
+                 }
+                 lastScanTime = currentTime
              }
+             // Reset barcode detection
+             detectedBarcode = null
         }
     }
 
-    val currentInventory = foundInventory
-    if (currentInventory != null) {
+    if (duplicateBatches != null) {
         ModalBottomSheet(onDismissRequest = {
-             foundInventory = null
-             detectedBarcode = null
+             duplicateBatches = null
         }) {
              Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                 Text("Found: ${currentInventory.firstOrNull()?.name ?: "Unknown"}", style = MaterialTheme.typography.headlineSmall)
+                 Text("Multiple batches found:", style = MaterialTheme.typography.headlineSmall)
                  Spacer(modifier = Modifier.height(16.dp))
 
-                 Text("Select batch to consume:", style = MaterialTheme.typography.titleSmall)
-                 LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-                     items(currentInventory) { item ->
-                         Card(
-                             modifier = Modifier
-                                 .fillMaxWidth()
-                                 .padding(vertical = 4.dp),
-                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                         ) {
-                             Column(modifier = Modifier.padding(12.dp)) {
-                                 Text("Qty: ${item.quantity} ${item.unit}")
-                                 item.expirationDate?.let {
-                                     val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
-                                     Text("Exp: ${dateFormat.format(date)}", style = MaterialTheme.typography.bodySmall)
-                                 }
-                                 Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                                     Button(
-                                         onClick = {
-                                             viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.FINISHED)
-                                             onDismiss()
-                                         },
-                                         modifier = Modifier.padding(end = 8.dp)
-                                     ) {
-                                         Text("Consume")
-                                     }
-                                     OutlinedButton(
-                                         onClick = {
-                                              viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.WASTED)
-                                              onDismiss()
-                                         }
-                                     ) {
-                                         Text("Waste")
+                 duplicateBatches?.let { batches ->
+                     LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
+                         items(batches) { item ->
+                             Card(
+                                 modifier = Modifier
+                                     .fillMaxWidth()
+                                     .padding(vertical = 4.dp)
+                                     .clickable {
+                                         scanQueue.add(item)
+                                         duplicateBatches = null
+                                     },
+                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                             ) {
+                                 Column(modifier = Modifier.padding(12.dp)) {
+                                     Text(item.name, style = MaterialTheme.typography.titleMedium)
+                                     Text("Qty: ${item.quantity} ${item.unit}")
+                                     item.expirationDate?.let {
+                                         val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                                         Text("Exp: ${dateFormat.format(date)}", style = MaterialTheme.typography.bodySmall)
                                      }
                                  }
                              }
@@ -96,18 +100,68 @@ fun ScanOutScreen(
                  }
              }
         }
-    } else {
-         Box(modifier = Modifier.fillMaxSize()) {
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Scanner taking up most space
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             BarcodeScanner(onBarcodeDetected = { code ->
-                if (detectedBarcode == null) {
+                if (detectedBarcode == null && duplicateBatches == null) {
                     detectedBarcode = code
                 }
             })
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
+
+            if (scanQueue.isEmpty()) {
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        }
+
+        // Queue UI Overlay
+        if (scanQueue.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .padding(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                Text("Cancel")
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Queue (${scanQueue.size})", style = MaterialTheme.typography.titleMedium)
+                    LazyColumn(modifier = Modifier.weight(1f)) {
+                        items(scanQueue) { item ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(item.name)
+                                IconButton(onClick = { scanQueue.remove(item) }) {
+                                    Icon(androidx.compose.material.icons.Icons.Default.Close, contentDescription = "Remove")
+                                }
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                         Button(onClick = {
+                             viewModel.consumeItems(scanQueue.toList(), ConsumptionType.FINISHED)
+                             scanQueue.clear()
+                             onDismiss()
+                         }) {
+                             Text("Consume All")
+                         }
+                         OutlinedButton(onClick = { scanQueue.clear() }) {
+                             Text("Clear")
+                         }
+                    }
+                }
             }
         }
     }

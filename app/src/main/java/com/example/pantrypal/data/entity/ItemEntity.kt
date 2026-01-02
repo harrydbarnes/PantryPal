@@ -17,5 +17,10 @@ data class ItemEntity(
     val isVegetarian: Boolean = false,
     val isGlutenFree: Boolean = false,
     val isUsual: Boolean = false,
+    val imageUrl: String? = null,
     val createdAt: Long = System.currentTimeMillis()
-)
+) {
+    companion object {
+        const val TEMP_ID = 0L
+    }
+}
