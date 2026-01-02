@@ -59,7 +59,7 @@ class KitchenRepository(
                 null
             }
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Error fetching product from API for barcode: $barcode", e)
+            android.util.Log.e("KitchenRepository", "Error fetching product from API for barcode: $barcode", e)
             null
         }
     }
