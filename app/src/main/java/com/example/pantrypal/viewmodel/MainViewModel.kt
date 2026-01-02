@@ -158,9 +158,9 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
 
     fun consumeItems(items: List<InventoryWithItemMap>, type: ConsumptionType) {
         viewModelScope.launch {
-            items.forEach { item ->
-                consumeItemSuspend(item.inventoryId, item.itemId, 1.0, type)
-            }
+            items.map { item ->
+                async { consumeItemSuspend(item.inventoryId, item.itemId, 1.0, type) }
+            }.awaitAll()
         }
     }
 
