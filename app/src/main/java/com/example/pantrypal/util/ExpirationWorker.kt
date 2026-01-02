@@ -39,8 +39,8 @@ class ExpirationWorker(
     }
 
     private fun showNotification(content: String) {
-        val channelId = "expiration_channel"
-        val notificationId = 101
+        val channelId = Constants.NOTIFICATION_CHANNEL_ID
+        val notificationId = Constants.NOTIFICATION_ID
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Expiration Alerts"

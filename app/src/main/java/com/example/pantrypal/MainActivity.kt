@@ -67,8 +67,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val database = KitchenDatabase.getDatabase(this)
-        val repository = KitchenRepository(database.itemDao(), database.inventoryDao(), database.consumptionDao(), database.shoppingDao())
+        val app = application as PantryPalApplication
+        val repository = app.repository
         val viewModelFactory = MainViewModelFactory(repository)
 
         // Schedule background work
@@ -134,16 +134,16 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
 
     // Notification Permission (Android 13+)
     var hasNotificationPermission by remember {
-        mutableStateOf(
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            mutableStateOf(
                 ContextCompat.checkSelfPermission(
                     context,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED
-            } else {
-                true
-            }
-        )
+            )
+        } else {
+            mutableStateOf(true) // Always true for older versions
+        }
     }
 
     val notificationLauncher = rememberLauncherForActivityResult(
@@ -404,7 +404,7 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         )
     } else if (showAddSheet) {
         // Check if it is a temporary item from API (itemId == 0)
-        val isTempItem = foundItem?.itemId == 0L
+        val isTempItem = foundItem?.itemId == ItemEntity.TEMP_ID
 
         if (isTempItem) {
              // Redirect to AddScreen with pre-filled data
