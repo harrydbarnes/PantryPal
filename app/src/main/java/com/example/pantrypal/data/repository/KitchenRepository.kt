@@ -55,7 +55,7 @@ class KitchenRepository(
                 null
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("KitchenRepository", "API call failed for barcode: $barcode", e)
             null
         }
     }
