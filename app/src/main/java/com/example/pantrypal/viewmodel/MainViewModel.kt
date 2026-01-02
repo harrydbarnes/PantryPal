@@ -9,6 +9,7 @@ import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.repository.KitchenRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
@@ -114,11 +115,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
     }
 
     suspend fun getItemByBarcode(barcode: String): ItemEntity? {
-        val localItem = repository.getItemByBarcode(barcode)
-        if (localItem != null) {
-            return localItem
-        }
-        return repository.getItemByBarcodeFromApi(barcode)
+        return repository.getItemByBarcode(barcode) ?: repository.getItemByBarcodeFromApi(barcode)
     }
 
     suspend fun getInventoryByBarcode(barcode: String): List<InventoryWithItemMap> {
@@ -144,7 +141,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
              if (type == ConsumptionType.FINISHED) {
                  val item = repository.getItemById(itemId)
                  if (item != null && item.isUsual) {
-                     val shoppingItem = com.example.pantrypal.data.entity.ShoppingItemEntity(
+                     val shoppingItem = ShoppingItemEntity(
                          name = item.name,
                          quantity = 1.0, // Default to 1
                          unit = item.defaultUnit
@@ -157,7 +154,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
 
     fun addShoppingItem(name: String, quantity: Double, unit: String) {
         viewModelScope.launch {
-             val item = com.example.pantrypal.data.entity.ShoppingItemEntity(
+             val item = ShoppingItemEntity(
                  name = name,
                  quantity = quantity,
                  unit = unit
@@ -166,13 +163,13 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
         }
     }
 
-    fun toggleShoppingItem(item: com.example.pantrypal.data.entity.ShoppingItemEntity) {
+    fun toggleShoppingItem(item: ShoppingItemEntity) {
         viewModelScope.launch {
             repository.updateShoppingItem(item.copy(isChecked = !item.isChecked))
         }
     }
 
-    fun deleteShoppingItem(item: com.example.pantrypal.data.entity.ShoppingItemEntity) {
+    fun deleteShoppingItem(item: ShoppingItemEntity) {
         viewModelScope.launch {
             repository.deleteShoppingItem(item)
         }

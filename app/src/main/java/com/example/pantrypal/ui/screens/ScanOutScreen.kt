@@ -21,6 +21,8 @@ import java.util.Locale
 import java.time.Instant
 import java.time.ZoneId
 
+private const val SCAN_DEBOUNCE_MS = 2000L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanOutScreen(

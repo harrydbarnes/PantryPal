@@ -404,7 +404,7 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         )
     } else if (showAddSheet) {
         // Check if it is a temporary item from API (itemId == 0)
-        val isTempItem = foundItem?.itemId == 0L // TODO: Replace with a constant like ItemEntity.TEMP_ITEM_ID
+        val isTempItem = foundItem?.itemId == 0L
 
         if (isTempItem) {
              // Redirect to AddScreen with pre-filled data
