@@ -54,9 +54,10 @@ class KitchenRepository(
             } else {
                 null
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
+} catch (e: Exception) {
+    android.util.Log.e("KitchenRepository", "Failed to fetch item from API", e)
+    null
+}
         }
     }
 
