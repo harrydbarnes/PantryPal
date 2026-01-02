@@ -59,7 +59,7 @@ class ExpirationWorker(
         // I will use android.R.drawable.ic_dialog_alert as a safe fallback for this environment.
 
         val builder = NotificationCompat.Builder(applicationContext, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setSmallIcon(R.drawable.ic_notification) // Replace with your app's notification icon
             .setContentTitle("PantryPal Alert")
             .setContentText(content)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
