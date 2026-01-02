@@ -34,6 +34,9 @@ interface InventoryDao {
 
     @Query("SELECT COUNT(*) FROM inventory WHERE itemId = :itemId")
     suspend fun countInventoryForItem(itemId: Long): Int
+
+    @Query("SELECT DISTINCT itemId FROM inventory WHERE itemId IN (:itemIds)")
+    suspend fun getInStockItemIds(itemIds: List<Long>): List<Long>
 }
 
 // Helper class for the join query

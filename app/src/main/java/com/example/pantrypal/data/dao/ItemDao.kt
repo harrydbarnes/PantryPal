@@ -22,6 +22,9 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE barcode = :barcode LIMIT 1")
     suspend fun getItemByBarcode(barcode: String): ItemEntity?
 
+    @Query("SELECT * FROM items WHERE itemId IN (:ids)")
+    suspend fun getItemsByIds(ids: List<Long>): List<ItemEntity>
+
     @Query("SELECT * FROM items")
     suspend fun getAllItemsSnapshot(): List<ItemEntity>
 }

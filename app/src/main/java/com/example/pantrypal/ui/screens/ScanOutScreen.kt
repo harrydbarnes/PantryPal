@@ -91,6 +91,25 @@ fun ScanOutScreen(
                                          val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
                                          Text("Exp: ${dateFormat.format(date)}", style = MaterialTheme.typography.bodySmall)
                                      }
+                                     Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                         Button(
+                                             onClick = {
+                                                 viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.FINISHED)
+                                                 onDismiss()
+                                             },
+                                             modifier = Modifier.padding(end = 8.dp)
+                                         ) {
+                                             Text("Consume")
+                                         }
+                                         OutlinedButton(
+                                             onClick = {
+                                                  viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, ConsumptionType.WASTED)
+                                                  onDismiss()
+                                             }
+                                         ) {
+                                             Text("Waste")
+                                         }
+                                     }
                                  }
                              }
                          }

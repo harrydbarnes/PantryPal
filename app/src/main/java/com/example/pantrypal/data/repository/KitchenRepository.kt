@@ -23,10 +23,14 @@ class KitchenRepository(
 ) {
     private val api: OpenFoodFactsApi by lazy {
         Retrofit.Builder()
-            .baseUrl("https://world.openfoodfacts.org/")
+            .baseUrl(OPEN_FOOD_FACTS_API_BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(OpenFoodFactsApi::class.java)
+    }
+
+    companion object {
+        private const val OPEN_FOOD_FACTS_API_BASE_URL = "https://world.openfoodfacts.org/"
     }
 
     // Items
@@ -93,7 +97,7 @@ class KitchenRepository(
         val itemHistory = history.filter { it.type == ConsumptionType.FINISHED }
             .groupBy { it.itemId }
 
-        val suggestions = mutableListOf<ItemEntity>()
+        val candidateIds = mutableListOf<Long>()
 
         for ((itemId, events) in itemHistory) {
             if (events.size < 2) continue // Need at least 2 events to calculate interval
@@ -109,19 +113,22 @@ class KitchenRepository(
 
             // Check if due for restock (LastConsumed + AvgInterval < CurrentTime)
             if (lastConsumed + avgInterval < currentTime) {
-                // Check if we already have it in inventory? (Optional, but good for "smart")
-                // For simplicity, let's just suggest it if it seems due.
-                // A better logic would check current stock too.
-                val currentStock = inventoryDao.countInventoryForItem(itemId)
-                if (currentStock == 0) {
-                     val item = itemDao.getItemById(itemId)
-                     if (item != null) {
-                         suggestions.add(item)
-                     }
-                }
+                candidateIds.add(itemId)
             }
         }
-        return suggestions
+
+        if (candidateIds.isEmpty()) return emptyList()
+
+        // Batch check inventory
+        // We only want items that have 0 stock.
+        // So we get IDs of items that ARE in stock, and exclude them.
+        val inStockIds = inventoryDao.getInStockItemIds(candidateIds)
+        val outOfStockIds = candidateIds.filter { !inStockIds.contains(it) }
+
+        if (outOfStockIds.isEmpty()) return emptyList()
+
+        // Batch fetch items
+        return itemDao.getItemsByIds(outOfStockIds)
     }
 
     // Export Data (Fetch all)
