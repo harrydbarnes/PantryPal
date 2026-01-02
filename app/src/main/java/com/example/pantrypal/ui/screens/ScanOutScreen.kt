@@ -43,7 +43,7 @@ fun ScanOutScreen(
     LaunchedEffect(detectedBarcode) {
         detectedBarcode?.let { code ->
              val currentTime = System.currentTimeMillis()
-             if (currentTime - lastScanTime > 2000) { // 2 second debounce
+             if (currentTime - lastScanTime > SCAN_DEBOUNCE_MS) { // 2 second debounce
                  val inv = viewModel.getInventoryByBarcode(code)
                  if (inv.isNotEmpty()) {
                      // If only one batch, add to queue immediately
