@@ -70,7 +70,7 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
         )
 
     // UI State for Shopping List
-    val shoppingListState: StateFlow<List<com.example.pantrypal.data.entity.ShoppingItemEntity>> = repository.shoppingList
+    val shoppingListState: StateFlow<List<ShoppingItemEntity>> = repository.shoppingList
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
