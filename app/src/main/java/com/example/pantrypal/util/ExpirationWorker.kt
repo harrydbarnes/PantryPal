@@ -8,24 +8,16 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.example.pantrypal.data.database.KitchenDatabase
 import com.example.pantrypal.data.repository.KitchenRepository
 import kotlinx.coroutines.flow.first
 
 class ExpirationWorker(
     context: Context,
-    workerParams: WorkerParameters
+    workerParams: WorkerParameters,
+    private val repository: KitchenRepository
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
-        val database = KitchenDatabase.getDatabase(applicationContext)
-        val repository = KitchenRepository(
-            database.itemDao(),
-            database.inventoryDao(),
-            database.consumptionDao(),
-            database.shoppingDao()
-        )
-
         val threshold = System.currentTimeMillis() + TWO_DAYS_IN_MILLIS
 
         // Since getExpiringItems returns a Flow, we take the first emission
