@@ -151,9 +151,7 @@ fun ScanOutScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                          Button(onClick = {
-                             scanQueue.forEach {
-                                 viewModel.consumeItem(it.inventoryId, it.itemId, 1.0, ConsumptionType.FINISHED)
-                             }
+                             viewModel.consumeItems(scanQueue.toList(), ConsumptionType.FINISHED)
                              scanQueue.clear()
                              onDismiss()
                          }) {

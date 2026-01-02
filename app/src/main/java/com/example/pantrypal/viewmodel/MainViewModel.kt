@@ -122,33 +122,45 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
         return repository.getInventoryByBarcode(barcode)
     }
 
+    private suspend fun consumeItemSuspend(inventoryId: Long, itemId: Long, quantity: Double, type: ConsumptionType, reason: String? = null) {
+        // Log consumption
+        val consumption = ConsumptionEntity(
+            itemId = itemId,
+            quantity = quantity,
+            type = type,
+            wasteReason = reason
+        )
+        repository.logConsumption(consumption)
+
+        // For this exercise, I'll assume we just delete the row (consumed all).
+        val inv = InventoryEntity(inventoryId = inventoryId, itemId = itemId, quantity = quantity, unit = "") // Dummy unit/qty for delete
+        repository.removeInventory(inv)
+
+        // Auto-add to shopping list if "Usual"
+        if (type == ConsumptionType.FINISHED) {
+            val item = repository.getItemById(itemId)
+            if (item != null && item.isUsual) {
+                val shoppingItem = ShoppingItemEntity(
+                    name = item.name,
+                    quantity = 1.0, // Default to 1
+                    unit = item.defaultUnit
+                )
+                repository.addShoppingItem(shoppingItem)
+            }
+        }
+    }
+
     fun consumeItem(inventoryId: Long, itemId: Long, quantity: Double, type: ConsumptionType, reason: String? = null) {
         viewModelScope.launch {
-            // Log consumption
-            val consumption = ConsumptionEntity(
-                itemId = itemId,
-                quantity = quantity,
-                type = type,
-                wasteReason = reason
-            )
-            repository.logConsumption(consumption)
+            consumeItemSuspend(inventoryId, itemId, quantity, type, reason)
+        }
+    }
 
-             // For this exercise, I'll assume we just delete the row (consumed all).
-             val inv = InventoryEntity(inventoryId = inventoryId, itemId = itemId, quantity = quantity, unit = "") // Dummy unit/qty for delete
-             repository.removeInventory(inv)
-
-             // Auto-add to shopping list if "Usual"
-             if (type == ConsumptionType.FINISHED) {
-                 val item = repository.getItemById(itemId)
-                 if (item != null && item.isUsual) {
-                     val shoppingItem = ShoppingItemEntity(
-                         name = item.name,
-                         quantity = 1.0, // Default to 1
-                         unit = item.defaultUnit
-                     )
-                     repository.addShoppingItem(shoppingItem)
-                 }
-             }
+    fun consumeItems(items: List<InventoryWithItemMap>, type: ConsumptionType) {
+        viewModelScope.launch {
+            items.forEach { item ->
+                consumeItemSuspend(item.inventoryId, item.itemId, 1.0, type)
+            }
         }
     }
 
