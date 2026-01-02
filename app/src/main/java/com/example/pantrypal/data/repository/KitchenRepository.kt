@@ -19,7 +19,7 @@ class KitchenRepository(
     private val itemDao: ItemDao,
     private val inventoryDao: InventoryDao,
     private val consumptionDao: ConsumptionDao,
-    private val shoppingDao: ShoppingDao? = null
+    private val shoppingDao: ShoppingDao
 ) {
     private val api: OpenFoodFactsApi by lazy {
         Retrofit.Builder()
