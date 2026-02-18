@@ -22,6 +22,7 @@ class InventoryUiModelTest {
             isVegetarian = true,
             isGlutenFree = true,
             isUsual = true,
+            imageUrl = null,
             createdAt = 1000L
         )
 

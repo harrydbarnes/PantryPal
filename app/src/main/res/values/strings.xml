@@ -5,4 +5,9 @@
     <string name="this_is_current_week">This is the current week</string>
     <string name="not_current_week">Not current week</string>
     <string name="set_as_current">Set as Current</string>
+    <string name="add_meal_title">Add Meal for Week %1$s</string>
+    <string name="meal_name_label">Meal Name</string>
+    <string name="ingredients_label">Ingredients (comma separated)</string>
+    <string name="add_action">Add</string>
+    <string name="cancel_action">Cancel</string>
 </resources>

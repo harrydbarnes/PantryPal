@@ -141,20 +141,20 @@ fun AddMealDialog(week: String, onDismiss: () -> Unit, onAdd: (String, List<Stri
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Meal for Week $week") },
+        title = { Text(stringResource(R.string.add_meal_title, week)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Meal Name") },
+                    label = { Text(stringResource(R.string.meal_name_label)) },
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = ingredientsText,
                     onValueChange = { ingredientsText = it },
-                    label = { Text("Ingredients (comma separated)") },
+                    label = { Text(stringResource(R.string.ingredients_label)) },
                     minLines = 3
                 )
             }
@@ -166,12 +166,12 @@ fun AddMealDialog(week: String, onDismiss: () -> Unit, onAdd: (String, List<Stri
                     onAdd(name, ingredients)
                 }
             }) {
-                Text("Add")
+                Text(stringResource(R.string.add_action))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel_action))
             }
         }
     )
