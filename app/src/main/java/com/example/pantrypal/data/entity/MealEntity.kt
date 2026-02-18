@@ -9,4 +9,9 @@ data class MealEntity(
     val name: String,
     val week: String, // "A" or "B"
     val ingredients: List<String>
-)
+) {
+    companion object {
+        const val WEEK_A = "A"
+        const val WEEK_B = "B"
+    }
+}

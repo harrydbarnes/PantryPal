@@ -58,7 +58,8 @@ abstract class KitchenDatabase : RoomDatabase() {
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // Add frequency to shopping_list table
-                db.execSQL("ALTER TABLE shopping_list ADD COLUMN frequency TEXT DEFAULT 'One-Off' NOT NULL")
+                val defaultFreq = ShoppingItemEntity.FREQ_ONE_OFF
+                db.execSQL("ALTER TABLE shopping_list ADD COLUMN frequency TEXT DEFAULT '$defaultFreq' NOT NULL")
 
                 // Create meals table
                 db.execSQL("""

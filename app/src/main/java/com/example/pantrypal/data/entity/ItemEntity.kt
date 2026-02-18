@@ -22,5 +22,9 @@ data class ItemEntity(
 ) {
     companion object {
         const val TEMP_ID = 0L
+        val CATEGORIES = listOf(
+            "Fruit & Veg", "Fish", "Dairy", "Fresh Snacks", "Fresh Meals",
+            "Snacks", "Juice & Drinks", "Baby", "Household", "Bread & Eggs", "Frozen", "General"
+        )
     }
 }

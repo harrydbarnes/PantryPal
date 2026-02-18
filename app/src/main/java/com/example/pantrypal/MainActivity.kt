@@ -27,6 +27,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -385,7 +386,7 @@ fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: L
             ) {
                 Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(32.dp))
                 Spacer(modifier = Modifier.width(16.dp))
-                Text("Open Kitchen Cupboard", style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.open_kitchen_cupboard), style = MaterialTheme.typography.headlineSmall)
             }
         }
     }

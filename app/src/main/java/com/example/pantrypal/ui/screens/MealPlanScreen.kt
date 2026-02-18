@@ -11,7 +11,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.pantrypal.R
 import com.example.pantrypal.viewmodel.MainViewModel
 import com.example.pantrypal.data.entity.MealEntity
 
@@ -21,7 +23,11 @@ fun MealPlanScreen(viewModel: MainViewModel) {
     val meals by viewModel.mealsState.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(if (currentWeekSetting == "A") 0 else 1) }
-    // Update selected tab if current week changes externally? Maybe not.
+
+    // Sync tab with current week setting
+    LaunchedEffect(currentWeekSetting) {
+        selectedTab = if (currentWeekSetting == "A") 0 else 1
+    }
 
     val displayWeek = if (selectedTab == 0) "A" else "B"
 
@@ -57,13 +63,13 @@ fun MealPlanScreen(viewModel: MainViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = if (currentWeekSetting == displayWeek) "This is the current week" else "Not current week",
+                    text = if (currentWeekSetting == displayWeek) stringResource(R.string.this_is_current_week) else stringResource(R.string.not_current_week),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (currentWeekSetting == displayWeek) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 if (currentWeekSetting != displayWeek) {
                     Button(onClick = { viewModel.setCurrentWeek(displayWeek) }) {
-                        Text("Set as Current")
+                        Text(stringResource(R.string.set_as_current))
                     }
                 } else {
                     Icon(Icons.Default.Check, contentDescription = "Current", tint = MaterialTheme.colorScheme.primary)
@@ -72,7 +78,9 @@ fun MealPlanScreen(viewModel: MainViewModel) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            val weekMeals = meals.filter { it.week == displayWeek }
+            val weekMeals = remember(meals, displayWeek) {
+                meals.filter { it.week == displayWeek }
+            }
 
             if (weekMeals.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

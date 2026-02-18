@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.ZoneOffset
+import com.example.pantrypal.data.entity.ItemEntity
 
 class AddItemState {
     var name by mutableStateOf("")
@@ -150,10 +151,7 @@ fun AddScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        val categories = listOf(
-            "Fruit & Veg", "Fish", "Dairy", "Fresh Snacks", "Fresh Meals",
-            "Snacks", "Juice & Drinks", "Baby", "Household", "Bread & Eggs", "Frozen", "General"
-        )
+        val categories = ItemEntity.CATEGORIES
         var expandedCategory by remember { mutableStateOf(false) }
 
         ExposedDropdownMenuBox(
