@@ -14,12 +14,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,6 +46,7 @@ import com.example.pantrypal.ui.screens.SettingsScreen
 import com.example.pantrypal.ui.screens.PastItemsScreen
 import com.example.pantrypal.ui.screens.AddScreen
 import com.example.pantrypal.ui.screens.ShoppingListScreen
+import com.example.pantrypal.ui.screens.MealPlanScreen
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -61,6 +64,7 @@ sealed class AppScreen {
     data object ScanOut : AppScreen()
     data object Settings : AppScreen()
     data object PastItems : AppScreen()
+    data object MealPlan : AppScreen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -69,7 +73,7 @@ class MainActivity : ComponentActivity() {
 
         val app = application as PantryPalApplication
         val repository = app.repository
-        val viewModelFactory = MainViewModelFactory(repository)
+        val viewModelFactory = MainViewModelFactory(repository, app)
 
         // Schedule background work
         val workRequest = PeriodicWorkRequestBuilder<ExpirationWorker>(1, TimeUnit.DAYS)
@@ -117,10 +121,16 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
         )
     }
 
+    var pendingPermissionAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { granted ->
             hasCameraPermission = granted
+            if (granted) {
+                pendingPermissionAction?.invoke()
+                pendingPermissionAction = null
+            }
         }
     )
 
@@ -128,6 +138,7 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
         if (hasCameraPermission) {
             onGranted()
         } else {
+            pendingPermissionAction = onGranted
             launcher.launch(Manifest.permission.CAMERA)
         }
     }
@@ -206,10 +217,10 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                     onClick = { currentScreen = AppScreen.Dashboard }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.List, contentDescription = "Inventory") },
-                    label = { Text("Inventory") },
-                    selected = currentScreen == AppScreen.Inventory,
-                    onClick = { currentScreen = AppScreen.Inventory }
+                    icon = { Icon(Icons.Default.DateRange, contentDescription = "Meal Plan") },
+                    label = { Text("Meal Plan") },
+                    selected = currentScreen == AppScreen.MealPlan,
+                    onClick = { currentScreen = AppScreen.MealPlan }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Shopping") },
@@ -261,7 +272,11 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                     )
                 }
                 AppScreen.Dashboard -> {
-                    DashboardScreen(expiringItems, restockSuggestions)
+                    DashboardScreen(
+                        expiringItems,
+                        restockSuggestions,
+                        onOpenInventory = { currentScreen = AppScreen.Inventory }
+                    )
                 }
                 AppScreen.Inventory -> {
                     InventoryScreen(inventory, onConsume = { item, type ->
@@ -270,6 +285,9 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                 }
                 AppScreen.ShoppingList -> {
                     ShoppingListScreen(viewModel)
+                }
+                AppScreen.MealPlan -> {
+                    MealPlanScreen(viewModel)
                 }
                 AppScreen.AddManual -> {
                     AddScreen(onAdd = { name, qty, unit, cat, veg, gf, exp ->
@@ -290,7 +308,7 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: List<ItemEntity>) {
+fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: List<ItemEntity>, onOpenInventory: () -> Unit) {
     LazyColumn(contentPadding = PaddingValues(16.dp)) {
         item {
             Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
@@ -355,6 +373,19 @@ fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: L
                         Text(text = "Seems you are out of this.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(32.dp))
+            Button(
+                onClick = onOpenInventory,
+                modifier = Modifier.fillMaxWidth().height(80.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(32.dp))
+                Spacer(modifier = Modifier.width(16.dp))
+                Text("Open Kitchen Cupboard", style = MaterialTheme.typography.headlineSmall)
             }
         }
     }
@@ -510,5 +541,3 @@ fun InventoryItemRow(item: InventoryUiModel, onConsume: (InventoryUiModel, Consu
         }
     }
 }
-
-// AddScreen moved to ui/screens/AddScreen.kt

@@ -22,7 +22,17 @@ import com.example.pantrypal.viewmodel.MainViewModel
 @Composable
 fun ShoppingListScreen(viewModel: MainViewModel) {
     val shoppingList by viewModel.shoppingListState.collectAsState()
+    val currentWeek by viewModel.currentWeek.collectAsState()
     var showAddItemDialog by remember { mutableStateOf(false) }
+
+    val filteredList = remember(shoppingList, currentWeek) {
+        shoppingList.filter { item ->
+            item.frequency == ShoppingItemEntity.FREQ_ONE_OFF ||
+            item.frequency == ShoppingItemEntity.FREQ_ESSENTIAL ||
+            (currentWeek == "A" && item.frequency == ShoppingItemEntity.FREQ_WEEK_A) ||
+            (currentWeek == "B" && item.frequency == ShoppingItemEntity.FREQ_WEEK_B)
+        }
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -32,13 +42,25 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-             Text(
-                "Shopping List",
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(16.dp)
-            )
+             Row(
+                 modifier = Modifier.fillMaxWidth().padding(16.dp),
+                 horizontalArrangement = Arrangement.SpaceBetween,
+                 verticalAlignment = Alignment.CenterVertically
+             ) {
+                 Text(
+                    "Shopping List",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                    Text(
+                        text = "Week $currentWeek",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+             }
 
-            if (shoppingList.isNotEmpty() && shoppingList.any { it.isChecked }) {
+            if (filteredList.isNotEmpty() && filteredList.any { it.isChecked }) {
                 Button(
                     onClick = { viewModel.clearCheckedShoppingItems() },
                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -48,7 +70,7 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
             }
 
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(16.dp)) {
-                items(shoppingList) { item ->
+                items(filteredList) { item ->
                     ShoppingListItemRow(
                         item = item,
                         onToggle = { viewModel.toggleShoppingItem(item) },
@@ -63,6 +85,16 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
         var newItemName by remember { mutableStateOf("") }
         var newItemQty by remember { mutableStateOf("1.0") }
         var newItemUnit by remember { mutableStateOf("pcs") }
+        var newItemFrequency by remember { mutableStateOf(ShoppingItemEntity.FREQ_ONE_OFF) }
+
+        val frequencies = listOf(
+            ShoppingItemEntity.FREQ_ONE_OFF,
+            ShoppingItemEntity.FREQ_ESSENTIAL,
+            ShoppingItemEntity.FREQ_WEEK_A,
+            ShoppingItemEntity.FREQ_WEEK_B
+        )
+
+        var expanded by remember { mutableStateOf(false) }
 
         AlertDialog(
             onDismissRequest = { showAddItemDialog = false },
@@ -72,26 +104,59 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
                     OutlinedTextField(
                         value = newItemName,
                         onValueChange = { newItemName = it },
-                        label = { Text("Item Name") }
+                        label = { Text("Item Name") },
+                        singleLine = true
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = newItemQty,
                         onValueChange = { newItemQty = it },
-                        label = { Text("Quantity") }
+                        label = { Text("Quantity") },
+                        singleLine = true
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = newItemUnit,
                         onValueChange = { newItemUnit = it },
-                        label = { Text("Unit") }
+                        label = { Text("Unit") },
+                        singleLine = true
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded }
+                    ) {
+                        OutlinedTextField(
+                            value = newItemFrequency,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Frequency") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            modifier = Modifier.menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            frequencies.forEach { selectionOption ->
+                                DropdownMenuItem(
+                                    text = { Text(selectionOption) },
+                                    onClick = {
+                                        newItemFrequency = selectionOption
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     if (newItemName.isNotBlank()) {
-                        viewModel.addShoppingItem(newItemName, newItemQty.toDoubleOrNull() ?: 1.0, newItemUnit)
+                        viewModel.addShoppingItem(newItemName, newItemQty.toDoubleOrNull() ?: 1.0, newItemUnit, newItemFrequency)
                         showAddItemDialog = false
                     }
                 }) {
@@ -132,10 +197,22 @@ fun ShoppingListItemRow(
                 style = MaterialTheme.typography.bodyLarge,
                 textDecoration = if (item.isChecked) TextDecoration.LineThrough else null
             )
-            Text(
-                text = "Qty: ${item.quantity} ${item.unit}",
-                style = MaterialTheme.typography.bodySmall
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Qty: ${item.quantity} ${item.unit}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (item.frequency != ShoppingItemEntity.FREQ_ONE_OFF) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                        Text(
+                            text = item.frequency,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
         }
         IconButton(onClick = onDelete) {
             Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)

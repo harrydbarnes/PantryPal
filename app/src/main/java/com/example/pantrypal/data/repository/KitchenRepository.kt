@@ -5,11 +5,13 @@ import com.example.pantrypal.data.dao.ConsumptionWithItem
 import com.example.pantrypal.data.dao.InventoryDao
 import com.example.pantrypal.data.dao.ItemDao
 import com.example.pantrypal.data.dao.ShoppingDao
+import com.example.pantrypal.data.dao.MealDao
 import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
+import com.example.pantrypal.data.entity.MealEntity
 import com.example.pantrypal.data.api.OpenFoodFactsApi
 import kotlinx.coroutines.flow.Flow
 import retrofit2.Retrofit
@@ -19,7 +21,8 @@ class KitchenRepository(
     private val itemDao: ItemDao,
     private val inventoryDao: InventoryDao,
     private val consumptionDao: ConsumptionDao,
-    private val shoppingDao: ShoppingDao
+    private val shoppingDao: ShoppingDao,
+    private val mealDao: MealDao
 ) {
     private val api: OpenFoodFactsApi by lazy {
         Retrofit.Builder()
@@ -34,7 +37,7 @@ class KitchenRepository(
     }
 
     // Items
-    val allItems: Flow<List<ItemEntity>> = itemDao.getAllItems()
+    fun getAllItems(): Flow<List<ItemEntity>> = itemDao.getAllItems()
 
     suspend fun getItemById(id: Long): ItemEntity? = itemDao.getItemById(id)
     suspend fun getItemByBarcode(barcode: String): ItemEntity? = itemDao.getItemByBarcode(barcode)
@@ -59,13 +62,12 @@ class KitchenRepository(
                 null
             }
         } catch (e: Exception) {
-            android.util.Log.e("KitchenRepository", "Error fetching product from API for barcode: $barcode", e)
+            // Log error
             null
         }
     }
 
     // Inventory
-    // Note: This matches the raw query return type in DAO
     val currentInventory = inventoryDao.getInventoryJoined()
 
     fun getExpiringItems(currentTime: Long) = inventoryDao.getExpiringItems(currentTime)
@@ -83,12 +85,19 @@ class KitchenRepository(
     val allConsumptionHistory: Flow<List<ConsumptionWithItem>> = consumptionDao.getAllHistoryWithItemFlow()
 
     // Shopping List
-    val shoppingList: Flow<List<ShoppingItemEntity>> = shoppingDao?.getAllShoppingItems() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    val shoppingList: Flow<List<ShoppingItemEntity>> = shoppingDao.getAllShoppingItems()
 
-    suspend fun addShoppingItem(item: ShoppingItemEntity) = shoppingDao?.insertShoppingItem(item)
-    suspend fun updateShoppingItem(item: ShoppingItemEntity) = shoppingDao?.updateShoppingItem(item)
-    suspend fun deleteShoppingItem(item: ShoppingItemEntity) = shoppingDao?.deleteShoppingItem(item)
-    suspend fun deleteCheckedShoppingItems() = shoppingDao?.deleteCheckedItems()
+    suspend fun addShoppingItem(item: ShoppingItemEntity) = shoppingDao.insertShoppingItem(item)
+    suspend fun updateShoppingItem(item: ShoppingItemEntity) = shoppingDao.updateShoppingItem(item)
+    suspend fun deleteShoppingItem(item: ShoppingItemEntity) = shoppingDao.deleteShoppingItem(item)
+    suspend fun deleteCheckedShoppingItems() = shoppingDao.deleteCheckedItems()
+
+    // Meals
+    val allMeals: Flow<List<MealEntity>> = mealDao.getAllMeals()
+    fun getMealsByWeek(week: String): Flow<List<MealEntity>> = mealDao.getMealsByWeek(week)
+    suspend fun insertMeal(meal: MealEntity) = mealDao.insertMeal(meal)
+    suspend fun deleteMeal(meal: MealEntity) = mealDao.deleteMeal(meal)
+
 
     // Smart Restock Logic
     suspend fun getRestockSuggestions(currentTime: Long): List<ItemEntity> {
@@ -120,8 +129,6 @@ class KitchenRepository(
         if (candidateIds.isEmpty()) return emptyList()
 
         // Batch check inventory
-        // We only want items that have 0 stock.
-        // So we get IDs of items that ARE in stock, and exclude them.
         val inStockIds = inventoryDao.getInStockItemIds(candidateIds)
         val outOfStockIds = candidateIds.filter { !inStockIds.contains(it) }
 
