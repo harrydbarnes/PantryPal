@@ -1,4 +1,8 @@
 <resources>
     <string name="app_name">PantryPal</string>
     <string name="item_not_found_in_inventory">Item not found in inventory</string>
+    <string name="open_kitchen_cupboard">Open Kitchen Cupboard</string>
+    <string name="this_is_current_week">This is the current week</string>
+    <string name="not_current_week">Not current week</string>
+    <string name="set_as_current">Set as Current</string>
 </resources>

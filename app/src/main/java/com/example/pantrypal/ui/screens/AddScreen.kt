@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.ZoneOffset
+import com.example.pantrypal.data.entity.ItemEntity
 
 class AddItemState {
     var name by mutableStateOf("")
@@ -150,13 +151,38 @@ fun AddScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
-            value = state.category,
-            onValueChange = { state.category = it },
-            label = { Text("Category") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
+        val categories = ItemEntity.CATEGORIES
+        var expandedCategory by remember { mutableStateOf(false) }
+
+        ExposedDropdownMenuBox(
+            expanded = expandedCategory,
+            onExpandedChange = { expandedCategory = !expandedCategory },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = state.category,
+                onValueChange = { state.category = it },
+                label = { Text("Category") },
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCategory) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                singleLine = true
+            )
+            ExposedDropdownMenu(
+                expanded = expandedCategory,
+                onDismissRequest = { expandedCategory = false }
+            ) {
+                categories.forEach { selectionOption ->
+                    DropdownMenuItem(
+                        text = { Text(selectionOption) },
+                        onClick = {
+                            state.category = selectionOption
+                            expandedCategory = false
+                        }
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

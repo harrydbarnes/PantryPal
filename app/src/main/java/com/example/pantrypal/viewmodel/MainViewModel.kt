@@ -1,5 +1,8 @@
 package com.example.pantrypal.viewmodel
 
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,12 +13,15 @@ import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
+import com.example.pantrypal.data.entity.MealEntity
 import com.example.pantrypal.data.repository.KitchenRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -31,7 +37,16 @@ fun tickerFlow(period: Long, initialDelay: Long = 0) = flow {
     }
 }
 
-class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
+class MainViewModel(private val repository: KitchenRepository, application: Application) : AndroidViewModel(application) {
+
+    private val prefs = application.getSharedPreferences("pantry_prefs", Context.MODE_PRIVATE)
+    private val _currentWeek = MutableStateFlow(prefs.getString("current_week", "A") ?: "A")
+    val currentWeek: StateFlow<String> = _currentWeek.asStateFlow()
+
+    fun setCurrentWeek(week: String) {
+        _currentWeek.value = week
+        prefs.edit().putString("current_week", week).apply()
+    }
 
     // UI State for Inventory
     val inventoryState: StateFlow<List<InventoryUiModel>> = repository.currentInventory
@@ -79,6 +94,35 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    val mealsState: StateFlow<List<MealEntity>> = repository.allMeals
+         .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun addMeal(name: String, week: String, ingredients: List<String>) {
+        viewModelScope.launch {
+            repository.insertMeal(MealEntity(name = name, week = week, ingredients = ingredients))
+            // Auto add ingredients to shopping list logic
+            ingredients.forEach { ingredient ->
+                 val freq = if (week == "A") ShoppingItemEntity.FREQ_WEEK_A else ShoppingItemEntity.FREQ_WEEK_B
+                 repository.addShoppingItem(
+                     ShoppingItemEntity(
+                        name = ingredient,
+                        frequency = freq
+                     )
+                 )
+            }
+        }
+    }
+
+    fun deleteMeal(meal: MealEntity) {
+        viewModelScope.launch {
+            repository.deleteMeal(meal)
+        }
+    }
 
     fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean, barcode: String? = null, expirationDate: Long? = null, imageUrl: String? = null) {
         viewModelScope.launch {
@@ -166,12 +210,13 @@ class MainViewModel(private val repository: KitchenRepository) : ViewModel() {
         }
     }
 
-    fun addShoppingItem(name: String, quantity: Double, unit: String) {
+    fun addShoppingItem(name: String, quantity: Double, unit: String, frequency: String = ShoppingItemEntity.FREQ_ONE_OFF) {
         viewModelScope.launch {
              val item = ShoppingItemEntity(
                  name = name,
                  quantity = quantity,
-                 unit = unit
+                 unit = unit,
+                 frequency = frequency
              )
              repository.addShoppingItem(item)
         }
@@ -229,11 +274,11 @@ fun InventoryWithItemMap.toUiModel(): InventoryUiModel {
     )
 }
 
-class MainViewModelFactory(private val repository: KitchenRepository) : ViewModelProvider.Factory {
+class MainViewModelFactory(private val repository: KitchenRepository, private val application: Application) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return MainViewModel(repository) as T
+            return MainViewModel(repository, application) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

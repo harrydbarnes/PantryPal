@@ -2,6 +2,8 @@ package com.example.pantrypal.data.converter
 
 import androidx.room.TypeConverter
 import com.example.pantrypal.data.entity.ConsumptionType
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 class Converters {
     @TypeConverter
@@ -16,5 +18,25 @@ class Converters {
         } catch (e: IllegalArgumentException) {
             ConsumptionType.FINISHED // Default fallback
         }
+    }
+
+    @TypeConverter
+    fun fromStringList(value: List<String>): String {
+        return gson.toJson(value, stringListType)
+    }
+
+    @TypeConverter
+    @TypeConverter
+    fun toStringList(value: String): List<String> {
+        return try {
+            gson.fromJson(value, stringListType) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    companion object {
+        private val gson = Gson()
+        private val stringListType = object : TypeToken<List<String>>() {}.type
     }
 }
