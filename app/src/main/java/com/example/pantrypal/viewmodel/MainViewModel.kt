@@ -108,7 +108,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             repository.insertMeal(MealEntity(name = name, week = week, ingredients = ingredients))
             // Auto add ingredients to shopping list logic
             val currentShoppingList = repository.shoppingList.first()
-            ingredients.forEach { ingredient ->
+            ingredients.distinctBy { it.lowercase() }.forEach { ingredient ->
                  val freq = if (week == "A") ShoppingItemEntity.FREQ_WEEK_A else ShoppingItemEntity.FREQ_WEEK_B
                  val alreadyInList = currentShoppingList.any {
                      it.name.equals(ingredient, ignoreCase = true) && it.frequency == freq
