@@ -26,7 +26,6 @@ class Converters {
     }
 
     @TypeConverter
-    @TypeConverter
     fun toStringList(value: String): List<String> {
         return try {
             gson.fromJson(value, stringListType) ?: emptyList()

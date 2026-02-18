@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -106,14 +107,20 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         viewModelScope.launch {
             repository.insertMeal(MealEntity(name = name, week = week, ingredients = ingredients))
             // Auto add ingredients to shopping list logic
-            ingredients.forEach { ingredient ->
+            val currentShoppingList = repository.shoppingList.first()
+            ingredients.distinctBy { it.lowercase() }.forEach { ingredient ->
                  val freq = if (week == "A") ShoppingItemEntity.FREQ_WEEK_A else ShoppingItemEntity.FREQ_WEEK_B
-                 repository.addShoppingItem(
-                     ShoppingItemEntity(
-                        name = ingredient,
-                        frequency = freq
+                 val alreadyInList = currentShoppingList.any {
+                     it.name.equals(ingredient, ignoreCase = true) && it.frequency == freq
+                 }
+                 if (!alreadyInList) {
+                     repository.addShoppingItem(
+                         ShoppingItemEntity(
+                            name = ingredient,
+                            frequency = freq
+                         )
                      )
-                 )
+                 }
             }
         }
     }
