@@ -81,7 +81,7 @@ class KitchenRepositoryTest {
             FakeMealDao()
         )
 
-        val suggestions = repo.getRestockSuggestions(System.currentTimeMillis())
+        val suggestions = repo.getRestockSuggestions(1672531200000L) // Use a fixed timestamp
 
         // 101L and 102L are candidates. 102L is in stock. So only 101L should be returned.
         assertEquals(1, suggestions.size)
