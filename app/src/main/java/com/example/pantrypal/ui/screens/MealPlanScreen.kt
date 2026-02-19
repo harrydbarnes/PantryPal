@@ -188,30 +188,30 @@ fun AddMealDialog(week: String, onDismiss: () -> Unit, onAdd: (String, List<Stri
 fun MealPlanSetupDialog(onStyleSelected: (String) -> Unit) {
     AlertDialog(
         onDismissRequest = { }, // Force selection
-        title = { Text("How do you meal plan?") },
+        title = { Text(stringResource(R.string.meal_plan_setup_title)) },
         text = {
             Column {
-                Text("Select a style to set up the app:")
+                Text(stringResource(R.string.meal_plan_setup_message))
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
-                    onClick = { onStyleSelected("Random") },
+                    onClick = { onStyleSelected(MainViewModel.STYLE_RANDOM) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Random")
+                    Text(stringResource(R.string.meal_plan_style_random))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
-                    onClick = { onStyleSelected("Week ahead") },
+                    onClick = { onStyleSelected(MainViewModel.STYLE_WEEK_AHEAD) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Week ahead")
+                    Text(stringResource(R.string.meal_plan_style_week_ahead))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
-                    onClick = { onStyleSelected("Two week schedule") },
+                    onClick = { onStyleSelected(MainViewModel.STYLE_TWO_WEEKS) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Two week schedule")
+                    Text(stringResource(R.string.meal_plan_style_two_weeks))
                 }
             }
         },
