@@ -20,7 +20,7 @@ class KitchenRepositoryTest {
         override suspend fun getAllHistory(): List<ConsumptionEntity> = emptyList()
 
         // The important one
-        override suspend fun getRestockCandidates(currentTime: Long): List<Long> {
+        override suspend fun getRestockCandidates(currentTime: Long, type: ConsumptionType): List<Long> {
             // Assume logic is correct in SQL, just return test data
             return listOf(101L, 102L)
         }

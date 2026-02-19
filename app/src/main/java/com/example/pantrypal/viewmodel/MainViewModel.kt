@@ -40,13 +40,27 @@ fun tickerFlow(period: Long, initialDelay: Long = 0) = flow {
 
 class MainViewModel(private val repository: KitchenRepository, application: Application) : AndroidViewModel(application) {
 
+    companion object {
+        const val STYLE_RANDOM = "RANDOM"
+        const val STYLE_WEEK_AHEAD = "WEEK_AHEAD"
+        const val STYLE_TWO_WEEKS = "TWO_WEEKS"
+    }
+
     private val prefs = application.getSharedPreferences("pantry_prefs", Context.MODE_PRIVATE)
     private val _currentWeek = MutableStateFlow(prefs.getString("current_week", "A") ?: "A")
     val currentWeek: StateFlow<String> = _currentWeek.asStateFlow()
 
+    private val _mealPlanStyle = MutableStateFlow(prefs.getString("meal_plan_style", null))
+    val mealPlanStyle: StateFlow<String?> = _mealPlanStyle.asStateFlow()
+
     fun setCurrentWeek(week: String) {
         _currentWeek.value = week
         prefs.edit().putString("current_week", week).apply()
+    }
+
+    fun setMealPlanStyle(style: String) {
+        _mealPlanStyle.value = style
+        prefs.edit().putString("meal_plan_style", style).apply()
     }
 
     // UI State for Inventory

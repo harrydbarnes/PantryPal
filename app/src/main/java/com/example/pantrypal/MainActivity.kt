@@ -26,6 +26,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -56,16 +57,18 @@ import java.util.concurrent.TimeUnit
 import com.example.pantrypal.util.ExpirationWorker
 import coil.compose.AsyncImage
 
-sealed class AppScreen {
-    data object Dashboard : AppScreen()
-    data object Inventory : AppScreen()
-    data object ShoppingList : AppScreen()
-    data object AddManual : AppScreen()
-    data object ScanIn : AppScreen()
-    data object ScanOut : AppScreen()
-    data object Settings : AppScreen()
-    data object PastItems : AppScreen()
-    data object MealPlan : AppScreen()
+import androidx.annotation.StringRes
+
+sealed class AppScreen(@StringRes val titleResId: Int) {
+    data object Dashboard : AppScreen(R.string.dashboard_title)
+    data object Inventory : AppScreen(R.string.inventory_title)
+    data object ShoppingList : AppScreen(R.string.shopping_list_title)
+    data object AddManual : AppScreen(R.string.add_item_title)
+    data object ScanIn : AppScreen(R.string.scan_in_title)
+    data object ScanOut : AppScreen(R.string.scan_out_title)
+    data object Settings : AppScreen(R.string.settings_title)
+    data object PastItems : AppScreen(R.string.past_items_title)
+    data object MealPlan : AppScreen(R.string.meal_plan_title)
 }
 
 class MainActivity : ComponentActivity() {
@@ -175,11 +178,16 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
 
     var showMenu by remember { mutableStateOf(false) }
 
+    val configuration = LocalConfiguration.current
+    val isWideScreen = configuration.screenWidthDp >= 600
+
     Scaffold(
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
-                title = { Text("PantryPal") },
+                title = {
+                    Text(stringResource(currentScreen.titleResId))
+                },
                 actions = {
                     IconButton(onClick = { showMenu = !showMenu }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "More")
@@ -217,6 +225,14 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                     selected = currentScreen == AppScreen.Dashboard,
                     onClick = { currentScreen = AppScreen.Dashboard }
                 )
+                if (isWideScreen) {
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.List, contentDescription = "Inventory") },
+                        label = { Text("Inventory") },
+                        selected = currentScreen == AppScreen.Inventory,
+                        onClick = { currentScreen = AppScreen.Inventory }
+                    )
+                }
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.DateRange, contentDescription = "Meal Plan") },
                     label = { Text("Meal Plan") },

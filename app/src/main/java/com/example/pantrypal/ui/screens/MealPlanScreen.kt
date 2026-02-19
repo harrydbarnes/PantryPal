@@ -21,6 +21,13 @@ import com.example.pantrypal.data.entity.MealEntity
 fun MealPlanScreen(viewModel: MainViewModel) {
     val currentWeekSetting by viewModel.currentWeek.collectAsState()
     val meals by viewModel.mealsState.collectAsState()
+    val mealPlanStyle by viewModel.mealPlanStyle.collectAsState()
+
+    if (mealPlanStyle.isNullOrEmpty()) {
+        MealPlanSetupDialog(onStyleSelected = { style ->
+            viewModel.setMealPlanStyle(style)
+        })
+    }
 
     var selectedTab by remember { mutableIntStateOf(if (currentWeekSetting == "A") 0 else 1) }
 
@@ -174,5 +181,38 @@ fun AddMealDialog(week: String, onDismiss: () -> Unit, onAdd: (String, List<Stri
                 Text(stringResource(R.string.cancel_action))
             }
         }
+    )
+}
+
+@Composable
+fun MealPlanSetupDialog(onStyleSelected: (String) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { }, // Force selection
+        title = { Text(stringResource(R.string.meal_plan_setup_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.meal_plan_setup_message))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val styles = listOf(
+                    MainViewModel.STYLE_RANDOM to R.string.meal_plan_style_random,
+                    MainViewModel.STYLE_WEEK_AHEAD to R.string.meal_plan_style_week_ahead,
+                    MainViewModel.STYLE_TWO_WEEKS to R.string.meal_plan_style_two_weeks
+                )
+
+                styles.forEachIndexed { index, (style, stringRes) ->
+                    Button(
+                        onClick = { onStyleSelected(style) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(stringRes))
+                    }
+                    if (index < styles.lastIndex) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = {}
     )
 }

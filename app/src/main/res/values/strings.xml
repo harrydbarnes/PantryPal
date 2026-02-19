@@ -10,4 +10,22 @@
     <string name="ingredients_label">Ingredients (comma separated)</string>
     <string name="add_action">Add</string>
     <string name="cancel_action">Cancel</string>
+
+    <!-- Screen Titles -->
+    <string name="dashboard_title">Dashboard</string>
+    <string name="inventory_title">Kitchen Cupboard</string>
+    <string name="shopping_list_title">Shopping List</string>
+    <string name="add_item_title">Add Item</string>
+    <string name="scan_in_title">Scan In</string>
+    <string name="scan_out_title">Scan Out</string>
+    <string name="settings_title">Settings</string>
+    <string name="past_items_title">Past Items Log</string>
+    <string name="meal_plan_title">Meal Plan</string>
+
+    <!-- Meal Plan Setup -->
+    <string name="meal_plan_setup_title">How do you meal plan?</string>
+    <string name="meal_plan_setup_message">Select a style to set up the app:</string>
+    <string name="meal_plan_style_random">Random</string>
+    <string name="meal_plan_style_week_ahead">Week ahead</string>
+    <string name="meal_plan_style_two_weeks">Two week schedule</string>
 </resources>
