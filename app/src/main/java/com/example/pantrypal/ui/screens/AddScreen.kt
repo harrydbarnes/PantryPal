@@ -24,6 +24,8 @@ import java.time.format.DateTimeFormatter
 import java.time.ZoneOffset
 import com.example.pantrypal.data.entity.ItemEntity
 
+private const val EXPIRATION_DATE_PATTERN = "yyyy-MM-dd"
+
 class AddItemState {
     var name by mutableStateOf("")
     var qtyText by mutableStateOf("1.0")
@@ -229,27 +231,32 @@ fun AddScreen(
 
         // Expiration Date
         Box(modifier = Modifier.fillMaxWidth()) {
+            val expirationDateFormatter = remember { DateTimeFormatter.ofPattern(EXPIRATION_DATE_PATTERN) }
+            val formattedDate = remember(state.expirationDate) {
+                state.expirationDate?.format(expirationDateFormatter) ?: ""
+            }
+            val onDatePickerClick = { showDatePicker = true }
+
             OutlinedTextField(
-                value = state.expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) ?: "",
+                value = formattedDate,
                 onValueChange = {}, // Read only
                 label = { Text("Expiration Date (Optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 readOnly = true,
                 trailingIcon = {
-                    IconButton(onClick = { showDatePicker = true }) {
+                    IconButton(onClick = onDatePickerClick) {
                         Icon(Icons.Default.DateRange, contentDescription = "Select Date")
                     }
                 }
             )
 
-            val dateStr = state.expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-            val contentDesc = "Expiration Date ${dateStr ?: "(Optional)"}"
+            val contentDesc = "Expiration Date ${formattedDate.ifEmpty { "(Optional)" }}"
 
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .clickable(
-                        onClick = { showDatePicker = true },
+                        onClick = onDatePickerClick,
                         role = Role.Button,
                         onClickLabel = "Select expiration date"
                     )
