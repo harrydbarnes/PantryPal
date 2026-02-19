@@ -57,16 +57,18 @@ import java.util.concurrent.TimeUnit
 import com.example.pantrypal.util.ExpirationWorker
 import coil.compose.AsyncImage
 
-sealed class AppScreen {
-    data object Dashboard : AppScreen()
-    data object Inventory : AppScreen()
-    data object ShoppingList : AppScreen()
-    data object AddManual : AppScreen()
-    data object ScanIn : AppScreen()
-    data object ScanOut : AppScreen()
-    data object Settings : AppScreen()
-    data object PastItems : AppScreen()
-    data object MealPlan : AppScreen()
+import androidx.annotation.StringRes
+
+sealed class AppScreen(@StringRes val titleResId: Int) {
+    data object Dashboard : AppScreen(R.string.dashboard_title)
+    data object Inventory : AppScreen(R.string.inventory_title)
+    data object ShoppingList : AppScreen(R.string.shopping_list_title)
+    data object AddManual : AppScreen(R.string.add_item_title)
+    data object ScanIn : AppScreen(R.string.scan_in_title)
+    data object ScanOut : AppScreen(R.string.scan_out_title)
+    data object Settings : AppScreen(R.string.settings_title)
+    data object PastItems : AppScreen(R.string.past_items_title)
+    data object MealPlan : AppScreen(R.string.meal_plan_title)
 }
 
 class MainActivity : ComponentActivity() {
@@ -184,18 +186,7 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
                 title = {
-                    val title = when (currentScreen) {
-                        AppScreen.Dashboard -> stringResource(R.string.dashboard_title)
-                        AppScreen.Inventory -> stringResource(R.string.inventory_title)
-                        AppScreen.ShoppingList -> stringResource(R.string.shopping_list_title)
-                        AppScreen.AddManual -> stringResource(R.string.add_item_title)
-                        AppScreen.ScanIn -> stringResource(R.string.scan_in_title)
-                        AppScreen.ScanOut -> stringResource(R.string.scan_out_title)
-                        AppScreen.Settings -> stringResource(R.string.settings_title)
-                        AppScreen.PastItems -> stringResource(R.string.past_items_title)
-                        AppScreen.MealPlan -> stringResource(R.string.meal_plan_title)
-                    }
-                    Text(title)
+                    Text(stringResource(currentScreen.titleResId))
                 },
                 actions = {
                     IconButton(onClick = { showMenu = !showMenu }) {

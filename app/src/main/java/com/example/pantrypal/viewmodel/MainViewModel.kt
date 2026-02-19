@@ -41,9 +41,9 @@ fun tickerFlow(period: Long, initialDelay: Long = 0) = flow {
 class MainViewModel(private val repository: KitchenRepository, application: Application) : AndroidViewModel(application) {
 
     companion object {
-        const val STYLE_RANDOM = "Random"
-        const val STYLE_WEEK_AHEAD = "Week ahead"
-        const val STYLE_TWO_WEEKS = "Two week schedule"
+        const val STYLE_RANDOM = "RANDOM"
+        const val STYLE_WEEK_AHEAD = "WEEK_AHEAD"
+        const val STYLE_TWO_WEEKS = "TWO_WEEKS"
     }
 
     private val prefs = application.getSharedPreferences("pantry_prefs", Context.MODE_PRIVATE)

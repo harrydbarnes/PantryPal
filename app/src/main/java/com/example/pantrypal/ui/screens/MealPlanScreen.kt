@@ -193,25 +193,23 @@ fun MealPlanSetupDialog(onStyleSelected: (String) -> Unit) {
             Column {
                 Text(stringResource(R.string.meal_plan_setup_message))
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { onStyleSelected(MainViewModel.STYLE_RANDOM) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(R.string.meal_plan_style_random))
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { onStyleSelected(MainViewModel.STYLE_WEEK_AHEAD) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(R.string.meal_plan_style_week_ahead))
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { onStyleSelected(MainViewModel.STYLE_TWO_WEEKS) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(R.string.meal_plan_style_two_weeks))
+
+                val styles = listOf(
+                    MainViewModel.STYLE_RANDOM to R.string.meal_plan_style_random,
+                    MainViewModel.STYLE_WEEK_AHEAD to R.string.meal_plan_style_week_ahead,
+                    MainViewModel.STYLE_TWO_WEEKS to R.string.meal_plan_style_two_weeks
+                )
+
+                styles.forEachIndexed { index, (style, stringRes) ->
+                    Button(
+                        onClick = { onStyleSelected(style) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(stringRes))
+                    }
+                    if (index < styles.lastIndex) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
         },
