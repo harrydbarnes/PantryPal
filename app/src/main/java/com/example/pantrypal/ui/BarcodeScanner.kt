@@ -1,6 +1,8 @@
 package com.example.pantrypal.ui
 
 import androidx.camera.core.CameraSelector
+import androidx.annotation.OptIn
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
@@ -144,6 +146,7 @@ fun BarcodeScanner(
     }
 }
 
+@OptIn(ExperimentalGetImage::class)
 private fun processImageProxy(
     scanner: com.google.mlkit.vision.barcode.BarcodeScanner,
     imageProxy: ImageProxy,
