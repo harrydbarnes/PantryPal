@@ -24,6 +24,8 @@ import java.time.format.DateTimeFormatter
 import java.time.ZoneOffset
 import com.example.pantrypal.data.entity.ItemEntity
 
+private const val EXPIRATION_DATE_PATTERN = "yyyy-MM-dd"
+
 class AddItemState {
     var name by mutableStateOf("")
     var qtyText by mutableStateOf("1.0")
@@ -229,7 +231,7 @@ fun AddScreen(
 
         // Expiration Date
         Box(modifier = Modifier.fillMaxWidth()) {
-            val expirationDateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }
+            val expirationDateFormatter = remember { DateTimeFormatter.ofPattern(EXPIRATION_DATE_PATTERN) }
             val formattedDate = remember(state.expirationDate) {
                 state.expirationDate?.format(expirationDateFormatter) ?: ""
             }
