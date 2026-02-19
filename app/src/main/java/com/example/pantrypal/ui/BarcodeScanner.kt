@@ -115,7 +115,9 @@ fun BarcodeScanner(
 
             // Calculate viewfinder rect (wider and rectangular)
             val padding = VIEWFINDER_PADDING.toPx()
-            val rectWidth = width - (padding * 2)
+            // Use min of width/height to ensure it fits on screen (e.g. tablet landscape)
+            val minDim = kotlin.math.min(width, height)
+            val rectWidth = minDim - (padding * 2)
             val rectHeight = rectWidth * VIEWFINDER_ASPECT_RATIO // Aspect ratio example
             val left = (width - rectWidth) / 2
             val top = (height * VIEWFINDER_CENTER_Y_PERCENT) - (rectHeight / 2)

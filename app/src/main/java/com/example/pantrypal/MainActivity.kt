@@ -26,6 +26,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -175,11 +176,27 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
 
     var showMenu by remember { mutableStateOf(false) }
 
+    val configuration = LocalConfiguration.current
+    val isWideScreen = configuration.screenWidthDp >= 600
+
     Scaffold(
         topBar = {
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
-                title = { Text("PantryPal") },
+                title = {
+                    val title = when (currentScreen) {
+                        AppScreen.Dashboard -> "Dashboard"
+                        AppScreen.Inventory -> "Kitchen Cupboard"
+                        AppScreen.ShoppingList -> "Shopping List"
+                        AppScreen.AddManual -> "Add Item"
+                        AppScreen.ScanIn -> "Scan In"
+                        AppScreen.ScanOut -> "Scan Out"
+                        AppScreen.Settings -> "Settings"
+                        AppScreen.PastItems -> "Past Items Log"
+                        AppScreen.MealPlan -> "Meal Plan"
+                    }
+                    Text(title)
+                },
                 actions = {
                     IconButton(onClick = { showMenu = !showMenu }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "More")
@@ -217,6 +234,14 @@ fun KitchenApp(viewModelFactory: MainViewModelFactory) {
                     selected = currentScreen == AppScreen.Dashboard,
                     onClick = { currentScreen = AppScreen.Dashboard }
                 )
+                if (isWideScreen) {
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.List, contentDescription = "Inventory") },
+                        label = { Text("Inventory") },
+                        selected = currentScreen == AppScreen.Inventory,
+                        onClick = { currentScreen = AppScreen.Inventory }
+                    )
+                }
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.DateRange, contentDescription = "Meal Plan") },
                     label = { Text("Meal Plan") },

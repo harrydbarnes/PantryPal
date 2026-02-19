@@ -21,6 +21,13 @@ import com.example.pantrypal.data.entity.MealEntity
 fun MealPlanScreen(viewModel: MainViewModel) {
     val currentWeekSetting by viewModel.currentWeek.collectAsState()
     val meals by viewModel.mealsState.collectAsState()
+    val mealPlanStyle by viewModel.mealPlanStyle.collectAsState()
+
+    if (mealPlanStyle.isNullOrEmpty()) {
+        MealPlanSetupDialog(onStyleSelected = { style ->
+            viewModel.setMealPlanStyle(style)
+        })
+    }
 
     var selectedTab by remember { mutableIntStateOf(if (currentWeekSetting == "A") 0 else 1) }
 
@@ -174,5 +181,40 @@ fun AddMealDialog(week: String, onDismiss: () -> Unit, onAdd: (String, List<Stri
                 Text(stringResource(R.string.cancel_action))
             }
         }
+    )
+}
+
+@Composable
+fun MealPlanSetupDialog(onStyleSelected: (String) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { }, // Force selection
+        title = { Text("How do you meal plan?") },
+        text = {
+            Column {
+                Text("Select a style to set up the app:")
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = { onStyleSelected("Random") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Random")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { onStyleSelected("Week ahead") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Week ahead")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { onStyleSelected("Two week schedule") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Two week schedule")
+                }
+            }
+        },
+        confirmButton = {}
     )
 }
