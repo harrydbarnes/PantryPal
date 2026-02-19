@@ -248,7 +248,7 @@ fun AddScreen(
                 }
             )
 
-            val contentDesc = "Expiration Date ${if (formattedDate.isNotEmpty()) formattedDate else "(Optional)"}"
+            val contentDesc = "Expiration Date ${formattedDate.ifEmpty { "(Optional)" }}"
 
             Box(
                 modifier = Modifier
