@@ -26,4 +26,7 @@ interface ConsumptionDao {
 
     @Query("SELECT * FROM consumption_history")
     suspend fun getAllHistory(): List<ConsumptionEntity>
+
+    @Query("SELECT itemId FROM consumption_history WHERE type = 'FINISHED' GROUP BY itemId HAVING COUNT(*) >= 2 AND (MAX(date) + (MAX(date) - MIN(date)) / (COUNT(*) - 1)) < :currentTime")
+    suspend fun getRestockCandidates(currentTime: Long): List<Long>
 }

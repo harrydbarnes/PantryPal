@@ -101,30 +101,7 @@ class KitchenRepository(
 
     // Smart Restock Logic
     suspend fun getRestockSuggestions(currentTime: Long): List<ItemEntity> {
-        val history = consumptionDao.getAllHistory()
-        // Group by itemId
-        val itemHistory = history.filter { it.type == ConsumptionType.FINISHED }
-            .groupBy { it.itemId }
-
-        val candidateIds = mutableListOf<Long>()
-
-        for ((itemId, events) in itemHistory) {
-            if (events.size < 2) continue // Need at least 2 events to calculate interval
-
-            // Calculate average interval
-            val sortedDates = events.map { it.date }.sorted()
-            var totalInterval = 0L
-            for (i in 0 until sortedDates.size - 1) {
-                totalInterval += (sortedDates[i+1] - sortedDates[i])
-            }
-            val avgInterval = totalInterval / (sortedDates.size - 1)
-            val lastConsumed = sortedDates.last()
-
-            // Check if due for restock (LastConsumed + AvgInterval < CurrentTime)
-            if (lastConsumed + avgInterval < currentTime) {
-                candidateIds.add(itemId)
-            }
-        }
+        val candidateIds = consumptionDao.getRestockCandidates(currentTime)
 
         if (candidateIds.isEmpty()) return emptyList()
 
