@@ -3,6 +3,7 @@
 /local.properties
 /build/
 /app/build/
+/build.log
 .idea/
 .DS_Store
 *.iml
