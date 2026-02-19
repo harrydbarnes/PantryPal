@@ -62,7 +62,7 @@ class KitchenRepository(
                 null
             }
         } catch (e: Exception) {
-            android.util.Log.e("KitchenRepository", "Error fetching product from API: ${e.message}")
+            android.util.Log.e("KitchenRepository", "Error fetching product from API: $e")
             null
         }
     }
