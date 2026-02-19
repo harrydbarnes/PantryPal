@@ -12,7 +12,11 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
@@ -224,18 +228,36 @@ fun AddScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Expiration Date
-        OutlinedTextField(
-            value = state.expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) ?: "",
-            onValueChange = {}, // Read only
-            label = { Text("Expiration Date (Optional)") },
-            modifier = Modifier.fillMaxWidth(),
-            readOnly = true,
-            trailingIcon = {
-                IconButton(onClick = { showDatePicker = true }) {
-                    Icon(Icons.Default.DateRange, contentDescription = "Select Date")
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = state.expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) ?: "",
+                onValueChange = {}, // Read only
+                label = { Text("Expiration Date (Optional)") },
+                modifier = Modifier.fillMaxWidth(),
+                readOnly = true,
+                trailingIcon = {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(Icons.Default.DateRange, contentDescription = "Select Date")
+                    }
                 }
-            }
-        )
+            )
+
+            val dateStr = state.expirationDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            val contentDesc = "Expiration Date ${dateStr ?: "(Optional)"}"
+
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable(
+                        onClick = { showDatePicker = true },
+                        role = Role.Button,
+                        onClickLabel = "Select expiration date"
+                    )
+                    .semantics {
+                        contentDescription = contentDesc
+                    }
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
