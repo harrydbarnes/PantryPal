@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -89,6 +90,8 @@ fun MealPlanScreen(viewModel: MainViewModel) {
                 meals.filter { it.week == displayWeek }
             }
 
+            var mealToEdit by remember { mutableStateOf<MealEntity?>(null) }
+
             if (weekMeals.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No meals for Week $displayWeek")
@@ -99,9 +102,32 @@ fun MealPlanScreen(viewModel: MainViewModel) {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(weekMeals) { meal ->
-                        MealItemRow(meal, onDelete = { viewModel.deleteMeal(meal) })
+                        MealItemRow(
+                            meal = meal,
+                            onDelete = { viewModel.deleteMeal(meal) },
+                            onEdit = { mealToEdit = meal },
+                            onMoveToOtherWeek = {
+                                val otherWeek = if (meal.week == "A") "B" else "A"
+                                viewModel.moveMealToWeek(meal, otherWeek)
+                            },
+                            onCopyToOtherWeek = {
+                                val otherWeek = if (meal.week == "A") "B" else "A"
+                                viewModel.duplicateMealToWeek(meal, otherWeek)
+                            }
+                        )
                     }
                 }
+            }
+
+            if (mealToEdit != null) {
+                EditMealDialog(
+                    meal = mealToEdit!!,
+                    onDismiss = { mealToEdit = null },
+                    onEdit = { updatedMeal ->
+                        viewModel.updateMeal(updatedMeal)
+                        mealToEdit = null
+                    }
+                )
             }
         }
     }
@@ -119,7 +145,13 @@ fun MealPlanScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-fun MealItemRow(meal: MealEntity, onDelete: () -> Unit) {
+fun MealItemRow(
+    meal: MealEntity,
+    onDelete: () -> Unit,
+    onEdit: () -> Unit,
+    onMoveToOtherWeek: () -> Unit,
+    onCopyToOtherWeek: () -> Unit
+) {
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -134,11 +166,93 @@ fun MealItemRow(meal: MealEntity, onDelete: () -> Unit) {
                     )
                 }
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+
+            var expanded by remember { mutableStateOf(false) }
+            val otherWeek = if (meal.week == "A") "B" else "A"
+
+            Box {
+                IconButton(onClick = { expanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        onClick = {
+                            expanded = false
+                            onEdit()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Move to Week $otherWeek") },
+                        onClick = {
+                            expanded = false
+                            onMoveToOtherWeek()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Copy to Week $otherWeek") },
+                        onClick = {
+                            expanded = false
+                            onCopyToOtherWeek()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            expanded = false
+                            onDelete()
+                        }
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+fun EditMealDialog(meal: MealEntity, onDismiss: () -> Unit, onEdit: (MealEntity) -> Unit) {
+    var name by remember { mutableStateOf(meal.name) }
+    var ingredientsText by remember { mutableStateOf(meal.ingredients.joinToString(", ")) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Meal") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.meal_name_label)) },
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = ingredientsText,
+                    onValueChange = { ingredientsText = it },
+                    label = { Text(stringResource(R.string.ingredients_label)) },
+                    minLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (name.isNotBlank()) {
+                    val ingredients = ingredientsText.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                    onEdit(meal.copy(name = name, ingredients = ingredients))
+                }
+            }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel_action))
+            }
+        }
+    )
 }
 
 @Composable

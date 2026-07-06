@@ -145,6 +145,30 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
+    fun updateMeal(meal: MealEntity) {
+        viewModelScope.launch {
+            repository.updateMeal(meal)
+        }
+    }
+
+    fun duplicateMealToWeek(meal: MealEntity, targetWeek: String) {
+        viewModelScope.launch {
+            val duplicatedMeal = MealEntity(
+                name = meal.name,
+                week = targetWeek,
+                ingredients = meal.ingredients
+            )
+            repository.insertMeal(duplicatedMeal)
+        }
+    }
+
+    fun moveMealToWeek(meal: MealEntity, targetWeek: String) {
+        viewModelScope.launch {
+            val movedMeal = meal.copy(week = targetWeek)
+            repository.updateMeal(movedMeal)
+        }
+    }
+
     fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean, barcode: String? = null, expirationDate: Long? = null, imageUrl: String? = null) {
         viewModelScope.launch {
             var itemId: Long = -1

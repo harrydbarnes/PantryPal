@@ -15,6 +15,9 @@ interface MealDao {
     @Delete
     suspend fun deleteMeal(meal: MealEntity)
 
+    @androidx.room.Update
+    suspend fun updateMeal(meal: MealEntity)
+
     @Query("SELECT * FROM meals WHERE week = :week")
     fun getMealsByWeek(week: String): Flow<List<MealEntity>>
 
