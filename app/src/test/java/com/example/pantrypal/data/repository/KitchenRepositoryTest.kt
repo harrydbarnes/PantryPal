@@ -68,6 +68,7 @@ class KitchenRepositoryTest {
         override fun getAllMeals(): Flow<List<MealEntity>> = flowOf(emptyList())
         override fun getMealsByWeek(week: String): Flow<List<MealEntity>> = flowOf(emptyList())
         override suspend fun insertMeal(meal: MealEntity) {}
+        override suspend fun updateMeal(meal: MealEntity) {}
         override suspend fun deleteMeal(meal: MealEntity) {}
     }
 

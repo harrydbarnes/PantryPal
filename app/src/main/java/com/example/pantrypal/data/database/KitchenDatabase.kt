@@ -21,7 +21,7 @@ import com.example.pantrypal.data.converter.Converters
 
 @Database(
     entities = [ItemEntity::class, InventoryEntity::class, ConsumptionEntity::class, ShoppingItemEntity::class, MealEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -73,6 +73,13 @@ abstract class KitchenDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meals ADD COLUMN dayOfWeek INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE meals ADD COLUMN mealSlot TEXT NOT NULL DEFAULT 'Dinner'")
+            }
+        }
+
         fun getDatabase(context: Context): KitchenDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -80,7 +87,7 @@ abstract class KitchenDatabase : RoomDatabase() {
                     KitchenDatabase::class.java,
                     "pantry_pal_db"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
                 INSTANCE = instance
                 instance

@@ -96,6 +96,7 @@ class KitchenRepository(
     val allMeals: Flow<List<MealEntity>> = mealDao.getAllMeals()
     fun getMealsByWeek(week: String): Flow<List<MealEntity>> = mealDao.getMealsByWeek(week)
     suspend fun insertMeal(meal: MealEntity) = mealDao.insertMeal(meal)
+    suspend fun updateMeal(meal: MealEntity) = mealDao.updateMeal(meal)
     suspend fun deleteMeal(meal: MealEntity) = mealDao.deleteMeal(meal)
 
 

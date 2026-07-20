@@ -1,218 +1,456 @@
 package com.example.pantrypal.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.pantrypal.R
-import com.example.pantrypal.viewmodel.MainViewModel
 import com.example.pantrypal.data.entity.MealEntity
+import com.example.pantrypal.util.dayLabel
+import com.example.pantrypal.util.otherWeek
+import com.example.pantrypal.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun MealPlanScreen(viewModel: MainViewModel) {
-    val currentWeekSetting by viewModel.currentWeek.collectAsState()
+    val currentWeek by viewModel.currentWeek.collectAsState()
     val meals by viewModel.mealsState.collectAsState()
-    val mealPlanStyle by viewModel.mealPlanStyle.collectAsState()
+    var displayedWeek by remember(currentWeek) { mutableStateOf(currentWeek) }
+    var editingMeal by remember { mutableStateOf<MealEntity?>(null) }
+    var showEditor by remember { mutableStateOf(false) }
+    var showCopyWeekDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    if (mealPlanStyle.isNullOrEmpty()) {
-        MealPlanSetupDialog(onStyleSelected = { style ->
-            viewModel.setMealPlanStyle(style)
-        })
+    val weekMeals = remember(meals, displayedWeek) {
+        meals.filter { it.week == displayedWeek }
+            .sortedWith(compareBy<MealEntity> { it.dayOfWeek }.thenBy { MealEntity.SLOTS.indexOf(it.mealSlot) })
     }
-
-    var selectedTab by remember { mutableIntStateOf(if (currentWeekSetting == "A") 0 else 1) }
-
-    // Sync tab with current week setting
-    LaunchedEffect(currentWeekSetting) {
-        selectedTab = if (currentWeekSetting == "A") 0 else 1
-    }
-
-    val displayWeek = if (selectedTab == 0) "A" else "B"
-
-    var showAddDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Meal")
+            FloatingActionButton(
+                onClick = {
+                    editingMeal = null
+                    showEditor = true
+                }
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add a meal")
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Week A") }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Text(
+                    text = "Your rotating meal schedule",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold
                 )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Week B") }
+                Text(
+                    text = "Plan once, adjust any day, then turn the week into a shopping list.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Current Week Indicator / Setter
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = if (currentWeekSetting == displayWeek) stringResource(R.string.this_is_current_week) else stringResource(R.string.not_current_week),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (currentWeekSetting == displayWeek) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                )
-                if (currentWeekSetting != displayWeek) {
-                    Button(onClick = { viewModel.setCurrentWeek(displayWeek) }) {
-                        Text(stringResource(R.string.set_as_current))
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MealEntity.WEEKS.forEach { week ->
+                        FilterChip(
+                            selected = displayedWeek == week,
+                            onClick = { displayedWeek = week },
+                            label = { Text("Week $week") },
+                            leadingIcon = if (displayedWeek == week) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            } else null,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-                } else {
-                    Icon(Icons.Default.Check, contentDescription = "Current", tint = MaterialTheme.colorScheme.primary)
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            val weekMeals = remember(meals, displayWeek) {
-                meals.filter { it.week == displayWeek }
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (displayedWeek == currentWeek) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHigh
+                        }
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    if (displayedWeek == currentWeek) "This week · Week $displayedWeek" else "Week $displayedWeek template",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    if (displayedWeek == currentWeek) {
+                                        "The schedule will rotate to Week ${otherWeek(currentWeek)} next Monday."
+                                    } else {
+                                        "Preview or prepare this rotation week."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (displayedWeek != currentWeek) {
+                                AssistChip(
+                                    onClick = { viewModel.setCurrentWeek(displayedWeek) },
+                                    label = { Text("Make current") }
+                                )
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    viewModel.buildShoppingListForWeek(displayedWeek)
+                                    scope.launch { snackbarHostState.showSnackbar("Week $displayedWeek added for review") }
+                                },
+                                enabled = weekMeals.any { it.ingredients.isNotEmpty() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.ShoppingCart, contentDescription = null)
+                                Spacer(Modifier.size(8.dp))
+                                Text("Build list")
+                            }
+                            OutlinedButton(
+                                onClick = { showCopyWeekDialog = true },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null)
+                                Spacer(Modifier.size(8.dp))
+                                Text("Reuse week")
+                            }
+                        }
+                    }
+                }
             }
 
             if (weekMeals.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No meals for Week $displayWeek")
+                item {
+                    EmptyMealPlan(
+                        week = displayedWeek,
+                        onAdd = {
+                            editingMeal = null
+                            showEditor = true
+                        },
+                        onCopy = { showCopyWeekDialog = true }
+                    )
                 }
             } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(weekMeals) { meal ->
-                        MealItemRow(meal, onDelete = { viewModel.deleteMeal(meal) })
+                (1..7).forEach { day ->
+                    val dayMeals = weekMeals.filter { it.dayOfWeek == day }
+                    item(key = "day-$day") {
+                        DaySchedule(
+                            day = day,
+                            meals = dayMeals,
+                            onAdd = {
+                                editingMeal = MealEntity(
+                                    name = "",
+                                    week = displayedWeek,
+                                    ingredients = emptyList(),
+                                    dayOfWeek = day
+                                )
+                                showEditor = true
+                            },
+                            onEdit = {
+                                editingMeal = it
+                                showEditor = true
+                            },
+                            onCopy = {
+                                viewModel.copyMealToOtherWeek(it)
+                                scope.launch { snackbarHostState.showSnackbar("Copied to Week ${otherWeek(it.week)}") }
+                            },
+                            onDelete = viewModel::deleteMeal
+                        )
                     }
                 }
             }
         }
     }
 
-    if (showAddDialog) {
-        AddMealDialog(
-            week = displayWeek,
-            onDismiss = { showAddDialog = false },
-            onAdd = { name, ingredients ->
-                viewModel.addMeal(name, displayWeek, ingredients)
-                showAddDialog = false
+    if (showEditor) {
+        MealEditorDialog(
+            week = displayedWeek,
+            meal = editingMeal,
+            onDismiss = { showEditor = false },
+            onSave = { name, day, slot, ingredients ->
+                val existing = editingMeal?.takeIf { it.mealId != 0L }
+                if (existing == null) {
+                    viewModel.addMeal(name, displayedWeek, day, slot, ingredients)
+                } else {
+                    viewModel.updateMeal(existing, name, day, slot, ingredients)
+                }
+                showEditor = false
+            }
+        )
+    }
+
+    if (showCopyWeekDialog) {
+        val sourceWeek = otherWeek(displayedWeek)
+        AlertDialog(
+            onDismissRequest = { showCopyWeekDialog = false },
+            icon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+            title = { Text("Reuse Week $sourceWeek?") },
+            text = { Text("Meals from Week $sourceWeek will be added to Week $displayedWeek. Matching meals already here will be kept once.") },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.copyWeek(sourceWeek, displayedWeek)
+                    showCopyWeekDialog = false
+                }) { Text("Add meals") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCopyWeekDialog = false }) { Text("Cancel") }
             }
         )
     }
 }
 
 @Composable
-fun MealItemRow(meal: MealEntity, onDelete: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = meal.name, style = MaterialTheme.typography.titleMedium)
-                if (meal.ingredients.isNotEmpty()) {
-                    Text(
-                        text = "Ingredients: ${meal.ingredients.joinToString()}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+private fun DaySchedule(
+    day: Int,
+    meals: List<MealEntity>,
+    onAdd: () -> Unit,
+    onEdit: (MealEntity) -> Unit,
+    onCopy: (MealEntity) -> Unit,
+    onDelete: (MealEntity) -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(dayLabel(day), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = onAdd) {
+                    Icon(Icons.Default.Add, contentDescription = "Add meal on ${dayLabel(day)}")
                 }
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+            if (meals.isEmpty()) {
+                Text(
+                    "Nothing planned",
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                meals.forEachIndexed { index, meal ->
+                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    MealRow(meal, onEdit, onCopy, onDelete)
+                }
             }
         }
     }
 }
 
 @Composable
-fun AddMealDialog(week: String, onDismiss: () -> Unit, onAdd: (String, List<String>) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var ingredientsText by remember { mutableStateOf("") } // Comma separated for simplicity
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.add_meal_title, week)) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.meal_name_label)) },
-                    singleLine = true
+private fun MealRow(
+    meal: MealEntity,
+    onEdit: (MealEntity) -> Unit,
+    onCopy: (MealEntity) -> Unit,
+    onDelete: (MealEntity) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(meal.mealSlot, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(meal.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            if (meal.ingredients.isNotEmpty()) {
+                Text(
+                    meal.ingredients.joinToString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = ingredientsText,
-                    onValueChange = { ingredientsText = it },
-                    label = { Text(stringResource(R.string.ingredients_label)) },
-                    minLines = 3
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (name.isNotBlank()) {
-                    val ingredients = ingredientsText.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                    onAdd(name, ingredients)
-                }
-            }) {
-                Text(stringResource(R.string.add_action))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel_action))
             }
         }
-    )
+        IconButton(onClick = { onEdit(meal) }) {
+            Icon(Icons.Default.Edit, contentDescription = "Edit ${meal.name}")
+        }
+        IconButton(onClick = { onCopy(meal) }) {
+            Icon(Icons.Default.ContentCopy, contentDescription = "Copy ${meal.name} to other week")
+        }
+        IconButton(onClick = { onDelete(meal) }) {
+            Icon(Icons.Default.Delete, contentDescription = "Delete ${meal.name}", tint = MaterialTheme.colorScheme.error)
+        }
+    }
 }
 
 @Composable
-fun MealPlanSetupDialog(onStyleSelected: (String) -> Unit) {
+private fun EmptyMealPlan(week: String, onAdd: () -> Unit, onCopy: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(Icons.Default.Restaurant, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+            Text("Week $week is ready to plan", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Add meals day by day or start with the other week's schedule.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = onCopy) { Text("Reuse other week") }
+                Button(onClick = onAdd) { Text("Add first meal") }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MealEditorDialog(
+    week: String,
+    meal: MealEntity?,
+    onDismiss: () -> Unit,
+    onSave: (String, Int, String, List<String>) -> Unit
+) {
+    var name by remember(meal) { mutableStateOf(meal?.name.orEmpty()) }
+    var ingredients by remember(meal) { mutableStateOf(meal?.ingredients?.joinToString(", ").orEmpty()) }
+    var day by remember(meal) { mutableIntStateOf(meal?.dayOfWeek ?: 1) }
+    var slot by remember(meal) { mutableStateOf(meal?.mealSlot ?: MealEntity.SLOT_DINNER) }
+
     AlertDialog(
-        onDismissRequest = { }, // Force selection
-        title = { Text(stringResource(R.string.meal_plan_setup_title)) },
+        onDismissRequest = onDismiss,
+        title = { Text(if (meal?.mealId == 0L || meal == null) "Add to Week $week" else "Edit meal") },
         text = {
-            Column {
-                Text(stringResource(R.string.meal_plan_setup_message))
-                Spacer(modifier = Modifier.height(16.dp))
-
-                val styles = listOf(
-                    MainViewModel.STYLE_RANDOM to R.string.meal_plan_style_random,
-                    MainViewModel.STYLE_WEEK_AHEAD to R.string.meal_plan_style_week_ahead,
-                    MainViewModel.STYLE_TWO_WEEKS to R.string.meal_plan_style_two_weeks
-                )
-
-                styles.forEachIndexed { index, (style, stringRes) ->
-                    Button(
-                        onClick = { onStyleSelected(style) },
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Meal or plan") },
+                        placeholder = { Text("e.g. Veggie chilli") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(stringRes))
+                    )
+                    SuggestionChip(
+                        onClick = { name = "Eating out" },
+                        label = { Text("Eating out") },
+                        icon = { Icon(Icons.Default.Restaurant, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                }
+                item {
+                    Text("Day", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        (1..7).forEach { option ->
+                            FilterChip(
+                                selected = day == option,
+                                onClick = { day = option },
+                                label = { Text(dayLabel(option).take(3)) }
+                            )
+                        }
                     }
-                    if (index < styles.lastIndex) {
-                        Spacer(modifier = Modifier.height(8.dp))
+                }
+                item {
+                    Text("Meal", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MealEntity.SLOTS.forEach { option ->
+                            FilterChip(
+                                selected = slot == option,
+                                onClick = { slot = option },
+                                label = { Text(option) }
+                            )
+                        }
                     }
+                }
+                item {
+                    OutlinedTextField(
+                        value = ingredients,
+                        onValueChange = { ingredients = it },
+                        label = { Text("Shopping ingredients") },
+                        supportingText = { Text("Separate items with commas. Leave blank for eating out.") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         },
-        confirmButton = {}
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(name, day, slot, ingredients.split(',').map { it.trim() }.filter { it.isNotEmpty() })
+                },
+                enabled = name.isNotBlank()
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

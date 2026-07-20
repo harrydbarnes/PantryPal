@@ -6,9 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckBox
-import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,35 +41,52 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-             Row(
-                 modifier = Modifier.fillMaxWidth().padding(16.dp),
-                 horizontalArrangement = Arrangement.SpaceBetween,
-                 verticalAlignment = Alignment.CenterVertically
-             ) {
-                 Text(
-                    "Shopping List",
-                    style = MaterialTheme.typography.headlineMedium
-                )
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                    Text(
-                        text = "Week $currentWeek",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
-             }
-
-            if (filteredList.isNotEmpty() && filteredList.any { it.isChecked }) {
-                Button(
-                    onClick = { viewModel.clearCheckedShoppingItems() },
-                    modifier = Modifier.padding(horizontal = 16.dp)
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Clear Checked")
+                    Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Week $currentWeek shopping", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "${filteredList.count { !it.isChecked }} left to review",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    if (filteredList.any { it.isChecked }) {
+                        TextButton(onClick = { viewModel.clearCheckedShoppingItems() }) {
+                            Text("Clear checked")
+                        }
+                    }
                 }
             }
 
-            LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(16.dp)) {
-                items(filteredList) { item ->
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (filteredList.isEmpty()) {
+                    item {
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Your list is clear", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "Add an item here or build a list from the meal planner.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+                items(filteredList, key = { it.shoppingId }) { item ->
                     ShoppingListItemRow(
                         item = item,
                         onToggle = { viewModel.toggleShoppingItem(item) },
@@ -178,44 +194,51 @@ fun ShoppingListItemRow(
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Row(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle() }
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = if (item.isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary
+            .clickable { onToggle() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (item.isChecked) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLow
         )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.name,
-                style = MaterialTheme.typography.bodyLarge,
-                textDecoration = if (item.isChecked) TextDecoration.LineThrough else null
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(checked = item.isChecked, onCheckedChange = { onToggle() })
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Qty: ${item.quantity} ${item.unit}",
-                    style = MaterialTheme.typography.bodySmall
+                    text = item.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textDecoration = if (item.isChecked) TextDecoration.LineThrough else null
                 )
-                if (item.frequency != ShoppingItemEntity.FREQ_ONE_OFF) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                        Text(
-                            text = item.frequency,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${item.quantity} ${item.unit}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (item.frequency != ShoppingItemEntity.FREQ_ONE_OFF) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(
+                                item.frequency,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
                     }
                 }
             }
-        }
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete ${item.name}", tint = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }

@@ -28,6 +28,12 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import com.example.pantrypal.util.mealsForShopping
+import com.example.pantrypal.util.normalizedIngredients
+import com.example.pantrypal.util.otherWeek
+import com.example.pantrypal.util.rotatingWeek
+import com.example.pantrypal.util.startOfWeek
 
 // Helper flow for periodic updates
 fun tickerFlow(period: Long, initialDelay: Long = 0) = flow {
@@ -47,7 +53,17 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     }
 
     private val prefs = application.getSharedPreferences("pantry_prefs", Context.MODE_PRIVATE)
-    private val _currentWeek = MutableStateFlow(prefs.getString("current_week", "A") ?: "A")
+    private val savedWeek = prefs.getString("current_week", MealEntity.WEEK_A) ?: MealEntity.WEEK_A
+    private val savedAnchorMonday = if (prefs.contains("meal_week_anchor")) {
+        prefs.getLong("meal_week_anchor", startOfWeek(LocalDate.now()).toEpochDay())
+    } else {
+        startOfWeek(LocalDate.now()).toEpochDay().also { anchor ->
+            prefs.edit().putString("current_week", savedWeek).putLong("meal_week_anchor", anchor).apply()
+        }
+    }
+    private val _currentWeek = MutableStateFlow(
+        rotatingWeek(savedWeek, savedAnchorMonday, LocalDate.now())
+    )
     val currentWeek: StateFlow<String> = _currentWeek.asStateFlow()
 
     private val _mealPlanStyle = MutableStateFlow(prefs.getString("meal_plan_style", null))
@@ -55,7 +71,10 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun setCurrentWeek(week: String) {
         _currentWeek.value = week
-        prefs.edit().putString("current_week", week).apply()
+        prefs.edit()
+            .putString("current_week", week)
+            .putLong("meal_week_anchor", startOfWeek(LocalDate.now()).toEpochDay())
+            .apply()
     }
 
     fun setMealPlanStyle(style: String) {
@@ -117,24 +136,77 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             initialValue = emptyList()
         )
 
-    fun addMeal(name: String, week: String, ingredients: List<String>) {
+    fun addMeal(name: String, week: String, dayOfWeek: Int, mealSlot: String, ingredients: List<String>) {
         viewModelScope.launch {
-            repository.insertMeal(MealEntity(name = name, week = week, ingredients = ingredients))
-            // Auto add ingredients to shopping list logic
-            val currentShoppingList = repository.shoppingList.first()
-            ingredients.distinctBy { it.lowercase() }.forEach { ingredient ->
-                 val freq = if (week == "A") ShoppingItemEntity.FREQ_WEEK_A else ShoppingItemEntity.FREQ_WEEK_B
-                 val alreadyInList = currentShoppingList.any {
-                     it.name.equals(ingredient, ignoreCase = true) && it.frequency == freq
-                 }
-                 if (!alreadyInList) {
-                     repository.addShoppingItem(
-                         ShoppingItemEntity(
-                            name = ingredient,
-                            frequency = freq
-                         )
-                     )
-                 }
+            repository.insertMeal(
+                MealEntity(
+                    name = name.trim(),
+                    week = week,
+                    ingredients = normalizedIngredients(ingredients),
+                    dayOfWeek = dayOfWeek.coerceIn(1, 7),
+                    mealSlot = mealSlot
+                )
+            )
+        }
+    }
+
+    fun updateMeal(meal: MealEntity, name: String, dayOfWeek: Int, mealSlot: String, ingredients: List<String>) {
+        viewModelScope.launch {
+            repository.updateMeal(
+                meal.copy(
+                    name = name.trim(),
+                    ingredients = normalizedIngredients(ingredients),
+                    dayOfWeek = dayOfWeek.coerceIn(1, 7),
+                    mealSlot = mealSlot
+                )
+            )
+        }
+    }
+
+    fun copyMealToOtherWeek(meal: MealEntity) {
+        viewModelScope.launch {
+            val targetWeek = otherWeek(meal.week)
+            val alreadyExists = repository.allMeals.first().any {
+                it.week == targetWeek &&
+                    it.dayOfWeek == meal.dayOfWeek &&
+                    it.mealSlot == meal.mealSlot &&
+                    it.name.equals(meal.name, ignoreCase = true)
+            }
+            if (!alreadyExists) {
+                repository.insertMeal(meal.copy(mealId = 0, week = targetWeek))
+            }
+        }
+    }
+
+    fun copyWeek(sourceWeek: String, targetWeek: String) {
+        viewModelScope.launch {
+            val meals = repository.allMeals.first()
+            val targetKeys = meals.filter { it.week == targetWeek }
+                .map { Triple(it.name.lowercase(), it.dayOfWeek, it.mealSlot) }
+                .toSet()
+            meals.filter { it.week == sourceWeek }
+                .distinctBy { Triple(it.name.lowercase(), it.dayOfWeek, it.mealSlot) }
+                .forEach { meal ->
+                val key = Triple(meal.name.lowercase(), meal.dayOfWeek, meal.mealSlot)
+                if (key !in targetKeys) {
+                    repository.insertMeal(meal.copy(mealId = 0, week = targetWeek))
+                }
+            }
+        }
+    }
+
+    fun buildShoppingListForWeek(week: String) {
+        viewModelScope.launch {
+            val ingredients = mealsForShopping(repository.allMeals.first(), week)
+            val existing = repository.shoppingList.first()
+            ingredients.forEach { ingredient ->
+                val match = existing.firstOrNull { it.name.equals(ingredient, ignoreCase = true) }
+                when {
+                    match == null -> repository.addShoppingItem(
+                        ShoppingItemEntity(name = ingredient, frequency = ShoppingItemEntity.FREQ_ONE_OFF)
+                    )
+                    match.isChecked -> repository.updateShoppingItem(match.copy(isChecked = false))
+                }
             }
         }
     }
