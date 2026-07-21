@@ -41,8 +41,8 @@ jobs:
       with:
         cache-provider: basic
 
-    - name: Build debug APK
-      run: ./gradlew :app:assembleDebug --build-cache --stacktrace
+    - name: Test and build debug APK
+      run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --build-cache --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v7
