@@ -189,7 +189,7 @@ abstract class KitchenDatabase : RoomDatabase() {
             weeks.forEach { week ->
                 db.execSQL(
                     "INSERT OR IGNORE INTO meal_weeks (weekId, name, emoji, sortOrder) VALUES (?, ?, ?, ?)",
-                    arrayOf(week.weekId, week.name, week.emoji, week.sortOrder)
+                    arrayOf<Any?>(week.weekId, week.name, week.emoji, week.sortOrder)
                 )
             }
 
@@ -202,7 +202,7 @@ abstract class KitchenDatabase : RoomDatabase() {
             sections.forEach { section ->
                 db.execSQL(
                     "INSERT OR IGNORE INTO shopping_sections (sectionId, name, sortOrder, recursEveryWeek, systemKey) VALUES (?, ?, ?, ?, ?)",
-                    arrayOf(section.sectionId, section.name, section.sortOrder, if (section.recursEveryWeek) 1 else 0, section.systemKey)
+                    arrayOf<Any?>(section.sectionId, section.name, section.sortOrder, if (section.recursEveryWeek) 1 else 0, section.systemKey)
                 )
             }
 
@@ -237,7 +237,7 @@ abstract class KitchenDatabase : RoomDatabase() {
                     SELECT 1 FROM shopping_list WHERE lower(name) = lower(?) AND sectionId = ?
                 )
                 """.trimIndent(),
-                arrayOf(
+                arrayOf<Any?>(
                     name,
                     quantity,
                     unit,
@@ -250,7 +250,7 @@ abstract class KitchenDatabase : RoomDatabase() {
             )
             db.execSQL(
                 "INSERT OR IGNORE INTO shopping_history (normalizedName, displayName, lastUsedAt) VALUES (?, ?, ?)",
-                arrayOf(name.trim().lowercase(), name, System.currentTimeMillis())
+                arrayOf<Any?>(name.trim().lowercase(), name, System.currentTimeMillis())
             )
         }
 
@@ -289,7 +289,7 @@ abstract class KitchenDatabase : RoomDatabase() {
             meals.forEach { meal ->
                 db.execSQL(
                     "INSERT INTO meals (name, week, ingredients, dayOfWeek, mealSlot) VALUES (?, ?, ?, ?, ?)",
-                    arrayOf(meal.name, meal.week, gson.toJson(meal.ingredients), meal.day, MealEntity.SLOT_DINNER)
+                    arrayOf<Any?>(meal.name, meal.week, gson.toJson(meal.ingredients), meal.day, MealEntity.SLOT_DINNER)
                 )
             }
         }

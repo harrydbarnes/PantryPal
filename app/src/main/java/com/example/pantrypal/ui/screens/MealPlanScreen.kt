@@ -64,6 +64,7 @@ import com.example.pantrypal.util.nextWeek
 import com.example.pantrypal.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MealPlanScreen(viewModel: MainViewModel) {
     val currentWeek by viewModel.currentWeek.collectAsState()
@@ -117,19 +118,19 @@ fun MealPlanScreen(viewModel: MainViewModel) {
             }
 
             item {
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    MealEntity.WEEKS.forEach { week ->
+                    weeks.forEach { week ->
                         FilterChip(
-                            selected = displayedWeek == week,
-                            onClick = { displayedWeek = week },
-                            label = { Text("Week $week") },
-                            leadingIcon = if (displayedWeek == week) {
+                            selected = displayedWeek == week.weekId,
+                            onClick = { displayedWeek = week.weekId },
+                            label = { Text(week.displayName) },
+                            leadingIcon = if (displayedWeek == week.weekId) {
                                 { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                            } else null,
-                            modifier = Modifier.weight(1f)
+                            } else null
                         )
                     }
                 }
@@ -152,12 +153,18 @@ fun MealPlanScreen(viewModel: MainViewModel) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    if (displayedWeek == currentWeek) "This week · Week $displayedWeek" else "Week $displayedWeek template",
+                                    if (displayedWeek == currentWeek) {
+                                        "This week · ${displayedWeekDetails?.displayName ?: "Week $displayedWeek"}"
+                                    } else {
+                                        "${displayedWeekDetails?.displayName ?: "Week $displayedWeek"} template"
+                                    },
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Text(
                                     if (displayedWeek == currentWeek) {
-                                        "The schedule will rotate to Week ${otherWeek(currentWeek)} next Monday."
+                                        val nextId = nextWeek(currentWeek, weekOrder)
+                                        val next = weeks.firstOrNull { it.weekId == nextId }
+                                        "The schedule rotates to ${next?.displayName ?: "Week $nextId"} next Monday."
                                     } else {
                                         "Preview or prepare this rotation week."
                                     },
@@ -170,6 +177,9 @@ fun MealPlanScreen(viewModel: MainViewModel) {
                                     onClick = { viewModel.setCurrentWeek(displayedWeek) },
                                     label = { Text("Make current") }
                                 )
+                            }
+                            IconButton(onClick = { editingWeek = displayedWeekDetails }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit week name and emoji")
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -230,8 +240,7 @@ fun MealPlanScreen(viewModel: MainViewModel) {
                                 showEditor = true
                             },
                             onCopy = {
-                                viewModel.copyMealToOtherWeek(it)
-                                scope.launch { snackbarHostState.showSnackbar("Copied to Week ${otherWeek(it.week)}") }
+                                copyingMeal = it
                             },
                             onDelete = viewModel::deleteMeal
                         )
@@ -259,23 +268,155 @@ fun MealPlanScreen(viewModel: MainViewModel) {
     }
 
     if (showCopyWeekDialog) {
-        val sourceWeek = otherWeek(displayedWeek)
-        AlertDialog(
-            onDismissRequest = { showCopyWeekDialog = false },
-            icon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
-            title = { Text("Reuse Week $sourceWeek?") },
-            text = { Text("Meals from Week $sourceWeek will be added to Week $displayedWeek. Matching meals already here will be kept once.") },
-            confirmButton = {
-                Button(onClick = {
-                    viewModel.copyWeek(sourceWeek, displayedWeek)
-                    showCopyWeekDialog = false
-                }) { Text("Add meals") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCopyWeekDialog = false }) { Text("Cancel") }
+        CopyWeekDialog(
+            targetWeek = displayedWeek,
+            weeks = weeks,
+            onDismiss = { showCopyWeekDialog = false },
+            onCopy = { sourceWeek ->
+                viewModel.copyWeek(sourceWeek, displayedWeek)
+                showCopyWeekDialog = false
             }
         )
     }
+
+    editingWeek?.let { week ->
+        WeekEditorDialog(
+            week = week,
+            onDismiss = { editingWeek = null },
+            onSave = { name, emoji ->
+                viewModel.updateMealWeek(week, name, emoji)
+                editingWeek = null
+            }
+        )
+    }
+
+    copyingMeal?.let { meal ->
+        CopyMealDialog(
+            meal = meal,
+            weeks = weeks,
+            onDismiss = { copyingMeal = null },
+            onCopy = { targetWeek ->
+                viewModel.copyMealToWeek(meal, targetWeek)
+                val target = weeks.firstOrNull { it.weekId == targetWeek }
+                scope.launch { snackbarHostState.showSnackbar("Copied to ${target?.displayName ?: "Week $targetWeek"}") }
+                copyingMeal = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun WeekEditorDialog(
+    week: MealWeekEntity,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit
+) {
+    var name by remember(week) { mutableStateOf(week.name) }
+    var emoji by remember(week) { mutableStateOf(week.emoji) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Name this rotation week") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = emoji,
+                    onValueChange = { emoji = it },
+                    label = { Text("Emoji") },
+                    placeholder = { Text("🍝") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Week name or theme") },
+                    placeholder = { Text("e.g. Comfort food") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "The schedule and rotation position stay the same.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(name, emoji) }, enabled = name.isNotBlank()) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CopyWeekDialog(
+    targetWeek: String,
+    weeks: List<MealWeekEntity>,
+    onDismiss: () -> Unit,
+    onCopy: (String) -> Unit
+) {
+    val choices = weeks.filterNot { it.weekId == targetWeek }
+    var selected by remember(targetWeek, choices) { mutableStateOf(choices.firstOrNull()?.weekId) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+        title = { Text("Reuse another week") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Choose a template. Matching meals already in this week are kept once.")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    choices.forEach { week ->
+                        FilterChip(
+                            selected = selected == week.weekId,
+                            onClick = { selected = week.weekId },
+                            label = { Text(week.displayName) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { selected?.let(onCopy) }, enabled = selected != null) { Text("Add meals") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CopyMealDialog(
+    meal: MealEntity,
+    weeks: List<MealWeekEntity>,
+    onDismiss: () -> Unit,
+    onCopy: (String) -> Unit
+) {
+    val choices = weeks.filterNot { it.weekId == meal.week }
+    var selected by remember(meal, choices) { mutableStateOf(choices.firstOrNull()?.weekId) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+        title = { Text("Copy ${meal.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Choose the week to add this meal to.")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    choices.forEach { week ->
+                        FilterChip(
+                            selected = selected == week.weekId,
+                            onClick = { selected = week.weekId },
+                            label = { Text(week.displayName) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { selected?.let(onCopy) }, enabled = selected != null) { Text("Copy meal") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable

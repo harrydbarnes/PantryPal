@@ -9,11 +9,13 @@ import java.time.LocalDate
 
 class MealScheduleTest {
     @Test
-    fun rotatingWeek_alternatesFromAnchoredMonday() {
+    fun rotatingWeek_cyclesAcrossFourWeekRotation() {
         val monday = LocalDate.of(2026, 7, 20)
         assertEquals(MealEntity.WEEK_A, rotatingWeek(MealEntity.WEEK_A, monday.toEpochDay(), monday))
         assertEquals(MealEntity.WEEK_B, rotatingWeek(MealEntity.WEEK_A, monday.toEpochDay(), monday.plusWeeks(1)))
-        assertEquals(MealEntity.WEEK_A, rotatingWeek(MealEntity.WEEK_A, monday.toEpochDay(), monday.plusWeeks(2)))
+        assertEquals(MealEntity.WEEK_C, rotatingWeek(MealEntity.WEEK_A, monday.toEpochDay(), monday.plusWeeks(2)))
+        assertEquals(MealEntity.WEEK_D, rotatingWeek(MealEntity.WEEK_A, monday.toEpochDay(), monday.plusWeeks(3)))
+        assertEquals(MealEntity.WEEK_A, rotatingWeek(MealEntity.WEEK_A, monday.toEpochDay(), monday.plusWeeks(4)))
     }
 
     @Test

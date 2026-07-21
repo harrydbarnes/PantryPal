@@ -61,7 +61,10 @@ class KitchenRepositoryTest {
         override suspend fun insertShoppingItem(item: ShoppingItemEntity): Long = 0
         override suspend fun updateShoppingItem(item: ShoppingItemEntity) {}
         override suspend fun deleteShoppingItem(item: ShoppingItemEntity) {}
-        override suspend fun deleteCheckedItems() {}
+        override suspend fun deleteCheckedWeekItems(weekId: String) {}
+        override suspend fun resetCheckedRecurringItems() {}
+        override suspend fun deleteItemsInSection(sectionId: Long) {}
+        override suspend fun deleteItemsInSectionForWeek(sectionId: Long, weekId: String) {}
     }
 
     class FakeMealDao : MealDao {
@@ -72,6 +75,23 @@ class KitchenRepositoryTest {
         override suspend fun deleteMeal(meal: MealEntity) {}
     }
 
+    class FakeMealWeekDao : MealWeekDao {
+        override fun getAllWeeks(): Flow<List<MealWeekEntity>> = flowOf(emptyList())
+        override suspend fun updateWeek(week: MealWeekEntity) {}
+    }
+
+    class FakeShoppingSectionDao : ShoppingSectionDao {
+        override fun getAllSections(): Flow<List<ShoppingSectionEntity>> = flowOf(emptyList())
+        override suspend fun insertSection(section: ShoppingSectionEntity): Long = 0
+        override suspend fun updateSection(section: ShoppingSectionEntity) {}
+        override suspend fun deleteSection(section: ShoppingSectionEntity) {}
+    }
+
+    class FakeShoppingHistoryDao : ShoppingHistoryDao {
+        override fun getHistory(): Flow<List<ShoppingHistoryEntity>> = flowOf(emptyList())
+        override suspend fun remember(entry: ShoppingHistoryEntity) {}
+    }
+
     @Test
     fun getRestockSuggestions_callsDaoAndReturnsCandidates() = runBlocking {
         val repo = KitchenRepository(
@@ -79,7 +99,10 @@ class KitchenRepositoryTest {
             FakeInventoryDao(),
             FakeConsumptionDao(),
             FakeShoppingDao(),
-            FakeMealDao()
+            FakeMealDao(),
+            FakeMealWeekDao(),
+            FakeShoppingSectionDao(),
+            FakeShoppingHistoryDao()
         )
 
         val suggestions = repo.getRestockSuggestions(1672531200000L) // Use a fixed timestamp
