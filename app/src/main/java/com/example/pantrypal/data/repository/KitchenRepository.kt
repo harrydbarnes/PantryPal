@@ -6,23 +6,33 @@ import com.example.pantrypal.data.dao.InventoryDao
 import com.example.pantrypal.data.dao.ItemDao
 import com.example.pantrypal.data.dao.ShoppingDao
 import com.example.pantrypal.data.dao.MealDao
+import com.example.pantrypal.data.dao.MealWeekDao
+import com.example.pantrypal.data.dao.ShoppingHistoryDao
+import com.example.pantrypal.data.dao.ShoppingSectionDao
 import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.entity.MealEntity
+import com.example.pantrypal.data.entity.MealWeekEntity
+import com.example.pantrypal.data.entity.ShoppingHistoryEntity
+import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.data.api.OpenFoodFactsApi
 import kotlinx.coroutines.flow.Flow
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.Locale
 
 class KitchenRepository(
     private val itemDao: ItemDao,
     private val inventoryDao: InventoryDao,
     private val consumptionDao: ConsumptionDao,
     private val shoppingDao: ShoppingDao,
-    private val mealDao: MealDao
+    private val mealDao: MealDao,
+    private val mealWeekDao: MealWeekDao,
+    private val shoppingSectionDao: ShoppingSectionDao,
+    private val shoppingHistoryDao: ShoppingHistoryDao
 ) {
     private val api: OpenFoodFactsApi by lazy {
         Retrofit.Builder()
@@ -86,18 +96,42 @@ class KitchenRepository(
 
     // Shopping List
     val shoppingList: Flow<List<ShoppingItemEntity>> = shoppingDao.getAllShoppingItems()
+    val shoppingSections: Flow<List<ShoppingSectionEntity>> = shoppingSectionDao.getAllSections()
+    val shoppingHistory: Flow<List<ShoppingHistoryEntity>> = shoppingHistoryDao.getHistory()
 
     suspend fun addShoppingItem(item: ShoppingItemEntity) = shoppingDao.insertShoppingItem(item)
     suspend fun updateShoppingItem(item: ShoppingItemEntity) = shoppingDao.updateShoppingItem(item)
     suspend fun deleteShoppingItem(item: ShoppingItemEntity) = shoppingDao.deleteShoppingItem(item)
-    suspend fun deleteCheckedShoppingItems() = shoppingDao.deleteCheckedItems()
+    suspend fun deleteCheckedShoppingItems(weekId: String) {
+        shoppingDao.deleteCheckedWeekItems(weekId)
+        shoppingDao.resetCheckedRecurringItems()
+    }
+    suspend fun deleteShoppingItemsInSection(sectionId: Long) = shoppingDao.deleteItemsInSection(sectionId)
+    suspend fun deleteShoppingItemsInSectionForWeek(sectionId: Long, weekId: String) =
+        shoppingDao.deleteItemsInSectionForWeek(sectionId, weekId)
+    suspend fun rememberShoppingItem(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isNotEmpty()) {
+            shoppingHistoryDao.remember(
+                ShoppingHistoryEntity(
+                    normalizedName = trimmed.lowercase(Locale.getDefault()),
+                    displayName = trimmed
+                )
+            )
+        }
+    }
+    suspend fun insertShoppingSection(section: ShoppingSectionEntity) = shoppingSectionDao.insertSection(section)
+    suspend fun updateShoppingSection(section: ShoppingSectionEntity) = shoppingSectionDao.updateSection(section)
+    suspend fun deleteShoppingSection(section: ShoppingSectionEntity) = shoppingSectionDao.deleteSection(section)
 
     // Meals
     val allMeals: Flow<List<MealEntity>> = mealDao.getAllMeals()
+    val mealWeeks: Flow<List<MealWeekEntity>> = mealWeekDao.getAllWeeks()
     fun getMealsByWeek(week: String): Flow<List<MealEntity>> = mealDao.getMealsByWeek(week)
     suspend fun insertMeal(meal: MealEntity) = mealDao.insertMeal(meal)
     suspend fun updateMeal(meal: MealEntity) = mealDao.updateMeal(meal)
     suspend fun deleteMeal(meal: MealEntity) = mealDao.deleteMeal(meal)
+    suspend fun updateMealWeek(week: MealWeekEntity) = mealWeekDao.updateWeek(week)
 
 
     // Smart Restock Logic

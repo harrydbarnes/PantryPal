@@ -58,8 +58,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.pantrypal.data.entity.MealEntity
+import com.example.pantrypal.data.entity.MealWeekEntity
 import com.example.pantrypal.util.dayLabel
-import com.example.pantrypal.util.otherWeek
+import com.example.pantrypal.util.nextWeek
 import com.example.pantrypal.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 
@@ -67,10 +68,13 @@ import kotlinx.coroutines.launch
 fun MealPlanScreen(viewModel: MainViewModel) {
     val currentWeek by viewModel.currentWeek.collectAsState()
     val meals by viewModel.mealsState.collectAsState()
+    val weeks by viewModel.mealWeeksState.collectAsState()
     var displayedWeek by remember(currentWeek) { mutableStateOf(currentWeek) }
     var editingMeal by remember { mutableStateOf<MealEntity?>(null) }
     var showEditor by remember { mutableStateOf(false) }
     var showCopyWeekDialog by remember { mutableStateOf(false) }
+    var editingWeek by remember { mutableStateOf<MealWeekEntity?>(null) }
+    var copyingMeal by remember { mutableStateOf<MealEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -78,6 +82,8 @@ fun MealPlanScreen(viewModel: MainViewModel) {
         meals.filter { it.week == displayedWeek }
             .sortedWith(compareBy<MealEntity> { it.dayOfWeek }.thenBy { MealEntity.SLOTS.indexOf(it.mealSlot) })
     }
+    val displayedWeekDetails = weeks.firstOrNull { it.weekId == displayedWeek }
+    val weekOrder = weeks.map { it.weekId }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },

@@ -11,7 +11,9 @@ data class ShoppingItemEntity(
     val unit: String = "pcs",
     val isChecked: Boolean = false,
     val addedAt: Long = System.currentTimeMillis(),
-    val frequency: String = FREQ_ONE_OFF
+    val frequency: String = FREQ_ONE_OFF,
+    val sectionId: Long = ShoppingSectionEntity.ID_THE_REST,
+    val weekId: String? = null
 ) {
     companion object {
         const val FREQ_ONE_OFF = "One-Off"

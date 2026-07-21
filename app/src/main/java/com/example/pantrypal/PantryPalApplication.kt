@@ -15,7 +15,10 @@ class PantryPalApplication : Application(), Configuration.Provider {
             database.inventoryDao(),
             database.consumptionDao(),
             database.shoppingDao(),
-            database.mealDao()
+            database.mealDao(),
+            database.mealWeekDao(),
+            database.shoppingSectionDao(),
+            database.shoppingHistoryDao()
         )
     }
 

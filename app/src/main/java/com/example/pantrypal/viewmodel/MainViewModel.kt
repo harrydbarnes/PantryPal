@@ -14,6 +14,9 @@ import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.entity.MealEntity
+import com.example.pantrypal.data.entity.MealWeekEntity
+import com.example.pantrypal.data.entity.ShoppingHistoryEntity
+import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.data.repository.KitchenRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -31,7 +34,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import com.example.pantrypal.util.mealsForShopping
 import com.example.pantrypal.util.normalizedIngredients
-import com.example.pantrypal.util.otherWeek
 import com.example.pantrypal.util.rotatingWeek
 import com.example.pantrypal.util.startOfWeek
 
@@ -129,11 +131,37 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             initialValue = emptyList()
         )
 
+    val shoppingSectionsState: StateFlow<List<ShoppingSectionEntity>> = repository.shoppingSections
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val shoppingHistoryState: StateFlow<List<ShoppingHistoryEntity>> = repository.shoppingHistory
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     val mealsState: StateFlow<List<MealEntity>> = repository.allMeals
          .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
+         )
+
+    val mealWeeksState: StateFlow<List<MealWeekEntity>> = repository.mealWeeks
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = listOf(
+                MealWeekEntity("A", "Week A", "🥔", 0),
+                MealWeekEntity("B", "Week B", "🐟", 1),
+                MealWeekEntity("C", "Week C", "🍕", 2),
+                MealWeekEntity("D", "Week D", "🍝", 3)
+            )
         )
 
     fun addMeal(name: String, week: String, dayOfWeek: Int, mealSlot: String, ingredients: List<String>) {
@@ -163,9 +191,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
-    fun copyMealToOtherWeek(meal: MealEntity) {
+    fun copyMealToWeek(meal: MealEntity, targetWeek: String) {
         viewModelScope.launch {
-            val targetWeek = otherWeek(meal.week)
+            if (targetWeek == meal.week) return@launch
             val alreadyExists = repository.allMeals.first().any {
                 it.week == targetWeek &&
                     it.dayOfWeek == meal.dayOfWeek &&
@@ -199,15 +227,33 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         viewModelScope.launch {
             val ingredients = mealsForShopping(repository.allMeals.first(), week)
             val existing = repository.shoppingList.first()
+            val sections = repository.shoppingSections.first()
+            val recurringSectionIds = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
+            val namesAlreadyCovered = existing.filter {
+                it.sectionId in recurringSectionIds ||
+                    (it.weekId == week && it.sectionId != ShoppingSectionEntity.ID_MEAL_PLAN)
+            }.map { it.name.lowercase() }.toSet()
+
+            repository.deleteShoppingItemsInSectionForWeek(ShoppingSectionEntity.ID_MEAL_PLAN, week)
             ingredients.forEach { ingredient ->
-                val match = existing.firstOrNull { it.name.equals(ingredient, ignoreCase = true) }
-                when {
-                    match == null -> repository.addShoppingItem(
-                        ShoppingItemEntity(name = ingredient, frequency = ShoppingItemEntity.FREQ_ONE_OFF)
+                repository.rememberShoppingItem(ingredient)
+                if (ingredient.lowercase() !in namesAlreadyCovered) {
+                    repository.addShoppingItem(
+                        ShoppingItemEntity(
+                            name = ingredient,
+                            frequency = ShoppingItemEntity.FREQ_ONE_OFF,
+                            sectionId = ShoppingSectionEntity.ID_MEAL_PLAN,
+                            weekId = week
+                        )
                     )
-                    match.isChecked -> repository.updateShoppingItem(match.copy(isChecked = false))
                 }
             }
+        }
+    }
+
+    fun updateMealWeek(week: MealWeekEntity, name: String, emoji: String) {
+        viewModelScope.launch {
+            repository.updateMealWeek(week.copy(name = name.trim(), emoji = emoji.trim()))
         }
     }
 
@@ -303,15 +349,63 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
-    fun addShoppingItem(name: String, quantity: Double, unit: String, frequency: String = ShoppingItemEntity.FREQ_ONE_OFF) {
+    fun addShoppingItem(
+        name: String,
+        quantity: Double,
+        unit: String,
+        sectionId: Long = ShoppingSectionEntity.ID_THE_REST,
+        weekId: String? = _currentWeek.value
+    ) {
         viewModelScope.launch {
+             val trimmedName = name.trim()
              val item = ShoppingItemEntity(
-                 name = name,
+                 name = trimmedName,
                  quantity = quantity,
-                 unit = unit,
-                 frequency = frequency
+                 unit = unit.trim().ifEmpty { "pcs" },
+                 sectionId = sectionId,
+                 weekId = weekId
              )
              repository.addShoppingItem(item)
+             repository.rememberShoppingItem(trimmedName)
+        }
+    }
+
+    fun updateShoppingItem(item: ShoppingItemEntity, name: String, quantity: Double, unit: String) {
+        viewModelScope.launch {
+            val trimmedName = name.trim()
+            repository.updateShoppingItem(
+                item.copy(name = trimmedName, quantity = quantity, unit = unit.trim().ifEmpty { "pcs" })
+            )
+            repository.rememberShoppingItem(trimmedName)
+        }
+    }
+
+    fun addShoppingSection(name: String, recursEveryWeek: Boolean) {
+        viewModelScope.launch {
+            val nextOrder = (repository.shoppingSections.first().maxOfOrNull { it.sortOrder } ?: 0) + 1
+            repository.insertShoppingSection(
+                ShoppingSectionEntity(
+                    name = name.trim(),
+                    sortOrder = nextOrder,
+                    recursEveryWeek = recursEveryWeek
+                )
+            )
+        }
+    }
+
+    fun updateShoppingSection(section: ShoppingSectionEntity, name: String, recursEveryWeek: Boolean) {
+        viewModelScope.launch {
+            repository.updateShoppingSection(
+                section.copy(name = name.trim(), recursEveryWeek = recursEveryWeek)
+            )
+        }
+    }
+
+    fun deleteShoppingSection(section: ShoppingSectionEntity) {
+        if (section.systemKey != null) return
+        viewModelScope.launch {
+            repository.deleteShoppingItemsInSection(section.sectionId)
+            repository.deleteShoppingSection(section)
         }
     }
 
@@ -329,7 +423,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun clearCheckedShoppingItems() {
         viewModelScope.launch {
-            repository.deleteCheckedShoppingItems()
+            repository.deleteCheckedShoppingItems(_currentWeek.value)
         }
     }
 
