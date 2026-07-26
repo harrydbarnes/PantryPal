@@ -6,10 +6,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.pantrypal.R
@@ -18,7 +18,6 @@ import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.ui.BarcodeScanner
 import com.example.pantrypal.viewmodel.MainViewModel
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 import java.time.Instant
 import java.time.ZoneId
 
@@ -85,7 +84,8 @@ fun ScanOutScreen(
                                          scanQueue.add(item)
                                          duplicateBatches = null
                                      },
-                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                 shape = MaterialTheme.shapes.large,
+                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                              ) {
                                  Column(modifier = Modifier.padding(12.dp)) {
                                      Text(item.name, style = MaterialTheme.typography.titleMedium)
@@ -112,8 +112,30 @@ fun ScanOutScreen(
                 }
             })
 
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter).padding(16.dp),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Default.QrCodeScanner,
+                        contentDescription = null
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (scanQueue.isEmpty()) "Scan what’s leaving the pantry" else "${scanQueue.size} queued • keep scanning",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
+
             if (scanQueue.isEmpty()) {
-                Button(
+                FilledTonalButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
                 ) {
@@ -129,10 +151,18 @@ fun ScanOutScreen(
                     .fillMaxWidth()
                     .height(200.dp)
                     .padding(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Queue (${scanQueue.size})", style = MaterialTheme.typography.titleMedium)
+                    Text("Ready to check out", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "${scanQueue.size} item${if (scanQueue.size == 1) "" else "s"} queued",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         items(scanQueue) { item ->
                             Row(
@@ -156,7 +186,7 @@ fun ScanOutScreen(
                              scanQueue.clear()
                              onDismiss()
                          }) {
-                             Text("Consume All")
+                             Text("Finish all")
                          }
                          OutlinedButton(onClick = { scanQueue.clear() }) {
                              Text("Clear")

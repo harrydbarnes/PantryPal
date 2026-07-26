@@ -36,6 +36,9 @@ import com.example.pantrypal.util.mealsForShopping
 import com.example.pantrypal.util.normalizedIngredients
 import com.example.pantrypal.util.rotatingWeek
 import com.example.pantrypal.util.startOfWeek
+import com.example.pantrypal.util.AppPreferences
+import com.example.pantrypal.util.AppSettings
+import com.example.pantrypal.util.AppThemeMode
 
 // Helper flow for periodic updates
 fun tickerFlow(period: Long, initialDelay: Long = 0) = flow {
@@ -54,7 +57,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         const val STYLE_TWO_WEEKS = "TWO_WEEKS"
     }
 
-    private val prefs = application.getSharedPreferences("pantry_prefs", Context.MODE_PRIVATE)
+    private val prefs = application.getSharedPreferences(AppPreferences.FILE_NAME, Context.MODE_PRIVATE)
     private val savedWeek = prefs.getString("current_week", MealEntity.WEEK_A) ?: MealEntity.WEEK_A
     private val savedAnchorMonday = if (prefs.contains("meal_week_anchor")) {
         prefs.getLong("meal_week_anchor", startOfWeek(LocalDate.now()).toEpochDay())
@@ -71,6 +74,14 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     private val _mealPlanStyle = MutableStateFlow(prefs.getString("meal_plan_style", null))
     val mealPlanStyle: StateFlow<String?> = _mealPlanStyle.asStateFlow()
 
+    private val _hasCompletedOnboarding = MutableStateFlow(
+        prefs.getBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, false)
+    )
+    val hasCompletedOnboarding: StateFlow<Boolean> = _hasCompletedOnboarding.asStateFlow()
+
+    private val _appSettings = MutableStateFlow(AppPreferences.readSettings(application))
+    val appSettings: StateFlow<AppSettings> = _appSettings.asStateFlow()
+
     fun setCurrentWeek(week: String) {
         _currentWeek.value = week
         prefs.edit()
@@ -82,6 +93,26 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     fun setMealPlanStyle(style: String) {
         _mealPlanStyle.value = style
         prefs.edit().putString("meal_plan_style", style).apply()
+    }
+
+    fun completeOnboarding() {
+        _hasCompletedOnboarding.value = true
+        prefs.edit().putBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, true).apply()
+    }
+
+    fun setThemeMode(themeMode: AppThemeMode) {
+        _appSettings.value = _appSettings.value.copy(themeMode = themeMode)
+        prefs.edit().putString(AppPreferences.KEY_THEME_MODE, themeMode.name).apply()
+    }
+
+    fun setDynamicColorEnabled(enabled: Boolean) {
+        _appSettings.value = _appSettings.value.copy(dynamicColorEnabled = enabled)
+        prefs.edit().putBoolean(AppPreferences.KEY_DYNAMIC_COLOR, enabled).apply()
+    }
+
+    fun setExpiryRemindersEnabled(enabled: Boolean) {
+        _appSettings.value = _appSettings.value.copy(expiryRemindersEnabled = enabled)
+        prefs.edit().putBoolean(AppPreferences.KEY_EXPIRY_REMINDERS, enabled).apply()
     }
 
     // UI State for Inventory

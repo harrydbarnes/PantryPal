@@ -5,7 +5,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Eco
+import androidx.compose.material.icons.filled.NoFood
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.Saver
@@ -23,6 +26,9 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.ZoneOffset
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.ui.components.ExpressiveHero
+import com.example.pantrypal.ui.components.SectionHeading
+import com.example.pantrypal.ui.components.StatusPill
 
 private const val EXPIRATION_DATE_PATTERN = "yyyy-MM-dd"
 
@@ -80,7 +86,7 @@ fun rememberAddItemState(): AddItemState {
     return rememberSaveable(saver = AddItemState.Saver) { AddItemState() }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddScreen(
     barcode: String? = null,
@@ -137,15 +143,20 @@ fun AddScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
+            .imePadding()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Add New Item", style = MaterialTheme.typography.headlineMedium)
+        ExpressiveHero(
+            eyebrow = "Stock the pantry",
+            title = "Add something delicious",
+            supportingText = "A few useful details now make stock checks and shopping nudges much smarter later.",
+            icon = Icons.Default.AddCircle
+        )
         if (barcode != null) {
-            Text("Barcode: $barcode", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            StatusPill(label = "Barcode $barcode")
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
             value = state.name,
@@ -154,8 +165,6 @@ fun AddScreen(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         val categories = ItemEntity.CATEGORIES
         var expandedCategory by remember { mutableStateOf(false) }
@@ -190,23 +199,24 @@ fun AddScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Quantity Input and Chips
-        Text("Quantity", style = MaterialTheme.typography.titleSmall)
+        SectionHeading(
+            title = "How much is going in?",
+            supportingText = "Choose a quick amount or type the exact quantity."
+        )
 
         OutlinedTextField(
             value = state.qtyText,
             onValueChange = { state.qtyText = it },
             label = { Text("Quantity") },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true
         )
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             for (i in 1..5) {
                 FilterChip(
@@ -217,8 +227,6 @@ fun AddScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
         OutlinedTextField(
             value = state.unit,
             onValueChange = { state.unit = it },
@@ -226,8 +234,6 @@ fun AddScreen(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         // Expiration Date
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -266,28 +272,64 @@ fun AddScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
         // Flags
-        Row(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
-            Text("Vegetarian")
-            Switch(checked = state.isVegetarian, onCheckedChange = { state.isVegetarian = it })
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ) {
+                    Icon(Icons.Default.Eco, contentDescription = null, modifier = Modifier.padding(10.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Vegetarian", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Helpful for meal ideas and dietary filters",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = state.isVegetarian, onCheckedChange = { state.isVegetarian = it })
+            }
         }
 
-        Row(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
-            Text("Gluten Free")
-            Switch(checked = state.isGlutenFree, onCheckedChange = { state.isGlutenFree = it })
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                ) {
+                    Icon(Icons.Default.NoFood, contentDescription = null, modifier = Modifier.padding(10.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Gluten free", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Keep dietary details visible at a glance",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = state.isGlutenFree, onCheckedChange = { state.isGlutenFree = it })
+            }
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -308,7 +350,7 @@ fun AddScreen(
                     val expDateMillis = state.expirationDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
                     onAdd(state.name, state.qtyText.toDoubleOrNull() ?: 1.0, state.unit, state.category, state.isVegetarian, state.isGlutenFree, expDateMillis)
                 },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).height(56.dp),
                 enabled = state.isValid
             ) {
                 Text("Save Item")

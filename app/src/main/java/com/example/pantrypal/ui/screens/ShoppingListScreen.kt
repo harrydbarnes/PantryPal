@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,8 +17,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RestaurantMenu
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -27,11 +32,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,12 +53,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.example.pantrypal.data.entity.ShoppingHistoryEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.entity.ShoppingSectionEntity
+import com.example.pantrypal.ui.components.ExpressiveHero
+import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.viewmodel.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -83,15 +87,15 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = {
                     editingItem = null
                     itemEditorSection = sections.firstOrNull { it.systemKey == ShoppingSectionEntity.KEY_THE_REST }
                         ?: sections.firstOrNull()
-                }
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add shopping item")
-            }
+                },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("Add item") }
+            )
         }
     ) { padding ->
         LazyColumn(
@@ -100,36 +104,44 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ExpressiveHero(
+                    eyebrow = currentWeekDetails?.displayName ?: "Week $currentWeek",
+                    title = if (visibleItems.all { it.isChecked } && visibleItems.isNotEmpty()) {
+                        "That’s the whole shop ticked off"
+                    } else {
+                        "${visibleItems.count { !it.isChecked }} item${if (visibleItems.count { !it.isChecked } == 1) "" else "s"} left to gather"
+                    },
+                    supportingText = "Recurring essentials and meal-plan ingredients, sorted into a list that feels manageable.",
+                    icon = if (visibleItems.all { it.isChecked } && visibleItems.isNotEmpty()) {
+                        Icons.Default.CheckCircle
+                    } else {
+                        Icons.Default.ShoppingCart
+                    },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+
+            item {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.ShoppingCart,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    StatusPill(
+                        label = "${visibleItems.count { it.isChecked }} packed",
+                        icon = Icons.Default.CheckCircle,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    StatusPill(
+                        label = "${sections.size} sections",
+                        icon = Icons.Default.Category
+                    )
+                    if (visibleItems.any { it.isChecked }) {
+                        AssistChip(
+                            onClick = { viewModel.clearCheckedShoppingItems() },
+                            label = { Text("Clear checked") }
                         )
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                currentWeekDetails?.displayName ?: "Week $currentWeek",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                "${visibleItems.count { !it.isChecked }} left to review",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                        if (visibleItems.any { it.isChecked }) {
-                            TextButton(onClick = { viewModel.clearCheckedShoppingItems() }) {
-                                Text("Clear checked")
-                            }
-                        }
                     }
                 }
             }
@@ -236,12 +248,27 @@ private fun ShoppingSectionCard(
     onToggleItem: (ShoppingItemEntity) -> Unit,
     onDeleteItem: (ShoppingItemEntity) -> Unit
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = sectionContainerColor(section),
+                    contentColor = sectionContentColor(section)
+                ) {
+                    Icon(
+                        sectionIcon(section),
+                        contentDescription = null,
+                        modifier = Modifier.padding(10.dp).size(22.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(section.name, style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -289,6 +316,28 @@ private fun ShoppingSectionCard(
             }
         }
     }
+}
+
+@Composable
+private fun sectionContainerColor(section: ShoppingSectionEntity) = when (section.systemKey) {
+    ShoppingSectionEntity.KEY_MEAL_PLAN -> MaterialTheme.colorScheme.tertiaryContainer
+    ShoppingSectionEntity.KEY_EVERY_WEEK -> MaterialTheme.colorScheme.primaryContainer
+    else -> MaterialTheme.colorScheme.secondaryContainer
+}
+
+@Composable
+private fun sectionContentColor(section: ShoppingSectionEntity) = when (section.systemKey) {
+    ShoppingSectionEntity.KEY_MEAL_PLAN -> MaterialTheme.colorScheme.onTertiaryContainer
+    ShoppingSectionEntity.KEY_EVERY_WEEK -> MaterialTheme.colorScheme.onPrimaryContainer
+    else -> MaterialTheme.colorScheme.onSecondaryContainer
+}
+
+private fun sectionIcon(section: ShoppingSectionEntity): ImageVector = when (section.systemKey) {
+    ShoppingSectionEntity.KEY_EVERY_WEEK -> Icons.Default.Repeat
+    ShoppingSectionEntity.KEY_MEAL_PLAN -> Icons.Default.RestaurantMenu
+    ShoppingSectionEntity.KEY_BABY_STUFF -> Icons.Default.Favorite
+    ShoppingSectionEntity.KEY_THE_REST -> Icons.Default.ShoppingBag
+    else -> Icons.Default.Category
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -430,7 +479,12 @@ fun ShoppingListItemRow(
             Text(
                 text = item.name,
                 style = MaterialTheme.typography.bodyLarge,
-                textDecoration = if (item.isChecked) TextDecoration.LineThrough else null
+                textDecoration = if (item.isChecked) TextDecoration.LineThrough else null,
+                color = if (item.isChecked) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
             )
             Text(
                 text = "${formatQuantity(item.quantity)} ${item.unit}",

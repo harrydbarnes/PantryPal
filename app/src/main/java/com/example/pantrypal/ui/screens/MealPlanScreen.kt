@@ -1,7 +1,6 @@
 package com.example.pantrypal.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -15,9 +14,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -31,7 +31,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,6 +59,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.pantrypal.data.entity.MealEntity
 import com.example.pantrypal.data.entity.MealWeekEntity
+import com.example.pantrypal.ui.components.ExpressiveHero
+import com.example.pantrypal.ui.components.SectionHeading
+import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.util.dayLabel
 import com.example.pantrypal.util.nextWeek
 import com.example.pantrypal.viewmodel.MainViewModel
@@ -89,14 +92,14 @@ fun MealPlanScreen(viewModel: MainViewModel) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = {
                     editingMeal = null
                     showEditor = true
-                }
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add a meal")
-            }
+                },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("Add meal") }
+            )
         }
     ) { padding ->
         LazyColumn(
@@ -105,16 +108,40 @@ fun MealPlanScreen(viewModel: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Text(
-                    text = "Your rotating meal schedule",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold
+                ExpressiveHero(
+                    eyebrow = "Four-week rhythm",
+                    title = "Dinner plans, minus the daily scramble",
+                    supportingText = "Shape each week once, reuse the good bits, and turn ingredients into a tidy shop.",
+                    icon = Icons.Default.Restaurant,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                 )
-                Text(
-                    text = "Plan once, adjust any day, then turn the week into a shopping list.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            }
+
+            item {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StatusPill(
+                        label = "${weekMeals.size} meal${if (weekMeals.size == 1) "" else "s"} planned",
+                        icon = Icons.Default.CalendarMonth
+                    )
+                    StatusPill(
+                        label = if (displayedWeek == currentWeek) "Current rotation" else "Template preview",
+                        icon = if (displayedWeek == currentWeek) Icons.Default.AutoAwesome else Icons.Default.ContentCopy,
+                        containerColor = if (displayedWeek == currentWeek) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHigh
+                        },
+                        contentColor = if (displayedWeek == currentWeek) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
             }
 
             item {
@@ -138,6 +165,7 @@ fun MealPlanScreen(viewModel: MainViewModel) {
 
             item {
                 Card(
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(
                         containerColor = if (displayedWeek == currentWeek) {
                             MaterialTheme.colorScheme.primaryContainer
@@ -211,7 +239,7 @@ fun MealPlanScreen(viewModel: MainViewModel) {
             if (weekMeals.isEmpty()) {
                 item {
                     EmptyMealPlan(
-                        week = displayedWeek,
+                        week = displayedWeekDetails?.displayName ?: "Week $displayedWeek",
                         onAdd = {
                             editingMeal = null
                             showEditor = true
@@ -220,6 +248,12 @@ fun MealPlanScreen(viewModel: MainViewModel) {
                     )
                 }
             } else {
+                item {
+                    SectionHeading(
+                        title = "The week at a glance",
+                        supportingText = "Tap a day’s plus button to fill any gaps."
+                    )
+                }
                 (1..7).forEach { day ->
                     val dayMeals = weekMeals.filter { it.dayOfWeek == day }
                     item(key = "day-$day") {
@@ -429,6 +463,7 @@ private fun DaySchedule(
     onDelete: (MealEntity) -> Unit
 ) {
     Card(
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -470,7 +505,12 @@ private fun MealRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(meal.mealSlot, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            StatusPill(
+                label = meal.mealSlot,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Spacer(Modifier.height(4.dp))
             Text(meal.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             if (meal.ingredients.isNotEmpty()) {
                 Text(
@@ -496,14 +536,17 @@ private fun MealRow(
 
 @Composable
 private fun EmptyMealPlan(week: String, onAdd: () -> Unit, onCopy: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(Icons.Default.Restaurant, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
-            Text("Week $week is ready to plan", style = MaterialTheme.typography.titleLarge)
+            Text("$week is ready to plan", style = MaterialTheme.typography.titleLarge)
             Text(
                 "Add meals day by day or start with the other week's schedule.",
                 style = MaterialTheme.typography.bodyMedium,

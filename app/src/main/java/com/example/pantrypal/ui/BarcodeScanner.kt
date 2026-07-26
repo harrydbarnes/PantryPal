@@ -135,6 +135,7 @@ fun BarcodeScanner(
             }
             val difference = Path.combine(PathOperation.Difference, path, holePath)
 
+            // Fixed high-contrast colours are intentional over unpredictable camera content.
             drawPath(difference, Color.Black.copy(alpha = 0.5f))
 
             drawRoundRect(

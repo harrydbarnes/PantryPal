@@ -18,6 +18,11 @@ class ExpirationWorker(
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
+        val remindersEnabled = applicationContext
+            .getSharedPreferences(AppPreferences.FILE_NAME, Context.MODE_PRIVATE)
+            .getBoolean(AppPreferences.KEY_EXPIRY_REMINDERS, true)
+        if (!remindersEnabled) return Result.success()
+
         val threshold = System.currentTimeMillis() + TWO_DAYS_IN_MILLIS
 
         // Since getExpiringItems returns a Flow, we take the first emission
@@ -77,6 +82,7 @@ class ExpirationWorker(
     }
 
     companion object {
+        const val UNIQUE_WORK_NAME = "ExpirationCheck"
         private const val TWO_DAYS_IN_MILLIS = 2 * 24 * 60 * 60 * 1000L
     }
 }
