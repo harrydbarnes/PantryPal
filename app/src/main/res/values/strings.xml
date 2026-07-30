@@ -21,6 +21,11 @@
     <string name="settings_title">Settings</string>
     <string name="past_items_title">Past Items Log</string>
     <string name="meal_plan_title">Meal Plan</string>
+    <string name="recipes_title">Recipes</string>
+    <string name="receipt_title">Review Receipt</string>
+    <string name="shopping_tools_title">Budget &amp; Prices</string>
+    <string name="data_management_title">Data &amp; Sharing</string>
+    <string name="household_title">Household Sharing</string>
 
     <!-- Meal Plan Setup -->
     <string name="meal_plan_setup_title">How do you meal plan?</string>

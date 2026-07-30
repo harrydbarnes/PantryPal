@@ -23,18 +23,25 @@ class ExpirationWorker(
             .getBoolean(AppPreferences.KEY_EXPIRY_REMINDERS, true)
         if (!remindersEnabled) return Result.success()
 
-        val threshold = System.currentTimeMillis() + TWO_DAYS_IN_MILLIS
-
-        // Since getExpiringItems returns a Flow, we take the first emission
-        val expiringItems = repository.getExpiringItems(System.currentTimeMillis()).first()
-            .filter { it.expirationDate != null && it.expirationDate < threshold }
+        val now = System.currentTimeMillis()
+        val dueSoonCutoff = now + TWO_DAYS_IN_MILLIS
+        val expiringItems = repository.getExpiringItems(dueSoonCutoff).first()
 
         if (expiringItems.isNotEmpty()) {
             val count = expiringItems.size
+            val expiredCount = expiringItems.count {
+                it.expirationDate?.let { date -> date < now } == true
+            }
             val contentText = if (count == 1) {
-                "${expiringItems[0].name} is expiring soon!"
+                if (expiredCount == 1) {
+                    "${expiringItems[0].name} has expired."
+                } else {
+                    "${expiringItems[0].name} is due soon."
+                }
+            } else if (expiredCount > 0) {
+                "$count items are expired or due soon."
             } else {
-                "$count items are expiring soon!"
+                "$count items are due soon."
             }
 
             showNotification(contentText)

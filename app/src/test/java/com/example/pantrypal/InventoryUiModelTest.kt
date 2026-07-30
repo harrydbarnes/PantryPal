@@ -15,6 +15,8 @@ class InventoryUiModelTest {
             unit = "pcs",
             addedDate = 1000L,
             expirationDate = null,
+            storageLocation = "Fridge",
+            isOpened = true,
             name = "Milk",
             barcode = "123",
             defaultUnit = "pcs",
@@ -22,6 +24,7 @@ class InventoryUiModelTest {
             isVegetarian = true,
             isGlutenFree = true,
             isUsual = true,
+            lowStockThreshold = 1.0,
             imageUrl = null,
             createdAt = 1000L
         )
@@ -32,5 +35,7 @@ class InventoryUiModelTest {
         assertEquals("2.0 pcs", result.quantity)
         assertTrue(result.tags.contains("Veg"))
         assertTrue(result.tags.contains("GF"))
+        assertEquals("Fridge", result.storageLocation)
+        assertTrue(result.isOpened)
     }
 }

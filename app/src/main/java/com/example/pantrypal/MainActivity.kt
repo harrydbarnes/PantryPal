@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -27,6 +28,8 @@ import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Home
@@ -47,10 +50,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pantrypal.ui.theme.PantryPalTheme
 import com.example.pantrypal.viewmodel.MainViewModel
 import com.example.pantrypal.viewmodel.MainViewModelFactory
+import com.example.pantrypal.viewmodel.PantryFeaturesViewModel
+import com.example.pantrypal.viewmodel.PantryFeaturesViewModelFactory
 import com.example.pantrypal.viewmodel.InventoryUiModel
 import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.ui.BarcodeScanner
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.ui.screens.ScanOutScreen
 import com.example.pantrypal.ui.screens.SettingsScreen
@@ -59,6 +66,11 @@ import com.example.pantrypal.ui.screens.AddScreen
 import com.example.pantrypal.ui.screens.ShoppingListScreen
 import com.example.pantrypal.ui.screens.MealPlanScreen
 import com.example.pantrypal.ui.screens.OnboardingScreen
+import com.example.pantrypal.ui.screens.DataManagementScreen
+import com.example.pantrypal.ui.screens.HouseholdCollaborationScreen
+import com.example.pantrypal.ui.screens.ReceiptReviewScreen
+import com.example.pantrypal.ui.screens.RecipeScreen
+import com.example.pantrypal.ui.screens.ShoppingToolsScreen
 import com.example.pantrypal.ui.components.ExpressiveHero
 import com.example.pantrypal.ui.components.FriendlyEmptyState
 import com.example.pantrypal.ui.components.PantryPalSpacing
@@ -72,7 +84,14 @@ import java.util.concurrent.TimeUnit
 import com.example.pantrypal.util.ExpirationWorker
 import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
+import com.example.pantrypal.util.ExpiryStatus
+import com.example.pantrypal.util.InventorySort
 import coil.compose.AsyncImage
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 import androidx.annotation.StringRes
 
@@ -86,19 +105,30 @@ sealed class AppScreen(@StringRes val titleResId: Int) {
     data object Settings : AppScreen(R.string.settings_title)
     data object PastItems : AppScreen(R.string.past_items_title)
     data object MealPlan : AppScreen(R.string.meal_plan_title)
+    data object Recipes : AppScreen(R.string.recipes_title)
+    data object Receipt : AppScreen(R.string.receipt_title)
+    data object ShoppingTools : AppScreen(R.string.shopping_tools_title)
+    data object DataManagement : AppScreen(R.string.data_management_title)
+    data object Household : AppScreen(R.string.household_title)
 }
 
 class MainActivity : ComponentActivity() {
+    private val sharedRecipeUrl = MutableStateFlow<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        sharedRecipeUrl.value = extractSharedRecipeUrl(intent)
 
         val app = application as PantryPalApplication
         val repository = app.repository
         val viewModelFactory = MainViewModelFactory(repository, app)
+        val featuresViewModelFactory = PantryFeaturesViewModelFactory(app.featuresRepository)
 
         setContent {
             val viewModel: MainViewModel = viewModel(factory = viewModelFactory)
+            val featuresViewModel: PantryFeaturesViewModel =
+                androidx.lifecycle.viewmodel.compose.viewModel(factory = featuresViewModelFactory)
             val appSettings by viewModel.appSettings.collectAsState()
             val systemDarkTheme = isSystemInDarkTheme()
             val darkTheme = when (appSettings.themeMode) {
@@ -119,11 +149,42 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    KitchenApp(viewModel, appSettings)
+                    KitchenApp(
+                        viewModel = viewModel,
+                        featuresViewModel = featuresViewModel,
+                        appSettings = appSettings,
+                        incomingSharedRecipeUrl = sharedRecipeUrl,
+                        onSharedRecipeUrlConsumed = { sharedRecipeUrl.value = null }
+                    )
                 }
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        sharedRecipeUrl.value = extractSharedRecipeUrl(intent)
+    }
+}
+
+private fun extractSharedRecipeUrl(intent: Intent?): String? {
+    if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return null
+    val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+    return Regex("""https?://\S+""").find(sharedText)?.value?.trimEnd('.', ',', ')')
+}
+
+private const val MAX_IMPORT_FILE_CHARS = 10_000_000
+
+private fun java.io.Reader.readTextBounded(maxChars: Int): String {
+    val output = StringBuilder(minOf(maxChars, 16_384))
+    val buffer = CharArray(8_192)
+    while (true) {
+        val read = read(buffer)
+        if (read < 0) break
+        require(output.length + read <= maxChars) { "The selected file is too large." }
+        output.append(buffer, 0, read)
+    }
+    return output.toString()
 }
 
 private fun updateExpirationWork(context: Context, enabled: Boolean) {
@@ -144,7 +205,10 @@ private fun updateExpirationWork(context: Context, enabled: Boolean) {
 @Composable
 fun KitchenApp(
     viewModel: MainViewModel,
-    appSettings: AppSettings
+    featuresViewModel: PantryFeaturesViewModel,
+    appSettings: AppSettings,
+    incomingSharedRecipeUrl: StateFlow<String?>,
+    onSharedRecipeUrlConsumed: () -> Unit
 ) {
     val inventory by viewModel.inventoryState.collectAsState()
     val expiringItems by viewModel.expiringItemsState.collectAsState()
@@ -158,9 +222,126 @@ fun KitchenApp(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val incomingRecipeUrl by incomingSharedRecipeUrl.collectAsState()
+    LaunchedEffect(incomingRecipeUrl) {
+        incomingRecipeUrl?.let { url ->
+            currentScreen = AppScreen.Recipes
+            featuresViewModel.importRecipeUrl(url)
+            onSharedRecipeUrlConsumed()
+        }
+    }
+
+    var showReceiptPasteDialog by rememberSaveable { mutableStateOf(false) }
+    var pastedReceiptText by rememberSaveable { mutableStateOf("") }
+    var pendingBackupRestore by remember { mutableStateOf<String?>(null) }
+    var pendingHouseholdRestore by remember { mutableStateOf<String?>(null) }
+
+    val textRecognizer = remember {
+        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    }
+    DisposableEffect(textRecognizer) {
+        onDispose { textRecognizer.close() }
+    }
+    val receiptImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            featuresViewModel.setReceiptProcessing(true)
+            runCatching { InputImage.fromFilePath(context, uri) }
+                .onSuccess { image ->
+                    textRecognizer.process(image)
+                        .addOnSuccessListener { result ->
+                            featuresViewModel.parseReceiptText(result.text)
+                        }
+                        .addOnFailureListener(featuresViewModel::setReceiptError)
+                }
+                .onFailure(featuresViewModel::setReceiptError)
+        }
+    }
+    val backupCreateLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                featuresViewModel.createBackupJson().onSuccess { json ->
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            context.contentResolver.openOutputStream(uri)?.bufferedWriter().use {
+                                requireNotNull(it) { "The selected file could not be opened." }
+                                    .write(json)
+                            }
+                        }
+                    }.onFailure {
+                        snackbarHostState.showSnackbar("Backup file could not be written.")
+                    }
+                }
+            }
+        }
+    }
+    val backupOpenLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader().use {
+                            requireNotNull(it) { "The selected file could not be opened." }
+                                .readTextBounded(MAX_IMPORT_FILE_CHARS)
+                        }
+                    }
+                }.onSuccess {
+                    pendingBackupRestore = it
+                }.onFailure {
+                    snackbarHostState.showSnackbar("Backup file could not be read.")
+                }
+            }
+        }
+    }
+    val householdCreateLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                featuresViewModel.createHouseholdJson().onSuccess { json ->
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            context.contentResolver.openOutputStream(uri)?.bufferedWriter().use {
+                                requireNotNull(it) { "The selected file could not be opened." }
+                                    .write(json)
+                            }
+                        }
+                    }.onFailure {
+                        snackbarHostState.showSnackbar("Household file could not be written.")
+                    }
+                }
+            }
+        }
+    }
+    val householdOpenLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader().use {
+                            requireNotNull(it) { "The selected file could not be opened." }
+                                .readTextBounded(MAX_IMPORT_FILE_CHARS)
+                        }
+                    }
+                }.onSuccess {
+                    pendingHouseholdRestore = it
+                }.onFailure {
+                    snackbarHostState.showSnackbar("Household file could not be read.")
+                }
+            }
+        }
+    }
 
     // Permission handling
-    val context = LocalContext.current
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -314,7 +495,28 @@ fun KitchenApp(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
-                         DropdownMenuItem(
+                        DropdownMenuItem(
+                            text = { Text("Recipes") },
+                            onClick = {
+                                currentScreen = AppScreen.Recipes
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Budget & prices") },
+                            onClick = {
+                                currentScreen = AppScreen.ShoppingTools
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Data & sharing") },
+                            onClick = {
+                                currentScreen = AppScreen.DataManagement
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Past Items Log") },
                             onClick = {
                                 currentScreen = AppScreen.PastItems
@@ -394,7 +596,8 @@ fun KitchenApp(
                             DashboardScreen(
                                 expiringItems,
                                 restockSuggestions,
-                                onOpenInventory = { currentScreen = AppScreen.Inventory }
+                                onOpenInventory = { currentScreen = AppScreen.Inventory },
+                                onAddRestock = viewModel::addRestockToShopping
                             )
                         }
                         AppScreen.Inventory -> {
@@ -404,15 +607,40 @@ fun KitchenApp(
                                 onScanOut = { selectScreen(AppScreen.ScanOut) },
                                 onConsume = { item, type ->
                                     viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, type)
-                                }
+                                },
+                                onAdjustQuantity = viewModel::adjustInventoryQuantity,
+                                onToggleOpened = viewModel::toggleInventoryOpened,
+                                onUpdateStockSettings = viewModel::updateStockSettings,
+                                onUpdateLocation = viewModel::updateInventoryLocation
                             )
                         }
-                        AppScreen.ShoppingList -> ShoppingListScreen(viewModel)
-                        AppScreen.MealPlan -> MealPlanScreen(viewModel)
+                        AppScreen.ShoppingList -> ShoppingListScreen(
+                            viewModel = viewModel,
+                            onScanReceipt = { currentScreen = AppScreen.Receipt },
+                            onOpenShoppingTools = {
+                                currentScreen = AppScreen.ShoppingTools
+                            }
+                        )
+                        AppScreen.MealPlan -> MealPlanScreen(
+                            viewModel = viewModel,
+                            onOpenRecipes = { currentScreen = AppScreen.Recipes }
+                        )
                         AppScreen.AddManual -> {
                             AddScreen(
-                                onAdd = { name, qty, unit, cat, veg, gf, exp ->
-                                    viewModel.addItem(name, qty, unit, cat, veg, gf, expirationDate = exp)
+                                onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened ->
+                                    viewModel.addItem(
+                                        name,
+                                        qty,
+                                        unit,
+                                        cat,
+                                        veg,
+                                        gf,
+                                        expirationDate = exp,
+                                        isUsual = usual,
+                                        lowStockThreshold = threshold,
+                                        storageLocation = location,
+                                        isOpened = opened
+                                    )
                                     currentScreen = AppScreen.Inventory
                                 },
                                 onCancel = { currentScreen = AppScreen.Inventory }
@@ -433,13 +661,214 @@ fun KitchenApp(
                                     }
                                 )
                             },
-                            onLaunchOnboarding = { showOnboarding = true }
+                            onLaunchOnboarding = { showOnboarding = true },
+                            onOpenDataManagement = {
+                                currentScreen = AppScreen.DataManagement
+                            }
                         )
+                        AppScreen.Recipes -> {
+                            val state by featuresViewModel.recipeState.collectAsState()
+                            val currentWeek by viewModel.currentWeek.collectAsState()
+                            RecipeScreen(
+                                state = state,
+                                onSearchQueryChange = featuresViewModel::setRecipeQuery,
+                                onExternalSearch = featuresViewModel::searchRecipesOnline,
+                                onImportUrl = featuresViewModel::importRecipeUrl,
+                                onRecipeSelected = featuresViewModel::selectRecipe,
+                                onRecipeDismissed = featuresViewModel::dismissRecipe,
+                                onImportPreviewDismissed =
+                                    featuresViewModel::dismissImportPreview,
+                                onSaveRecipe = featuresViewModel::saveRecipe,
+                                onToggleFavourite = featuresViewModel::setFavourite,
+                                onRateRecipe = featuresViewModel::rateRecipe,
+                                onMarkCooked = featuresViewModel::markRecipeCooked,
+                                onOpenSource = { url ->
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        )
+                                    }.onFailure {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                "No app could open this recipe source."
+                                            )
+                                        }
+                                    }
+                                },
+                                onAddToPlan = {
+                                    featuresViewModel.addRecipeToPlan(it, currentWeek)
+                                },
+                                onAddMissingToShopping = { recipe, ingredients ->
+                                    featuresViewModel.addMissingToShopping(
+                                        recipe,
+                                        ingredients,
+                                        currentWeek
+                                    )
+                                }
+                            )
+                        }
+                        AppScreen.Receipt -> {
+                            val result by featuresViewModel.receiptResult.collectAsState()
+                            val isProcessing by
+                                featuresViewModel.receiptProcessing.collectAsState()
+                            ReceiptReviewScreen(
+                                result = result,
+                                isProcessing = isProcessing,
+                                onCaptureReceipt = {
+                                    receiptImageLauncher.launch("image/*")
+                                },
+                                onPasteReceiptText = {
+                                    showReceiptPasteDialog = true
+                                },
+                                onCandidateChange =
+                                    featuresViewModel::updateReceiptCandidate,
+                                onImportSelected = { candidates ->
+                                    featuresViewModel.importReceipt(candidates)
+                                    currentScreen = AppScreen.ShoppingTools
+                                }
+                            )
+                        }
+                        AppScreen.ShoppingTools -> {
+                            val state by
+                                featuresViewModel.shoppingToolsState.collectAsState()
+                            ShoppingToolsScreen(
+                                state = state,
+                                onSetBudgetMinor = featuresViewModel::setWeeklyBudget,
+                                onScanReceipt = { currentScreen = AppScreen.Receipt }
+                            )
+                        }
+                        AppScreen.DataManagement -> {
+                            val state by featuresViewModel.dataState.collectAsState()
+                            DataManagementScreen(
+                                state = state,
+                                onExportBackup = {
+                                    backupCreateLauncher.launch(
+                                        "PantryPal-backup-${java.time.LocalDate.now()}.json"
+                                    )
+                                },
+                                onImportBackup = {
+                                    backupOpenLauncher.launch(
+                                        arrayOf("application/json", "text/plain")
+                                    )
+                                },
+                                onOpenHousehold = {
+                                    currentScreen = AppScreen.Household
+                                }
+                            )
+                        }
+                        AppScreen.Household -> {
+                            val state by featuresViewModel.householdState.collectAsState()
+                            HouseholdCollaborationScreen(
+                                state = state,
+                                onShareSnapshot = {
+                                    householdCreateLauncher.launch(
+                                        "PantryPal-household-${java.time.LocalDate.now()}.json"
+                                    )
+                                },
+                                onImportSnapshot = {
+                                    householdOpenLauncher.launch(
+                                        arrayOf("application/json", "text/plain")
+                                    )
+                                },
+                                onSyncNow = featuresViewModel::explainRealtimeSync,
+                                onResolveConflict = { _, _ ->
+                                    featuresViewModel.explainRealtimeSync()
+                                }
+                            )
+                        }
                         AppScreen.PastItems -> PastItemsScreen(viewModel)
                     }
                 }
             }
         }
+    }
+
+    if (showReceiptPasteDialog) {
+        AlertDialog(
+            onDismissRequest = { showReceiptPasteDialog = false },
+            title = { Text("Paste receipt text") },
+            text = {
+                OutlinedTextField(
+                    value = pastedReceiptText,
+                    onValueChange = { pastedReceiptText = it },
+                    label = { Text("Receipt text") },
+                    minLines = 8,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        featuresViewModel.parseReceiptText(pastedReceiptText)
+                        pastedReceiptText = ""
+                        showReceiptPasteDialog = false
+                        currentScreen = AppScreen.Receipt
+                    },
+                    enabled = pastedReceiptText.isNotBlank()
+                ) {
+                    Text("Review items")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReceiptPasteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    pendingBackupRestore?.let { json ->
+        AlertDialog(
+            onDismissRequest = { pendingBackupRestore = null },
+            title = { Text("Replace this kitchen?") },
+            text = {
+                Text(
+                    "PantryPal will validate the backup, then replace pantry, shopping, plans, recipes and settings on this device."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        featuresViewModel.restoreBackupJson(json)
+                        pendingBackupRestore = null
+                    }
+                ) {
+                    Text("Restore backup")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingBackupRestore = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    pendingHouseholdRestore?.let { json ->
+        AlertDialog(
+            onDismissRequest = { pendingHouseholdRestore = null },
+            title = { Text("Import household snapshot?") },
+            text = {
+                Text(
+                    "This checks the snapshot for damage, then replaces local kitchen data with the shared household copy."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        featuresViewModel.restoreHouseholdJson(json)
+                        pendingHouseholdRestore = null
+                    }
+                ) {
+                    Text("Import snapshot")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingHouseholdRestore = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -460,6 +889,11 @@ private fun parentScreenFor(screen: AppScreen): AppScreen = when (screen) {
     AppScreen.AddManual,
     AppScreen.ScanIn,
     AppScreen.ScanOut -> AppScreen.Inventory
+    AppScreen.Recipes -> AppScreen.MealPlan
+    AppScreen.Receipt,
+    AppScreen.ShoppingTools -> AppScreen.ShoppingList
+    AppScreen.DataManagement,
+    AppScreen.Household -> AppScreen.Settings
     else -> AppScreen.Dashboard
 }
 
@@ -517,7 +951,12 @@ private fun KitchenNavigationRail(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: List<ItemEntity>, onOpenInventory: () -> Unit) {
+fun DashboardScreen(
+    expiringItems: List<InventoryUiModel>,
+    restockSuggestions: List<ItemEntity>,
+    onOpenInventory: () -> Unit,
+    onAddRestock: (ItemEntity) -> Unit
+) {
     LazyColumn(
         contentPadding = PaddingValues(
             start = PantryPalSpacing.sm,
@@ -612,7 +1051,7 @@ fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: L
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                                 Text(
-                                    text = "Plan it into a meal soon",
+                                    text = item.expiryLabel,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
                                 )
@@ -671,6 +1110,11 @@ fun DashboardScreen(expiringItems: List<InventoryUiModel>, restockSuggestions: L
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        FilledTonalButton(onClick = { onAddRestock(item) }) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Add")
+                        }
                     }
                 }
             }
@@ -724,8 +1168,21 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         // Navigate to add screen pre-filled
         AddScreen(
             barcode = detectedBarcode,
-            onAdd = { name, qty, unit, cat, veg, gf, exp ->
-                viewModel.addItem(name, qty, unit, cat, veg, gf, barcode = detectedBarcode, expirationDate = exp)
+            onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened ->
+                viewModel.addItem(
+                    name,
+                    qty,
+                    unit,
+                    cat,
+                    veg,
+                    gf,
+                    barcode = detectedBarcode,
+                    expirationDate = exp,
+                    isUsual = usual,
+                    lowStockThreshold = threshold,
+                    storageLocation = location,
+                    isOpened = opened
+                )
                 onDismiss()
             },
             onCancel = {
@@ -742,8 +1199,22 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
              // Redirect to AddScreen with pre-filled data
              AddScreen(
                 barcode = detectedBarcode,
-                onAdd = { name, qty, unit, cat, veg, gf, exp ->
-                    viewModel.addItem(name, qty, unit, cat, veg, gf, barcode = detectedBarcode, expirationDate = exp, imageUrl = foundItem?.imageUrl)
+                onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened ->
+                    viewModel.addItem(
+                        name,
+                        qty,
+                        unit,
+                        cat,
+                        veg,
+                        gf,
+                        barcode = detectedBarcode,
+                        expirationDate = exp,
+                        imageUrl = foundItem?.imageUrl,
+                        isUsual = usual,
+                        lowStockThreshold = threshold,
+                        storageLocation = location,
+                        isOpened = opened
+                    )
                     onDismiss()
                 },
                 onCancel = {
@@ -815,13 +1286,54 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun InventoryScreen(
     items: List<InventoryUiModel>,
     onScanIn: () -> Unit,
     onScanOut: () -> Unit,
-    onConsume: (InventoryUiModel, ConsumptionType) -> Unit
+    onConsume: (InventoryUiModel, ConsumptionType) -> Unit,
+    onAdjustQuantity: (Long, Double) -> Unit,
+    onToggleOpened: (InventoryUiModel) -> Unit,
+    onUpdateStockSettings: (Long, Boolean, Double?) -> Unit,
+    onUpdateLocation: (InventoryUiModel, String) -> Unit
 ) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var location by rememberSaveable { mutableStateOf<String?>(null) }
+    var expiryFilter by rememberSaveable { mutableStateOf<ExpiryStatus?>(null) }
+    var lowStockOnly by rememberSaveable { mutableStateOf(false) }
+    var openedOnly by rememberSaveable { mutableStateOf(false) }
+    var sort by rememberSaveable { mutableStateOf(InventorySort.NAME) }
+    var showCategoryMenu by remember { mutableStateOf(false) }
+    var showLocationMenu by remember { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    var editingStockItem by remember { mutableStateOf<InventoryUiModel?>(null) }
+
+    val filteredItems = remember(items, query, category, location, expiryFilter, lowStockOnly, openedOnly, sort) {
+        val filtered = items.asSequence()
+            .filter {
+                query.isBlank() ||
+                    it.name.contains(query, ignoreCase = true) ||
+                    it.category.contains(query, ignoreCase = true)
+            }
+            .filter { category == null || it.category == category }
+            .filter { location == null || it.storageLocation == location }
+            .filter {
+                expiryFilter == null ||
+                    it.expiryStatus == expiryFilter ||
+                    (expiryFilter == ExpiryStatus.DUE_SOON && it.expiryStatus == ExpiryStatus.TODAY)
+            }
+            .filter { !lowStockOnly || it.isRestockNeeded }
+            .filter { !openedOnly || it.isOpened }
+        when (sort) {
+            InventorySort.NAME -> filtered.sortedBy { it.name.lowercase() }.toList()
+            InventorySort.EXPIRY -> filtered.sortedWith(compareBy<InventoryUiModel> { it.expirationDate == null }.thenBy { it.expirationDate }).toList()
+            InventorySort.RECENTLY_ADDED -> filtered.sortedByDescending { it.addedDate }.toList()
+            InventorySort.CATEGORY -> filtered.sortedWith(compareBy<InventoryUiModel> { it.category }.thenBy { it.name }).toList()
+        }
+    }
+
     LazyColumn(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -829,7 +1341,7 @@ fun InventoryScreen(
         item {
             ExpressiveHero(
                 eyebrow = "Kitchen cupboard",
-                title = "${items.size} pantry item${if (items.size == 1) "" else "s"}, all in one place",
+                title = "${filteredItems.size} of ${items.size} pantry item${if (items.size == 1) "" else "s"}",
                 supportingText = "Finish what you have, spot what’s low, and make every ingredient count.",
                 icon = Icons.Default.Inventory2,
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -859,6 +1371,73 @@ fun InventoryScreen(
                 }
             }
         }
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                label = { Text("Search pantry") },
+                placeholder = { Text("Name or category") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
+        item {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box {
+                    FilterChip(
+                        selected = category != null,
+                        onClick = { showCategoryMenu = true },
+                        label = { Text(category ?: "Category") }
+                    )
+                    DropdownMenu(expanded = showCategoryMenu, onDismissRequest = { showCategoryMenu = false }) {
+                        DropdownMenuItem(text = { Text("All categories") }, onClick = { category = null; showCategoryMenu = false })
+                        items.map { it.category }.distinct().sorted().forEach { value ->
+                            DropdownMenuItem(text = { Text(value) }, onClick = { category = value; showCategoryMenu = false })
+                        }
+                    }
+                }
+                Box {
+                    FilterChip(
+                        selected = location != null,
+                        onClick = { showLocationMenu = true },
+                        label = { Text(location ?: "Location") }
+                    )
+                    DropdownMenu(expanded = showLocationMenu, onDismissRequest = { showLocationMenu = false }) {
+                        DropdownMenuItem(text = { Text("All locations") }, onClick = { location = null; showLocationMenu = false })
+                        items.map { it.storageLocation }.distinct().sorted().forEach { value ->
+                            DropdownMenuItem(text = { Text(value) }, onClick = { location = value; showLocationMenu = false })
+                        }
+                    }
+                }
+                FilterChip(
+                    selected = expiryFilter == ExpiryStatus.EXPIRED,
+                    onClick = { expiryFilter = if (expiryFilter == ExpiryStatus.EXPIRED) null else ExpiryStatus.EXPIRED },
+                    label = { Text("Expired") }
+                )
+                FilterChip(
+                    selected = expiryFilter == ExpiryStatus.DUE_SOON || expiryFilter == ExpiryStatus.TODAY,
+                    onClick = { expiryFilter = if (expiryFilter == ExpiryStatus.DUE_SOON) null else ExpiryStatus.DUE_SOON },
+                    label = { Text("Due soon") }
+                )
+                FilterChip(selected = lowStockOnly, onClick = { lowStockOnly = !lowStockOnly }, label = { Text("Low stock") })
+                FilterChip(selected = openedOnly, onClick = { openedOnly = !openedOnly }, label = { Text("Opened") })
+                Box {
+                    AssistChip(onClick = { showSortMenu = true }, label = { Text("Sort: ${sort.name.lowercase().replace('_', ' ')}") })
+                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                        InventorySort.entries.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.name.lowercase().replace('_', ' ').replaceFirstChar { it.titlecase() }) },
+                                onClick = { sort = option; showSortMenu = false }
+                            )
+                        }
+                    }
+                }
+            }
+        }
         if (items.isEmpty()) {
             item {
                 FriendlyEmptyState(
@@ -867,16 +1446,88 @@ fun InventoryScreen(
                     icon = Icons.Default.Inventory2
                 )
             }
+        } else if (filteredItems.isEmpty()) {
+            item {
+                FriendlyEmptyState(
+                    title = "Nothing matches those filters",
+                    supportingText = "Try a broader search or clear one of the filter chips.",
+                    icon = Icons.Default.Search
+                )
+            }
         }
-        items(items, key = { it.inventoryId }) { item ->
-            InventoryItemRow(item, onConsume)
+        items(filteredItems, key = { it.inventoryId }) { item ->
+            InventoryItemRow(
+                item = item,
+                onConsume = onConsume,
+                onAdjustQuantity = onAdjustQuantity,
+                onToggleOpened = onToggleOpened,
+                onEditStockSettings = { editingStockItem = item }
+            )
         }
+    }
+
+    editingStockItem?.let { item ->
+        var alwaysStocked by remember(item) { mutableStateOf(item.isUsual) }
+        var thresholdText by remember(item) { mutableStateOf(item.lowStockThreshold?.toString() ?: "1") }
+        var selectedLocation by remember(item) { mutableStateOf(item.storageLocation) }
+        AlertDialog(
+            onDismissRequest = { editingStockItem = null },
+            title = { Text("Restock settings") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Always keep ${item.name} stocked", modifier = Modifier.weight(1f))
+                        Switch(checked = alwaysStocked, onCheckedChange = { alwaysStocked = it })
+                    }
+                    if (alwaysStocked) {
+                        OutlinedTextField(
+                            value = thresholdText,
+                            onValueChange = { thresholdText = it },
+                            label = { Text("Low-stock threshold") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+                    Text("Storage location", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        com.example.pantrypal.data.entity.InventoryEntity.STORAGE_LOCATIONS.forEach { option ->
+                            FilterChip(
+                                selected = selectedLocation == option,
+                                onClick = { selectedLocation = option },
+                                label = { Text(option) }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    onUpdateStockSettings(
+                        item.itemId,
+                        alwaysStocked,
+                        if (alwaysStocked) thresholdText.toDoubleOrNull() else null
+                    )
+                    onUpdateLocation(item, selectedLocation)
+                    editingStockItem = null
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { editingStockItem = null }) { Text("Cancel") } }
+        )
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun InventoryItemRow(item: InventoryUiModel, onConsume: (InventoryUiModel, ConsumptionType) -> Unit) {
+fun InventoryItemRow(
+    item: InventoryUiModel,
+    onConsume: (InventoryUiModel, ConsumptionType) -> Unit,
+    onAdjustQuantity: (Long, Double) -> Unit,
+    onToggleOpened: (InventoryUiModel) -> Unit,
+    onEditStockSettings: (InventoryUiModel) -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -927,10 +1578,21 @@ fun InventoryItemRow(item: InventoryUiModel, onConsume: (InventoryUiModel, Consu
                     }
                 }
                 Text(
-                    text = "${item.quantity} available",
+                    text = "${item.quantity} · ${item.category} · ${item.storageLocation}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (item.expirationDate != null) {
+                    Text(
+                        text = item.expiryLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (item.expiryStatus == ExpiryStatus.EXPIRED) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
                 if (item.tags.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -940,9 +1602,33 @@ fun InventoryItemRow(item: InventoryUiModel, onConsume: (InventoryUiModel, Consu
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { onAdjustQuantity(item.inventoryId, -1.0.coerceAtMost(item.quantityValue)) },
+                        enabled = item.quantityValue > 0
+                    ) {
+                        Icon(Icons.Default.Remove, contentDescription = "Reduce ${item.name} by one")
+                    }
+                    Text(item.quantity, style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = { onAdjustQuantity(item.inventoryId, 1.0) }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add one ${item.name}")
+                    }
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = item.isOpened,
+                        onClick = { onToggleOpened(item) },
+                        label = { Text(if (item.isOpened) "Opened" else "Unopened") }
+                    )
+                    AssistChip(
+                        onClick = { onEditStockSettings(item) },
+                        label = { Text(if (item.isUsual) "Restock at ${item.lowStockThreshold ?: 0}" else "Restock settings") }
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = { onConsume(item, ConsumptionType.FINISHED) }) {
-                        Text("Finished")
+                        Text(if (item.quantityValue <= 1.0) "Finished" else "Use 1")
                     }
                     TextButton(
                         onClick = { onConsume(item, ConsumptionType.WASTED) },

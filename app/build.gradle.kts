@@ -133,6 +133,7 @@ dependencies {
 
     // MLKit
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 
     // Retrofit
     implementation("com.squareup.retrofit2:retrofit:3.0.0")

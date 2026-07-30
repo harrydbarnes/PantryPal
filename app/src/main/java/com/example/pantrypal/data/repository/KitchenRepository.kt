@@ -20,6 +20,7 @@ import com.example.pantrypal.data.entity.ShoppingHistoryEntity
 import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.data.api.OpenFoodFactsApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.Locale
@@ -80,12 +81,17 @@ class KitchenRepository(
     // Inventory
     val currentInventory = inventoryDao.getInventoryJoined()
 
-    fun getExpiringItems(currentTime: Long) = inventoryDao.getExpiringItems(currentTime)
+    fun getExpiringItems(dueSoonCutoff: Long) = inventoryDao.getExpiringItems(dueSoonCutoff)
 
     suspend fun getInventoryByBarcode(barcode: String) = inventoryDao.getInventoryByBarcode(barcode)
 
     suspend fun addInventory(inventory: InventoryEntity) = inventoryDao.insertInventory(inventory)
+    suspend fun updateInventory(inventory: InventoryEntity) = inventoryDao.updateInventory(inventory)
     suspend fun removeInventory(inventory: InventoryEntity) = inventoryDao.deleteInventory(inventory)
+    suspend fun updateStockSettings(itemId: Long, isUsual: Boolean, lowStockThreshold: Double?) =
+        inventoryDao.updateStockSettings(itemId, isUsual, lowStockThreshold)
+
+    suspend fun getInventorySnapshot() = inventoryDao.getAllInventorySnapshot()
 
     // Consumption
     suspend fun logConsumption(consumption: ConsumptionEntity) = consumptionDao.insertConsumption(consumption)
@@ -124,6 +130,51 @@ class KitchenRepository(
     suspend fun updateShoppingSection(section: ShoppingSectionEntity) = shoppingSectionDao.updateSection(section)
     suspend fun deleteShoppingSection(section: ShoppingSectionEntity) = shoppingSectionDao.deleteSection(section)
 
+    suspend fun putAwayShoppingItems(
+        shoppingItems: List<ShoppingItemEntity>,
+        storageLocation: String
+    ) {
+        val purchases = shoppingItems.filter {
+            it.name.isNotBlank() && it.quantity > 0
+        }
+        if (purchases.isEmpty()) return
+
+        val knownItems = itemDao.getAllItemsSnapshot().toMutableList()
+        val inventory = inventoryDao.getAllInventorySnapshot().toMutableList()
+        purchases.forEach { shoppingItem ->
+            val item = knownItems.firstOrNull { it.name.equals(shoppingItem.name, ignoreCase = true) }
+                ?: ItemEntity(
+                    name = shoppingItem.name.trim(),
+                    defaultUnit = shoppingItem.unit,
+                    category = if (storageLocation == InventoryEntity.LOCATION_HOUSEHOLD) "Household" else "General"
+                ).let { newItem ->
+                    val id = itemDao.insertItem(newItem)
+                    newItem.copy(itemId = id).also(knownItems::add)
+                }
+
+            val existingBatch = inventory.firstOrNull {
+                it.itemId == item.itemId &&
+                    it.unit.equals(shoppingItem.unit, ignoreCase = true) &&
+                    it.storageLocation == storageLocation &&
+                    it.expirationDate == null
+            }
+            if (existingBatch != null) {
+                val updated = existingBatch.copy(quantity = existingBatch.quantity + shoppingItem.quantity)
+                inventoryDao.updateInventory(updated)
+                inventory[inventory.indexOf(existingBatch)] = updated
+            } else {
+                val newInventory = InventoryEntity(
+                    itemId = item.itemId,
+                    quantity = shoppingItem.quantity,
+                    unit = shoppingItem.unit,
+                    storageLocation = storageLocation
+                )
+                val inventoryId = inventoryDao.insertInventory(newInventory)
+                inventory += newInventory.copy(inventoryId = inventoryId)
+            }
+        }
+    }
+
     // Meals
     val allMeals: Flow<List<MealEntity>> = mealDao.getAllMeals()
     val mealWeeks: Flow<List<MealWeekEntity>> = mealWeekDao.getAllWeeks()
@@ -137,17 +188,25 @@ class KitchenRepository(
     // Smart Restock Logic
     suspend fun getRestockSuggestions(currentTime: Long): List<ItemEntity> {
         val candidateIds = consumptionDao.getRestockCandidates(currentTime)
+        val inStockCandidateIds = if (candidateIds.isEmpty()) {
+            emptyList()
+        } else {
+            inventoryDao.getInStockItemIds(candidateIds)
+        }
+        val consumedAndOutOfStock = if (candidateIds.isEmpty()) {
+            emptyList()
+        } else {
+            itemDao.getItemsByIds(candidateIds.filterNot(inStockCandidateIds::contains))
+        }
 
-        if (candidateIds.isEmpty()) return emptyList()
+        val inventoryTotals = inventoryDao.getAllInventorySnapshot()
+            .groupBy { it.itemId }
+            .mapValues { (_, batches) -> batches.sumOf { it.quantity } }
+        val usualAndLow = itemDao.getAllItemsSnapshot().filter { item ->
+            item.isUsual && (inventoryTotals[item.itemId] ?: 0.0) <= (item.lowStockThreshold ?: 0.0)
+        }
 
-        // Batch check inventory
-        val inStockIds = inventoryDao.getInStockItemIds(candidateIds)
-        val outOfStockIds = candidateIds.filter { !inStockIds.contains(it) }
-
-        if (outOfStockIds.isEmpty()) return emptyList()
-
-        // Batch fetch items
-        return itemDao.getItemsByIds(outOfStockIds)
+        return (usualAndLow + consumedAndOutOfStock).distinctBy { it.itemId }
     }
 
     // Export Data (Fetch all)

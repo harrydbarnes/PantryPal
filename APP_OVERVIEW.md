@@ -1,61 +1,67 @@
 # PantryPal app overview
 
-PantryPal is a local-first Android kitchen companion built with Kotlin, Jetpack Compose, Material 3, Room, WorkManager, CameraX, and ML Kit. It tracks cupboard inventory, barcode-based additions and consumption, expiry warnings, shopping items, consumption history, and a rotating meal schedule.
+PantryPal is a local-first Android kitchen companion built with Kotlin, Jetpack Compose, Material 3, Room, WorkManager, CameraX, Retrofit, and ML Kit. It connects pantry inventory, a four-week meal rotation, recipes, shopping, receipt capture, and household-safe data portability.
 
 ## User journeys
 
-- **Dashboard:** see expiring stock and restock suggestions, then open the cupboard.
-- **First run:** move through a five-step onboarding that explains pantry tracking, scanning, the four-week meal rotation, shopping-list generation, local storage, and permissions.
-- **Kitchen cupboard:** view inventory and record an item as finished or wasted.
-- **Scan in / scan out:** identify products by barcode and add or consume them.
-- **Meal plan:** maintain a four-week rotating schedule, give each week a name and emoji, change individual days, reuse meals or whole weeks, and build the week's shopping list.
-- **Shopping:** review recurring sections, meal-derived ingredients, and extra items for the selected week; create custom sections and reuse remembered item names.
+- **Dashboard:** see expired/due-soon stock and aggregate low-stock suggestions, then add a restock item directly.
+- **First run:** move through onboarding covering pantry tracking, scanning, the four-week rotation, shopping-list generation, privacy, and permissions.
+- **Kitchen cupboard:** search, filter, sort and stocktake batches; track storage location, opened state, expiry, always-stocked status, and low-stock thresholds.
+- **Scan in / scan out:** identify products by barcode and add or consume a whole or partial quantity.
+- **Meal plan:** maintain four rotating weeks, rename and reorder the weekly rhythm, reuse meals or whole weeks, open the recipe book, and preview a pantry-aware shopping build.
+- **Recipes:** reuse meals as saved recipes, search locally, see cook-now/use-soon/missing-one-or-two ideas, search TheMealDB, import schema.org recipe links, favourite/rate recipes, add a recipe to the plan, and send missing ingredients to shopping.
+- **Shopping:** plan any rotation week, distinguish buy/home/check-stock ingredients, maintain custom or recurring sections, and finish a shop into pantry inventory.
+- **Receipts and budget:** select an image for on-device text recognition or paste receipt text, correct uncertain names, quantities and prices, add purchases to pantry and price history, compare unit-price changes, and track weekly spending against a target.
 - **Past items:** review consumption history.
-- **Settings:** choose system/light/dark appearance, control dynamic colour and expiry reminders, review notification access and local-data behaviour, replay onboarding, and view build/version information.
+- **Settings and data:** control appearance/reminders, export or restore a complete backup, exchange checksummed household snapshots, replay onboarding, and view build information.
 
 ## Architecture
 
-The app uses a compact single-module architecture:
+The app remains a compact single Android module:
 
-1. Compose screens render state and send user events to `MainViewModel`.
-2. `MainViewModel` owns UI-facing state flows, preferences, and application actions.
-3. `KitchenRepository` is the boundary around Room DAOs and Open Food Facts.
-4. `KitchenDatabase` stores items, inventory batches, consumption, shopping sections/items/history, week templates, and meals.
-5. `ExpirationWorker` performs scheduled expiry checks.
+1. Compose screens render state and send user events to `MainViewModel` or `PantryFeaturesViewModel`.
+2. `MainViewModel` owns the core pantry, meal-plan, and shopping workflows.
+3. `PantryFeaturesViewModel` owns recipe discovery, receipt review, budgets, backups, and household snapshot state.
+4. `KitchenRepository` is the core boundary around Room and Open Food Facts. `PantryFeaturesRepository` coordinates the linked feature workflows.
+5. `KitchenDatabase` stores the complete local kitchen and exposes a dependency-aware backup DAO.
+6. `ExpirationWorker` performs scheduled expiry checks.
 
-The app currently uses manual screen state in `MainActivity` rather than Navigation Compose. Data is stored on-device; Open Food Facts is only contacted for an unknown scanned barcode.
+The app uses manual screen state in `MainActivity` rather than Navigation Compose. Data is stored on-device. Network requests occur only for an unknown scanned barcode, an explicit online recipe search, or an explicitly imported recipe URL.
 
 ## Material 3 design system
 
-PantryPal uses a warm "garden pantry" Material 3 theme with complete light and dark semantic color roles, dynamic color on Android 12+, an emphasized type scale, and generous rounded shapes. Reusable UI building blocks live in `ui/components/ExpressiveComponents.kt`:
+PantryPal uses a warm garden-pantry Material 3 theme with complete light/dark semantic roles, dynamic colour on Android 12+, an emphasized type scale, rounded shapes, 48dp touch targets, and an 8dp spacing rhythm.
 
-- `ExpressiveHero` gives each main journey a clear, friendly opening moment.
-- `StatusPill` communicates small counts and states without relying on color alone.
-- `SectionHeading` establishes a consistent content hierarchy.
-- `FriendlyEmptyState` turns empty data into useful, positive guidance.
-- `PantryPalSpacing` keeps screen rhythm on the 8dp spacing system.
+Reusable building blocks live in `ui/components/ExpressiveComponents.kt`:
 
-Compact windows use a four-destination bottom navigation bar for Home, Pantry, Plan, and Shop; windows at 600dp and above switch to a navigation rail with the same stable hierarchy. Scan in and Scan out are contextual Pantry actions rather than destinations, and their focused camera screens use high-contrast guidance without persistent navigation competing for attention.
+- `ExpressiveHero` gives each main journey a clear opening moment.
+- `StatusPill` communicates small counts and states without relying on colour alone.
+- `SectionHeading` establishes consistent hierarchy.
+- `FriendlyEmptyState` turns empty data into useful guidance.
+- `PantryPalSpacing` keeps screen rhythm consistent.
 
-Onboarding completion is stored in the existing `pantry_prefs` preference file. First-time users see the walkthrough before the normal app shell; skipping or finishing marks it complete. Settings can replay the walkthrough without clearing the completion flag. The Android 13+ notification permission request is deferred until onboarding closes, while camera permission remains contextual to Scan in and Scan out.
-
-Settings preferences use the same local preference file and apply immediately. Theme mode can follow Android or force light/dark, dynamic colour can be disabled independently on supported devices, and turning expiry reminders off cancels the unique daily WorkManager job. The expiration worker also checks the stored preference before sending a notification so an already-running job respects the user's choice.
+Compact windows use four primary destinations: Home, Pantry, Plan, and Shop. Windows at 600dp and above use a navigation rail with the same hierarchy. Scan in/out remain contextual Pantry actions. Recipes, receipt review, budget/prices, backup, and household sharing are secondary destinations under Plan, Shop, or Settings, so the primary hierarchy remains stable.
 
 ## Data model
 
-- `ItemEntity`: reusable product definition and dietary/category metadata.
-- `InventoryEntity`: a quantity or batch of an item, optionally with an expiry date.
+- `ItemEntity`: reusable product definition, dietary/category metadata, always-stocked state, and optional low-stock threshold.
+- `InventoryEntity`: a quantity or batch with storage location, opened state, and optional expiry.
 - `ConsumptionEntity`: finished or wasted history.
-- `ShoppingSectionEntity`: ordered shopping group that can recur every week or hold week-specific entries.
-- `ShoppingItemEntity`: checklist entry assigned to a section and, when relevant, a rotation week.
-- `ShoppingHistoryEntity`: item-name memory used for quick-add suggestions even after an active entry is cleared.
-- `MealWeekEntity`: editable week name, emoji, and stable rotation position.
-- `MealEntity`: named meal assigned to a rotation week, weekday, meal slot, and shopping ingredients.
+- `ShoppingSectionEntity`: ordered recurring or week-specific shopping group.
+- `ShoppingItemEntity`: checklist entry assigned to a section and optional rotation week.
+- `ShoppingHistoryEntity`: item-name memory for quick-add suggestions.
+- `MealWeekEntity`: editable week name, emoji, and rotation position.
+- `MealEntity`: meal, rotation week, weekday/slot, servings, ingredients, and optional recipe link.
+- `RecipeEntity` / `RecipeIngredientEntity`: reusable instructions, attribution, timings, personal state, parsed ingredients, and optional pantry-item links.
+- `PriceHistoryEntity`: local receipt/manual purchase observation.
+- `BudgetWeeklyEntity`: Monday-anchored weekly spending target.
 
-Room schema version 5 adds rotation-week metadata, shopping sections/history, and section/week ownership on shopping entries. The 4→5 migration preserves existing content, maps legacy essentials and Week A/B items, and seeds missing example data without replacing an existing meal plan.
+Room schema version 6 adds inventory stock settings, meal recipe/serving fields, recipes, price history, and weekly budgets. Migration 5→6 preserves existing batches, meals, and shopping data while assigning safe defaults.
 
 ## Current constraints
 
-- Meal ingredients are editable shopping prompts rather than quantities linked to inventory products. Building a list creates a review checklist instead of calculating stock shortages.
-- The default rotation is four weeks (A–D). Choosing **Make current** anchors that template to the current Monday; the ordered rotation advances automatically each Monday.
-- There is no account or cloud sync. Backup/export currently covers core inventory data only.
+- Imported ingredient quantities and pantry quantities do not always share comparable units. PantryPal labels uncertain matches **Check stock** instead of claiming a precise shortage.
+- The default rotation is four weeks (A–D). Choosing **Make current** anchors that template to the current Monday; the rotation advances each Monday.
+- TheMealDB key `1` is suitable for development/education. A public store release needs a production/supporter key.
+- Household sharing currently exchanges complete checksummed snapshots. The transport boundary and conflict model are ready, but real-time multi-device sync still needs an opt-in backend and account/security design.
+- Receipt recognition is review-first: users confirm names, quantities, and prices before anything is stored.

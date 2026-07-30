@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -69,7 +71,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun MealPlanScreen(viewModel: MainViewModel) {
+fun MealPlanScreen(
+    viewModel: MainViewModel,
+    onOpenRecipes: () -> Unit = {}
+) {
     val currentWeek by viewModel.currentWeek.collectAsState()
     val meals by viewModel.mealsState.collectAsState()
     val weeks by viewModel.mealWeeksState.collectAsState()
@@ -116,6 +121,17 @@ fun MealPlanScreen(viewModel: MainViewModel) {
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                 )
+            }
+
+            item {
+                FilledTonalButton(
+                    onClick = onOpenRecipes,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.MenuBook, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Browse recipes and cupboard ideas")
+                }
             }
 
             item {

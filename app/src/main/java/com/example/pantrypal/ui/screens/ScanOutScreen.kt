@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +35,7 @@ fun ScanOutScreen(
     var detectedBarcode by remember { mutableStateOf<String?>(null) }
     // Batch mode: Queue of items to consume
     val scanQueue = remember { mutableStateListOf<InventoryWithItemMap>() }
+    val scanAmounts = remember { mutableStateMapOf<Long, Double>() }
     // State to show selection dialog for duplicate batches
     var duplicateBatches by remember { mutableStateOf<List<InventoryWithItemMap>?>(null) }
 
@@ -50,7 +53,9 @@ fun ScanOutScreen(
                  if (inv.isNotEmpty()) {
                      // If only one batch, add to queue immediately
                      if (inv.size == 1) {
-                         scanQueue.add(inv[0])
+                         if (scanQueue.none { it.inventoryId == inv[0].inventoryId }) scanQueue.add(inv[0])
+                         scanAmounts[inv[0].inventoryId] =
+                             ((scanAmounts[inv[0].inventoryId] ?: 0.0) + 1.0).coerceAtMost(inv[0].quantity)
                      } else {
                          // Multiple batches found, let user select
                          duplicateBatches = inv
@@ -81,7 +86,9 @@ fun ScanOutScreen(
                                      .fillMaxWidth()
                                      .padding(vertical = 4.dp)
                                      .clickable {
-                                         scanQueue.add(item)
+                                         if (scanQueue.none { it.inventoryId == item.inventoryId }) scanQueue.add(item)
+                                         scanAmounts[item.inventoryId] =
+                                             ((scanAmounts[item.inventoryId] ?: 0.0) + 1.0).coerceAtMost(item.quantity)
                                          duplicateBatches = null
                                      },
                                  shape = MaterialTheme.shapes.large,
@@ -170,8 +177,24 @@ fun ScanOutScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(item.name)
-                                IconButton(onClick = { scanQueue.remove(item) }) {
+                                Text(item.name, modifier = Modifier.weight(1f))
+                                IconButton(onClick = {
+                                    val current = scanAmounts[item.inventoryId] ?: 1.0
+                                    scanAmounts[item.inventoryId] = (current - 1.0).coerceAtLeast(0.1)
+                                }) {
+                                    Icon(androidx.compose.material.icons.Icons.Default.Remove, contentDescription = "Reduce amount")
+                                }
+                                Text("${scanAmounts[item.inventoryId] ?: 1.0} ${item.unit}")
+                                IconButton(onClick = {
+                                    val current = scanAmounts[item.inventoryId] ?: 1.0
+                                    scanAmounts[item.inventoryId] = (current + 1.0).coerceAtMost(item.quantity)
+                                }) {
+                                    Icon(androidx.compose.material.icons.Icons.Default.Add, contentDescription = "Increase amount")
+                                }
+                                IconButton(onClick = {
+                                    scanQueue.remove(item)
+                                    scanAmounts.remove(item.inventoryId)
+                                }) {
                                     Icon(androidx.compose.material.icons.Icons.Default.Close, contentDescription = "Remove")
                                 }
                             }
@@ -182,13 +205,20 @@ fun ScanOutScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                          Button(onClick = {
-                             viewModel.consumeItems(scanQueue.toList(), ConsumptionType.FINISHED)
+                             viewModel.consumeItemAmounts(
+                                 scanQueue.map { it to (scanAmounts[it.inventoryId] ?: 1.0) },
+                                 ConsumptionType.FINISHED
+                             )
                              scanQueue.clear()
+                             scanAmounts.clear()
                              onDismiss()
                          }) {
                              Text("Finish all")
                          }
-                         OutlinedButton(onClick = { scanQueue.clear() }) {
+                         OutlinedButton(onClick = {
+                             scanQueue.clear()
+                             scanAmounts.clear()
+                         }) {
                              Text("Clear")
                          }
                     }

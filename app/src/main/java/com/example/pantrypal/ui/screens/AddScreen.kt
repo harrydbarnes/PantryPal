@@ -26,6 +26,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.ZoneOffset
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.ui.components.ExpressiveHero
 import com.example.pantrypal.ui.components.SectionHeading
 import com.example.pantrypal.ui.components.StatusPill
@@ -40,6 +41,10 @@ class AddItemState {
     var isVegetarian by mutableStateOf(false)
     var isGlutenFree by mutableStateOf(false)
     var expirationDate by mutableStateOf<LocalDate?>(null)
+    var isUsual by mutableStateOf(false)
+    var lowStockThresholdText by mutableStateOf("1")
+    var storageLocation by mutableStateOf(InventoryEntity.LOCATION_PANTRY)
+    var isOpened by mutableStateOf(false)
 
     val isValid: Boolean
         get() = name.isNotBlank() && (qtyText.toDoubleOrNull() ?: 0.0) > 0.0
@@ -52,6 +57,10 @@ class AddItemState {
         private const val KEY_IS_VEGETARIAN = "isVegetarian"
         private const val KEY_IS_GLUTEN_FREE = "isGlutenFree"
         private const val KEY_EXPIRATION_DATE = "expirationDate"
+        private const val KEY_IS_USUAL = "isUsual"
+        private const val KEY_LOW_STOCK_THRESHOLD = "lowStockThreshold"
+        private const val KEY_STORAGE_LOCATION = "storageLocation"
+        private const val KEY_IS_OPENED = "isOpened"
 
         val Saver: Saver<AddItemState, *> = mapSaver(
             save = { state ->
@@ -62,7 +71,11 @@ class AddItemState {
                     KEY_CATEGORY to state.category,
                     KEY_IS_VEGETARIAN to state.isVegetarian,
                     KEY_IS_GLUTEN_FREE to state.isGlutenFree,
-                    KEY_EXPIRATION_DATE to state.expirationDate?.toEpochDay()
+                    KEY_EXPIRATION_DATE to state.expirationDate?.toEpochDay(),
+                    KEY_IS_USUAL to state.isUsual,
+                    KEY_LOW_STOCK_THRESHOLD to state.lowStockThresholdText,
+                    KEY_STORAGE_LOCATION to state.storageLocation,
+                    KEY_IS_OPENED to state.isOpened
                 )
             },
             restore = { map ->
@@ -75,6 +88,10 @@ class AddItemState {
                     isGlutenFree = map[KEY_IS_GLUTEN_FREE] as? Boolean ?: false
                     val dateEpoch = map[KEY_EXPIRATION_DATE] as? Long
                     expirationDate = dateEpoch?.let { LocalDate.ofEpochDay(it) }
+                    isUsual = map[KEY_IS_USUAL] as? Boolean ?: false
+                    lowStockThresholdText = map[KEY_LOW_STOCK_THRESHOLD] as? String ?: "1"
+                    storageLocation = map[KEY_STORAGE_LOCATION] as? String ?: InventoryEntity.LOCATION_PANTRY
+                    isOpened = map[KEY_IS_OPENED] as? Boolean ?: false
                 }
             }
         )
@@ -90,7 +107,7 @@ fun rememberAddItemState(): AddItemState {
 @Composable
 fun AddScreen(
     barcode: String? = null,
-    onAdd: (String, Double, String, String, Boolean, Boolean, Long?) -> Unit,
+    onAdd: (String, Double, String, String, Boolean, Boolean, Long?, Boolean, Double?, String, Boolean) -> Unit,
     onCancel: (() -> Unit)? = null,
     preFillItem: com.example.pantrypal.data.entity.ItemEntity? = null
 ) {
@@ -104,6 +121,8 @@ fun AddScreen(
             state.category = item.category
             state.isVegetarian = item.isVegetarian
             state.isGlutenFree = item.isGlutenFree
+            state.isUsual = item.isUsual
+            state.lowStockThresholdText = item.lowStockThreshold?.toString() ?: "1"
         }
     }
 
@@ -165,6 +184,56 @@ fun AddScreen(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
+
+        SectionHeading(
+            title = "Where will it live?",
+            supportingText = "Locations make stocktakes and finding ingredients faster."
+        )
+
+        var expandedLocation by remember { mutableStateOf(false) }
+        ExposedDropdownMenuBox(
+            expanded = expandedLocation,
+            onExpandedChange = { expandedLocation = !expandedLocation },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = state.storageLocation,
+                onValueChange = { state.storageLocation = it },
+                label = { Text("Storage location") },
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedLocation) },
+                singleLine = true
+            )
+            ExposedDropdownMenu(
+                expanded = expandedLocation,
+                onDismissRequest = { expandedLocation = false }
+            ) {
+                InventoryEntity.STORAGE_LOCATIONS.forEach { location ->
+                    DropdownMenuItem(
+                        text = { Text(location) },
+                        onClick = {
+                            state.storageLocation = location
+                            expandedLocation = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Already opened", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Useful when deciding which batch to finish first",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(checked = state.isOpened, onCheckedChange = { state.isOpened = it })
+        }
 
         val categories = ItemEntity.CATEGORIES
         var expandedCategory by remember { mutableStateOf(false) }
@@ -307,6 +376,38 @@ fun AddScreen(
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Always keep stocked", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Suggest it for the next shop when stock reaches your threshold",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = state.isUsual, onCheckedChange = { state.isUsual = it })
+                }
+                if (state.isUsual) {
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = state.lowStockThresholdText,
+                        onValueChange = { state.lowStockThresholdText = it },
+                        label = { Text("Low-stock threshold") },
+                        supportingText = { Text("Suggest a restock at or below this amount") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
             Row(
                 modifier = Modifier.padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -348,7 +449,19 @@ fun AddScreen(
             Button(
                 onClick = {
                     val expDateMillis = state.expirationDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
-                    onAdd(state.name, state.qtyText.toDoubleOrNull() ?: 1.0, state.unit, state.category, state.isVegetarian, state.isGlutenFree, expDateMillis)
+                    onAdd(
+                        state.name,
+                        state.qtyText.toDoubleOrNull() ?: 1.0,
+                        state.unit,
+                        state.category,
+                        state.isVegetarian,
+                        state.isGlutenFree,
+                        expDateMillis,
+                        state.isUsual,
+                        if (state.isUsual) state.lowStockThresholdText.toDoubleOrNull() else null,
+                        state.storageLocation,
+                        state.isOpened
+                    )
                 },
                 modifier = Modifier.weight(1f).height(56.dp),
                 enabled = state.isValid

@@ -29,11 +29,13 @@ class KitchenRepositoryTest {
     class FakeInventoryDao : InventoryDao {
         override suspend fun insertInventory(inventory: InventoryEntity): Long = 0
         override suspend fun deleteInventory(inventory: InventoryEntity) {}
+        override suspend fun updateInventory(inventory: InventoryEntity) {}
         override fun getInventoryJoined(): Flow<List<InventoryWithItemMap>> = flowOf(emptyList())
         override suspend fun getAllInventorySnapshot(): List<InventoryEntity> = emptyList()
         override fun getExpiringItems(currentTime: Long): Flow<List<InventoryWithItemMap>> = flowOf(emptyList())
         override suspend fun getInventoryByBarcode(barcode: String): List<InventoryWithItemMap> = emptyList()
         override suspend fun countInventoryForItem(itemId: Long): Int = 0
+        override suspend fun updateStockSettings(itemId: Long, isUsual: Boolean, lowStockThreshold: Double?) {}
 
         override suspend fun getInStockItemIds(itemIds: List<Long>): List<Long> {
             // Assume 102L is in stock, so only 101L is needed

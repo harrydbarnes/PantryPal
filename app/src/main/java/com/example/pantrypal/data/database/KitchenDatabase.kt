@@ -11,11 +11,19 @@ import com.example.pantrypal.data.dao.ItemDao
 import com.example.pantrypal.data.dao.ShoppingDao
 import com.example.pantrypal.data.dao.MealDao
 import com.example.pantrypal.data.dao.MealWeekDao
+import com.example.pantrypal.data.dao.BudgetWeeklyDao
+import com.example.pantrypal.data.dao.BackupDao
+import com.example.pantrypal.data.dao.PriceHistoryDao
+import com.example.pantrypal.data.dao.RecipeDao
 import com.example.pantrypal.data.dao.ShoppingHistoryDao
 import com.example.pantrypal.data.dao.ShoppingSectionDao
+import com.example.pantrypal.data.entity.BudgetWeeklyEntity
 import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.PriceHistoryEntity
+import com.example.pantrypal.data.entity.RecipeEntity
+import com.example.pantrypal.data.entity.RecipeIngredientEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.entity.MealEntity
 import com.example.pantrypal.data.entity.MealWeekEntity
@@ -36,9 +44,13 @@ import com.google.gson.Gson
         MealEntity::class,
         MealWeekEntity::class,
         ShoppingSectionEntity::class,
-        ShoppingHistoryEntity::class
+        ShoppingHistoryEntity::class,
+        PriceHistoryEntity::class,
+        BudgetWeeklyEntity::class,
+        RecipeEntity::class,
+        RecipeIngredientEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -51,6 +63,10 @@ abstract class KitchenDatabase : RoomDatabase() {
     abstract fun mealWeekDao(): MealWeekDao
     abstract fun shoppingSectionDao(): ShoppingSectionDao
     abstract fun shoppingHistoryDao(): ShoppingHistoryDao
+    abstract fun priceHistoryDao(): PriceHistoryDao
+    abstract fun budgetWeeklyDao(): BudgetWeeklyDao
+    abstract fun recipeDao(): RecipeDao
+    abstract fun backupDao(): BackupDao
 
     companion object {
         @Volatile
@@ -123,6 +139,20 @@ abstract class KitchenDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE items ADD COLUMN lowStockThreshold REAL DEFAULT NULL")
+                db.execSQL(
+                    "ALTER TABLE inventory ADD COLUMN storageLocation TEXT NOT NULL DEFAULT '${InventoryEntity.LOCATION_PANTRY}'"
+                )
+                db.execSQL("ALTER TABLE inventory ADD COLUMN isOpened INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE meals ADD COLUMN recipeId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE meals ADD COLUMN servings REAL NOT NULL DEFAULT 4.0")
+                createDataToolsTables(db)
+                createRecipeTables(db)
+            }
+        }
+
         fun getDatabase(context: Context): KitchenDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -130,7 +160,13 @@ abstract class KitchenDatabase : RoomDatabase() {
                     KitchenDatabase::class.java,
                     "pantry_pal_db"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6
+                )
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
@@ -175,6 +211,108 @@ abstract class KitchenDatabase : RoomDatabase() {
                     PRIMARY KEY(`normalizedName`)
                 )
                 """.trimIndent()
+            )
+        }
+
+        private fun createDataToolsTables(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `price_history` (
+                    `priceId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `itemId` INTEGER,
+                    `normalizedItemName` TEXT NOT NULL,
+                    `displayName` TEXT NOT NULL,
+                    `priceMinor` INTEGER NOT NULL,
+                    `quantity` REAL NOT NULL,
+                    `unit` TEXT NOT NULL,
+                    `retailer` TEXT,
+                    `purchasedAt` INTEGER NOT NULL,
+                    `currencyCode` TEXT NOT NULL,
+                    `source` TEXT NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_price_history_normalizedItemName` " +
+                    "ON `price_history` (`normalizedItemName`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_price_history_purchasedAt` " +
+                    "ON `price_history` (`purchasedAt`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_price_history_retailer` " +
+                    "ON `price_history` (`retailer`)"
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `weekly_budgets` (
+                    `weekStartEpochDay` INTEGER NOT NULL,
+                    `budgetMinor` INTEGER NOT NULL,
+                    `currencyCode` TEXT NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`weekStartEpochDay`)
+                )
+                """.trimIndent()
+            )
+        }
+
+        private fun createRecipeTables(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `recipes` (
+                    `recipeId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `normalizedTitle` TEXT NOT NULL,
+                    `sourceUrl` TEXT,
+                    `sourceName` TEXT,
+                    `attribution` TEXT,
+                    `externalId` TEXT,
+                    `imageUrl` TEXT,
+                    `yieldText` TEXT,
+                    `servings` REAL,
+                    `prepTimeMinutes` INTEGER,
+                    `cookTimeMinutes` INTEGER,
+                    `totalTimeMinutes` INTEGER,
+                    `instructions` TEXT NOT NULL,
+                    `tags` TEXT NOT NULL,
+                    `rating` INTEGER,
+                    `isFavourite` INTEGER NOT NULL,
+                    `lastCookedAt` INTEGER,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_recipes_normalizedTitle` " +
+                    "ON `recipes` (`normalizedTitle`)"
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `recipe_ingredients` (
+                    `ingredientId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `recipeId` INTEGER NOT NULL,
+                    `rawText` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `normalizedName` TEXT NOT NULL,
+                    `quantity` REAL,
+                    `unit` TEXT,
+                    `isOptional` INTEGER NOT NULL,
+                    `linkedPantryItemId` INTEGER,
+                    `sortOrder` INTEGER NOT NULL,
+                    FOREIGN KEY(`recipeId`) REFERENCES `recipes`(`recipeId`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(`linkedPantryItemId`) REFERENCES `items`(`itemId`) ON UPDATE NO ACTION ON DELETE SET NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_recipe_ingredients_recipeId` " +
+                    "ON `recipe_ingredients` (`recipeId`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_recipe_ingredients_linkedPantryItemId` " +
+                    "ON `recipe_ingredients` (`linkedPantryItemId`)"
             )
         }
 
@@ -288,8 +426,15 @@ abstract class KitchenDatabase : RoomDatabase() {
             val gson = Gson()
             meals.forEach { meal ->
                 db.execSQL(
-                    "INSERT INTO meals (name, week, ingredients, dayOfWeek, mealSlot) VALUES (?, ?, ?, ?, ?)",
-                    arrayOf<Any?>(meal.name, meal.week, gson.toJson(meal.ingredients), meal.day, MealEntity.SLOT_DINNER)
+                    "INSERT INTO meals (name, week, ingredients, dayOfWeek, mealSlot, servings) VALUES (?, ?, ?, ?, ?, ?)",
+                    arrayOf<Any?>(
+                        meal.name,
+                        meal.week,
+                        gson.toJson(meal.ingredients),
+                        meal.day,
+                        MealEntity.SLOT_DINNER,
+                        MealEntity.DEFAULT_SERVINGS
+                    )
                 )
             }
         }

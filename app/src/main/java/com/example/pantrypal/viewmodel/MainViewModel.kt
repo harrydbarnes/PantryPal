@@ -18,8 +18,6 @@ import com.example.pantrypal.data.entity.MealWeekEntity
 import com.example.pantrypal.data.entity.ShoppingHistoryEntity
 import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.data.repository.KitchenRepository
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,6 +37,12 @@ import com.example.pantrypal.util.startOfWeek
 import com.example.pantrypal.util.AppPreferences
 import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
+import com.example.pantrypal.util.ExpiryStatus
+import com.example.pantrypal.util.ShoppingNeedStatus
+import com.example.pantrypal.util.ShoppingReconciliationLine
+import com.example.pantrypal.util.classifyExpiry
+import com.example.pantrypal.util.expiryLabel
+import com.example.pantrypal.util.reconcileShoppingIngredients
 
 // Helper flow for periodic updates
 fun tickerFlow(period: Long, initialDelay: Long = 0) = flow {
@@ -70,6 +74,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         rotatingWeek(savedWeek, savedAnchorMonday, LocalDate.now())
     )
     val currentWeek: StateFlow<String> = _currentWeek.asStateFlow()
+    private val _shoppingWeek = MutableStateFlow(_currentWeek.value)
+    val shoppingWeek: StateFlow<String> = _shoppingWeek.asStateFlow()
 
     private val _mealPlanStyle = MutableStateFlow(prefs.getString("meal_plan_style", null))
     val mealPlanStyle: StateFlow<String?> = _mealPlanStyle.asStateFlow()
@@ -95,6 +101,10 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         prefs.edit().putString("meal_plan_style", style).apply()
     }
 
+    fun setShoppingWeek(week: String) {
+        _shoppingWeek.value = week
+    }
+
     fun completeOnboarding() {
         _hasCompletedOnboarding.value = true
         prefs.edit().putBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, true).apply()
@@ -118,7 +128,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     // UI State for Inventory
     val inventoryState: StateFlow<List<InventoryUiModel>> = repository.currentInventory
         .map { list ->
-            list.map { it.toUiModel() }
+            val totals = list.groupBy { it.itemId }.mapValues { (_, batches) -> batches.sumOf { it.quantity } }
+            list.map { it.toUiModel(totalQuantity = totals[it.itemId] ?: it.quantity) }
         }
         .stateIn(
             scope = viewModelScope,
@@ -128,7 +139,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     // UI State for Expiring Items
     val expiringItemsState: StateFlow<List<InventoryUiModel>> = tickerFlow(60_000L) // Check every minute
-        .flatMapLatest { repository.getExpiringItems(System.currentTimeMillis()) }
+        .flatMapLatest {
+            repository.getExpiringItems(System.currentTimeMillis() + 8 * 24 * 60 * 60 * 1000L)
+        }
         .map { list ->
             list.map { it.toUiModel() }
         }
@@ -146,7 +159,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         )
 
     // UI State for Restock Suggestions
-    val restockSuggestionsState: StateFlow<List<ItemEntity>> = tickerFlow(3_600_000L) // Check every hour
+    val restockSuggestionsState: StateFlow<List<ItemEntity>> = repository.currentInventory
         .flatMapLatest { flow { emit(repository.getRestockSuggestions(System.currentTimeMillis())) } }
         .stateIn(
             scope = viewModelScope,
@@ -175,6 +188,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    private val _shoppingBuildPreview = MutableStateFlow<ShoppingBuildPreview?>(null)
+    val shoppingBuildPreview: StateFlow<ShoppingBuildPreview?> = _shoppingBuildPreview.asStateFlow()
 
     val mealsState: StateFlow<List<MealEntity>> = repository.allMeals
          .stateIn(
@@ -255,8 +271,47 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     }
 
     fun buildShoppingListForWeek(week: String) {
+        _shoppingWeek.value = week
         viewModelScope.launch {
             val ingredients = mealsForShopping(repository.allMeals.first(), week)
+            val inventory = repository.currentInventory.first()
+            commitShoppingPreview(
+                ShoppingBuildPreview(
+                    weekId = week,
+                    lines = reconcileShoppingIngredients(ingredients, inventory)
+                )
+            )
+        }
+    }
+
+    fun previewShoppingListForWeek(week: String) {
+        _shoppingWeek.value = week
+        viewModelScope.launch {
+            val ingredients = mealsForShopping(repository.allMeals.first(), week)
+            _shoppingBuildPreview.value = ShoppingBuildPreview(
+                weekId = week,
+                lines = reconcileShoppingIngredients(ingredients, repository.currentInventory.first())
+            )
+        }
+    }
+
+    fun dismissShoppingBuildPreview() {
+        _shoppingBuildPreview.value = null
+    }
+
+    fun commitShoppingBuildPreview(includeCheckStock: Boolean = true) {
+        val preview = _shoppingBuildPreview.value ?: return
+        viewModelScope.launch {
+            commitShoppingPreview(preview, includeCheckStock)
+            _shoppingBuildPreview.value = null
+        }
+    }
+
+    private suspend fun commitShoppingPreview(
+        preview: ShoppingBuildPreview,
+        includeCheckStock: Boolean = true
+    ) {
+            val week = preview.weekId
             val existing = repository.shoppingList.first()
             val sections = repository.shoppingSections.first()
             val recurringSectionIds = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
@@ -266,12 +321,19 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             }.map { it.name.lowercase() }.toSet()
 
             repository.deleteShoppingItemsInSectionForWeek(ShoppingSectionEntity.ID_MEAL_PLAN, week)
-            ingredients.forEach { ingredient ->
-                repository.rememberShoppingItem(ingredient)
-                if (ingredient.lowercase() !in namesAlreadyCovered) {
+            preview.lines
+                .filter {
+                    it.status == ShoppingNeedStatus.NEED_TO_BUY ||
+                        (includeCheckStock && it.status == ShoppingNeedStatus.CHECK_STOCK)
+                }
+                .forEach { line ->
+                repository.rememberShoppingItem(line.name)
+                if (line.name.lowercase() !in namesAlreadyCovered) {
                     repository.addShoppingItem(
                         ShoppingItemEntity(
-                            name = ingredient,
+                            name = line.name,
+                            quantity = line.requiredQuantity,
+                            unit = line.unit,
                             frequency = ShoppingItemEntity.FREQ_ONE_OFF,
                             sectionId = ShoppingSectionEntity.ID_MEAL_PLAN,
                             weekId = week
@@ -279,7 +341,6 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     )
                 }
             }
-        }
     }
 
     fun updateMealWeek(week: MealWeekEntity, name: String, emoji: String) {
@@ -294,7 +355,21 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
-    fun addItem(name: String, quantity: Double, unit: String, category: String, isVeg: Boolean, isGlutenFree: Boolean, barcode: String? = null, expirationDate: Long? = null, imageUrl: String? = null) {
+    fun addItem(
+        name: String,
+        quantity: Double,
+        unit: String,
+        category: String,
+        isVeg: Boolean,
+        isGlutenFree: Boolean,
+        barcode: String? = null,
+        expirationDate: Long? = null,
+        imageUrl: String? = null,
+        isUsual: Boolean = false,
+        lowStockThreshold: Double? = null,
+        storageLocation: String = InventoryEntity.LOCATION_PANTRY,
+        isOpened: Boolean = false
+    ) {
         viewModelScope.launch {
             var itemId: Long = -1
 
@@ -312,6 +387,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     category = category,
                     isVegetarian = isVeg,
                     isGlutenFree = isGlutenFree,
+                    isUsual = isUsual,
+                    lowStockThreshold = lowStockThreshold,
                     barcode = barcode,
                     imageUrl = imageUrl
                 )
@@ -323,9 +400,14 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     itemId = itemId,
                     quantity = quantity,
                     unit = unit,
-                    expirationDate = expirationDate
+                    expirationDate = expirationDate,
+                    storageLocation = storageLocation,
+                    isOpened = isOpened
                 )
                 repository.addInventory(inventory)
+                if (isUsual || lowStockThreshold != null) {
+                    repository.updateStockSettings(itemId, isUsual, lowStockThreshold)
+                }
             }
         }
     }
@@ -339,29 +421,48 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     }
 
     private suspend fun consumeItemSuspend(inventoryId: Long, itemId: Long, quantity: Double, type: ConsumptionType, reason: String? = null) {
+        val inventory = repository.getInventorySnapshot().firstOrNull { it.inventoryId == inventoryId } ?: return
+        val consumedQuantity = quantity.coerceAtLeast(0.0).coerceAtMost(inventory.quantity)
+        if (consumedQuantity <= 0.0) return
+
         // Log consumption
         val consumption = ConsumptionEntity(
             itemId = itemId,
-            quantity = quantity,
+            quantity = consumedQuantity,
             type = type,
             wasteReason = reason
         )
         repository.logConsumption(consumption)
 
-        // For this exercise, I'll assume we just delete the row (consumed all).
-        val inv = InventoryEntity(inventoryId = inventoryId, itemId = itemId, quantity = quantity, unit = "") // Dummy unit/qty for delete
-        repository.removeInventory(inv)
+        val remaining = inventory.quantity - consumedQuantity
+        if (remaining <= 0.0) {
+            repository.removeInventory(inventory)
+        } else {
+            repository.updateInventory(inventory.copy(quantity = remaining))
+        }
 
         // Auto-add to shopping list if "Usual"
         if (type == ConsumptionType.FINISHED) {
             val item = repository.getItemById(itemId)
-            if (item != null && item.isUsual) {
-                val shoppingItem = ShoppingItemEntity(
-                    name = item.name,
-                    quantity = 1.0, // Default to 1
-                    unit = item.defaultUnit
+            val restockBoundary = item?.lowStockThreshold ?: 0.0
+            val totalRemaining = repository.getInventorySnapshot()
+                .filter { it.itemId == itemId }
+                .sumOf { it.quantity }
+            val alreadyListed = item?.let { stockedItem ->
+                repository.shoppingList.first().any {
+                    !it.isChecked && it.name.equals(stockedItem.name, ignoreCase = true)
+                }
+            } ?: false
+            if (item != null && item.isUsual && totalRemaining <= restockBoundary && !alreadyListed) {
+                repository.addShoppingItem(
+                    ShoppingItemEntity(
+                        name = item.name,
+                        quantity = restockBoundary.coerceAtLeast(1.0),
+                        unit = item.defaultUnit,
+                        sectionId = ShoppingSectionEntity.ID_THE_REST,
+                        weekId = _shoppingWeek.value
+                    )
                 )
-                repository.addShoppingItem(shoppingItem)
             }
         }
     }
@@ -374,9 +475,67 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun consumeItems(items: List<InventoryWithItemMap>, type: ConsumptionType) {
         viewModelScope.launch {
-            items.map { item ->
-                async { consumeItemSuspend(item.inventoryId, item.itemId, 1.0, type) }
-            }.awaitAll()
+            items.forEach { item ->
+                consumeItemSuspend(item.inventoryId, item.itemId, 1.0.coerceAtMost(item.quantity), type)
+            }
+        }
+    }
+
+    fun consumeItemAmounts(items: List<Pair<InventoryWithItemMap, Double>>, type: ConsumptionType) {
+        viewModelScope.launch {
+            items.forEach { (item, amount) ->
+                consumeItemSuspend(item.inventoryId, item.itemId, amount, type)
+            }
+        }
+    }
+
+    fun adjustInventoryQuantity(inventoryId: Long, delta: Double) {
+        viewModelScope.launch {
+            val inventory = repository.getInventorySnapshot().firstOrNull { it.inventoryId == inventoryId } ?: return@launch
+            val nextQuantity = inventory.quantity + delta
+            if (nextQuantity <= 0.0) repository.removeInventory(inventory)
+            else repository.updateInventory(inventory.copy(quantity = nextQuantity))
+        }
+    }
+
+    fun toggleInventoryOpened(item: InventoryUiModel) {
+        viewModelScope.launch {
+            val inventory = repository.getInventorySnapshot().firstOrNull { it.inventoryId == item.inventoryId } ?: return@launch
+            repository.updateInventory(inventory.copy(isOpened = !inventory.isOpened))
+        }
+    }
+
+    fun updateInventoryLocation(item: InventoryUiModel, storageLocation: String) {
+        viewModelScope.launch {
+            val inventory = repository.getInventorySnapshot().firstOrNull { it.inventoryId == item.inventoryId } ?: return@launch
+            repository.updateInventory(inventory.copy(storageLocation = storageLocation.trim().ifEmpty { InventoryEntity.LOCATION_PANTRY }))
+        }
+    }
+
+    fun updateStockSettings(itemId: Long, isUsual: Boolean, lowStockThreshold: Double?) {
+        viewModelScope.launch {
+            repository.updateStockSettings(itemId, isUsual, lowStockThreshold)
+        }
+    }
+
+    fun addRestockToShopping(item: ItemEntity, weekId: String = _currentWeek.value) {
+        viewModelScope.launch {
+            val alreadyListed = repository.shoppingList.first().any {
+                !it.isChecked && it.name.equals(item.name, ignoreCase = true) &&
+                    (it.weekId == null || it.weekId == weekId)
+            }
+            if (!alreadyListed) {
+                repository.addShoppingItem(
+                    ShoppingItemEntity(
+                        name = item.name,
+                        quantity = item.lowStockThreshold?.coerceAtLeast(1.0) ?: 1.0,
+                        unit = item.defaultUnit,
+                        sectionId = ShoppingSectionEntity.ID_THE_REST,
+                        weekId = weekId
+                    )
+                )
+                repository.rememberShoppingItem(item.name)
+            }
         }
     }
 
@@ -452,9 +611,21 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
-    fun clearCheckedShoppingItems() {
+    fun clearCheckedShoppingItems(weekId: String = _currentWeek.value) {
         viewModelScope.launch {
-            repository.deleteCheckedShoppingItems(_currentWeek.value)
+            repository.deleteCheckedShoppingItems(weekId)
+        }
+    }
+
+    fun finishShopping(weekId: String, storageLocation: String) {
+        viewModelScope.launch {
+            val sections = repository.shoppingSections.first()
+            val recurringIds = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
+            val checked = repository.shoppingList.first().filter {
+                it.isChecked && (it.sectionId in recurringIds || it.weekId == null || it.weekId == weekId)
+            }
+            repository.putAwayShoppingItems(checked, storageLocation)
+            repository.deleteCheckedShoppingItems(weekId)
         }
     }
 
@@ -472,25 +643,54 @@ data class InventoryUiModel(
     val itemId: Long,
     val name: String,
     val quantity: String,
+    val quantityValue: Double,
+    val unit: String,
+    val category: String,
+    val storageLocation: String,
+    val expirationDate: Long?,
+    val expiryStatus: ExpiryStatus,
+    val expiryLabel: String,
+    val isOpened: Boolean,
+    val isUsual: Boolean,
+    val lowStockThreshold: Double?,
     val tags: List<String>,
     val imageUrl: String? = null,
-    val isRestockNeeded: Boolean = false
+    val isRestockNeeded: Boolean = false,
+    val addedDate: Long
 )
 
-fun InventoryWithItemMap.toUiModel(): InventoryUiModel {
+fun InventoryWithItemMap.toUiModel(totalQuantity: Double = quantity): InventoryUiModel {
     val tags = mutableListOf<String>()
     if (isVegetarian) tags.add("Veg")
     if (isGlutenFree) tags.add("GF")
 
+    val status = classifyExpiry(expirationDate)
     return InventoryUiModel(
         inventoryId = inventoryId,
         itemId = itemId,
         name = name,
         quantity = "$quantity $unit",
+        quantityValue = quantity,
+        unit = unit,
+        category = category,
+        storageLocation = storageLocation,
+        expirationDate = expirationDate,
+        expiryStatus = status,
+        expiryLabel = expiryLabel(status, expirationDate),
+        isOpened = isOpened,
+        isUsual = isUsual,
+        lowStockThreshold = lowStockThreshold,
         tags = tags,
-        imageUrl = imageUrl
+        imageUrl = imageUrl,
+        isRestockNeeded = lowStockThreshold?.let { totalQuantity <= it } == true,
+        addedDate = addedDate
     )
 }
+
+data class ShoppingBuildPreview(
+    val weekId: String,
+    val lines: List<ShoppingReconciliationLine>
+)
 
 class MainViewModelFactory(private val repository: KitchenRepository, private val application: Application) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {

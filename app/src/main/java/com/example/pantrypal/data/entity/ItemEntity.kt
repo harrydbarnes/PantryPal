@@ -1,5 +1,6 @@
 package com.example.pantrypal.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Index
@@ -17,6 +18,8 @@ data class ItemEntity(
     val isVegetarian: Boolean = false,
     val isGlutenFree: Boolean = false,
     val isUsual: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL")
+    val lowStockThreshold: Double? = null,
     val imageUrl: String? = null,
     val createdAt: Long = System.currentTimeMillis()
 ) {

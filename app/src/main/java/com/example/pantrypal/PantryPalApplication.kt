@@ -4,12 +4,16 @@ import android.app.Application
 import androidx.work.Configuration
 import com.example.pantrypal.data.database.KitchenDatabase
 import com.example.pantrypal.data.repository.KitchenRepository
+import com.example.pantrypal.data.repository.PantryFeaturesRepository
 import com.example.pantrypal.util.KitchenWorkerFactory
 
 class PantryPalApplication : Application(), Configuration.Provider {
 
+    val database: KitchenDatabase by lazy {
+        KitchenDatabase.getDatabase(this)
+    }
+
     val repository: KitchenRepository by lazy {
-        val database = KitchenDatabase.getDatabase(this)
         KitchenRepository(
             database.itemDao(),
             database.inventoryDao(),
@@ -20,6 +24,10 @@ class PantryPalApplication : Application(), Configuration.Provider {
             database.shoppingSectionDao(),
             database.shoppingHistoryDao()
         )
+    }
+
+    val featuresRepository: PantryFeaturesRepository by lazy {
+        PantryFeaturesRepository(this, database, repository)
     }
 
     override val workManagerConfiguration: Configuration

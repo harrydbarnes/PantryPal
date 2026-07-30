@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.School
@@ -74,7 +75,8 @@ fun SettingsScreen(
     onDynamicColorChange: (Boolean) -> Unit,
     onExpiryRemindersChange: (Boolean) -> Unit,
     onOpenNotificationSettings: () -> Unit,
-    onLaunchOnboarding: () -> Unit
+    onLaunchOnboarding: () -> Unit,
+    onOpenDataManagement: () -> Unit = {}
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useTwoColumns = maxWidth >= 720.dp
@@ -116,7 +118,7 @@ fun SettingsScreen(
                             onThemeModeChange = onThemeModeChange,
                             onDynamicColorChange = onDynamicColorChange
                         )
-                        LocalDataCard()
+                        LocalDataCard(onOpenDataManagement)
                     }
                     Column(
                         modifier = Modifier.weight(1f),
@@ -147,7 +149,7 @@ fun SettingsScreen(
                     onOpenNotificationSettings = onOpenNotificationSettings
                 )
                 LearningCard(onLaunchOnboarding)
-                LocalDataCard()
+                LocalDataCard(onOpenDataManagement)
                 BuildDetailsCard()
             }
         }
@@ -293,7 +295,7 @@ private fun LearningCard(onLaunchOnboarding: () -> Unit) {
 }
 
 @Composable
-private fun LocalDataCard() {
+private fun LocalDataCard(onOpenDataManagement: () -> Unit) {
     SettingsSectionCard(
         icon = Icons.Default.Lock,
         title = "Your data",
@@ -309,6 +311,14 @@ private fun LocalDataCard() {
                 modifier = Modifier.weight(1f)
             )
             StatusPill(label = "Local")
+        }
+        OutlinedButton(
+            onClick = onOpenDataManagement,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.SaveAlt, contentDescription = null)
+            Spacer(Modifier.width(PantryPalSpacing.xs))
+            Text("Backup and household sharing")
         }
     }
 }
