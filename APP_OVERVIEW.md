@@ -28,6 +28,11 @@ The app remains a compact single Android module:
 
 The app uses manual screen state in `MainActivity` rather than Navigation Compose. Data is stored on-device. Network requests occur only for an unknown scanned barcode, an explicit online recipe search, or an explicitly imported recipe URL.
 
+## Implementation guardrails
+
+- Keep historical or other large derived calculations in Room queries where practical. For example, `ConsumptionDao.getRestockCandidates` derives the average consumption interval in SQL, so the app does not need to load and filter the full history in memory.
+- Do not place a clickable overlay over a text field without explicit semantics. If that interaction is necessary, expose the field label and current value through a `contentDescription` so TalkBack users retain the same context.
+
 ## Material 3 design system
 
 PantryPal uses a warm garden-pantry Material 3 theme with complete light/dark semantic roles, dynamic colour on Android 12+, an emphasized type scale, rounded shapes, 48dp touch targets, and an 8dp spacing rhythm.
