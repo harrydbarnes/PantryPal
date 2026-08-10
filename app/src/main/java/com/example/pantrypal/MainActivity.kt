@@ -59,7 +59,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.pantrypal.data.entity.ItemEntity
-import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.ui.screens.ScanOutScreen
 import com.example.pantrypal.ui.screens.SettingsScreen
 import com.example.pantrypal.ui.screens.PastItemsScreen
@@ -85,6 +84,7 @@ import java.util.concurrent.TimeUnit
 import com.example.pantrypal.util.ExpirationWorker
 import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
+import com.example.pantrypal.util.OnboardingGoal
 import com.example.pantrypal.util.ExpiryStatus
 import com.example.pantrypal.util.InventorySort
 import com.example.pantrypal.util.ShoppingLocation
@@ -543,10 +543,6 @@ fun KitchenApp(
             mutableStateOf(true) // Always true for older versions
         }
     }
-    var notificationPermissionRequested by rememberSaveable {
-        mutableStateOf(hasNotificationPermission)
-    }
-
     val notificationLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { granted ->
@@ -565,26 +561,8 @@ fun KitchenApp(
         }
     )
 
-    LaunchedEffect(
-        showOnboarding,
-        appSettings.expiryRemindersEnabled,
-        appSettings.shoppingRemindersEnabled,
-        appSettings.nearbyShoppingRemindersEnabled,
-        hasNotificationPermission,
-        notificationPermissionRequested
-    ) {
-        if (
-            !showOnboarding &&
-            (
-                appSettings.expiryRemindersEnabled ||
-                    appSettings.shoppingRemindersEnabled ||
-                    appSettings.nearbyShoppingRemindersEnabled
-                ) &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !hasNotificationPermission &&
-            !notificationPermissionRequested
-        ) {
-            notificationPermissionRequested = true
+    fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
             notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
@@ -592,40 +570,16 @@ fun KitchenApp(
     if (showOnboarding) {
         OnboardingScreen(
             isReplay = hasCompletedOnboarding,
-            initialShoppingDay = appSettings.shoppingDayOfWeek,
-            initialShoppingTimeMinutes = appSettings.shoppingTimeMinutes,
-            initialShoppingReminderTiming = appSettings.shoppingReminderTiming,
-            onSaveShoppingRoutine = { day, time, timing ->
-                viewModel.setShoppingReminderDay(day)
-                viewModel.setShoppingReminderTime(time)
-                viewModel.setShoppingReminderTiming(timing)
-                viewModel.setShoppingRemindersEnabled(true)
-            },
-            onSaveRegulars = { regulars ->
-                regulars.forEach { regular ->
-                    viewModel.addShoppingItem(
-                        name = regular,
-                        quantity = 1.0,
-                        unit = "pcs",
-                        sectionId = ShoppingSectionEntity.ID_EVERY_WEEK
-                    )
-                }
-            },
-            onSaveShoppingSpot = { name ->
-                viewModel.setNearbyShoppingRemindersEnabled(true)
-                pendingShoppingLocationName = name
-                if (ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
-                    pendingShoppingLocationName = null
-                    captureCurrentLocation(name)
-                } else {
-                    requestLocationPermission()
-                }
-            },
-            onCompleteToMealPlan = {
-                viewModel.completeOnboarding()
+            onComplete = { goal ->
+                viewModel.completeOnboarding(goal)
                 showOnboarding = false
                 if (!hasCompletedOnboarding) {
-                    currentScreen = AppScreen.MealPlan
+                    currentScreen = when (goal) {
+                        OnboardingGoal.PANTRY_EXPIRY -> AppScreen.AddManual
+                        OnboardingGoal.MEAL_PLANNING -> AppScreen.MealPlan
+                        OnboardingGoal.SHOPPING_LIST -> AppScreen.ShoppingList
+                        OnboardingGoal.REDUCE_WASTE -> AppScreen.AddManual
+                    }
                 }
             },
             onSkip = {
@@ -854,8 +808,14 @@ fun KitchenApp(
                                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
                             onThemeModeChange = viewModel::setThemeMode,
                             onDynamicColorChange = viewModel::setDynamicColorEnabled,
-                            onExpiryRemindersChange = viewModel::setExpiryRemindersEnabled,
-                            onShoppingRemindersChange = viewModel::setShoppingRemindersEnabled,
+                            onExpiryRemindersChange = { enabled ->
+                                viewModel.setExpiryRemindersEnabled(enabled)
+                                if (enabled) requestNotificationPermissionIfNeeded()
+                            },
+                            onShoppingRemindersChange = { enabled ->
+                                viewModel.setShoppingRemindersEnabled(enabled)
+                                if (enabled) requestNotificationPermissionIfNeeded()
+                            },
                             onShoppingDayChange = viewModel::setShoppingReminderDay,
                             onShoppingTimeChange = viewModel::setShoppingReminderTime,
                             onShoppingReminderTimingChange = viewModel::setShoppingReminderTiming,

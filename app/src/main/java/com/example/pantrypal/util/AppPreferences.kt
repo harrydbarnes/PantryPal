@@ -24,10 +24,23 @@ enum class ShoppingReminderTiming {
     }
 }
 
+/** The optional intent chosen during the lightweight first-run journey. */
+enum class OnboardingGoal {
+    PANTRY_EXPIRY,
+    MEAL_PLANNING,
+    SHOPPING_LIST,
+    REDUCE_WASTE;
+
+    companion object {
+        fun fromStoredValue(value: String?): OnboardingGoal? =
+            entries.firstOrNull { it.name == value }
+    }
+}
+
 data class AppSettings(
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val dynamicColorEnabled: Boolean = true,
-    val expiryRemindersEnabled: Boolean = true,
+    val expiryRemindersEnabled: Boolean = false,
     val shoppingRemindersEnabled: Boolean = false,
     val shoppingDayOfWeek: Int = AppPreferences.DEFAULT_SHOPPING_DAY,
     val shoppingTimeMinutes: Int = AppPreferences.DEFAULT_SHOPPING_TIME_MINUTES,
@@ -38,6 +51,7 @@ data class AppSettings(
 object AppPreferences {
     const val FILE_NAME = "pantry_prefs"
     const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
+    const val KEY_ONBOARDING_GOAL = "onboarding_goal"
     const val KEY_MEAL_PLAN_INTRO_SEEN = "meal_plan_intro_seen"
     const val KEY_SETTINGS_INTRO_SEEN = "settings_intro_seen"
     const val KEY_THEME_MODE = "theme_mode"
@@ -59,7 +73,7 @@ object AppPreferences {
                 preferences.getString(KEY_THEME_MODE, AppThemeMode.SYSTEM.name)
             ),
             dynamicColorEnabled = preferences.getBoolean(KEY_DYNAMIC_COLOR, true),
-            expiryRemindersEnabled = preferences.getBoolean(KEY_EXPIRY_REMINDERS, true),
+            expiryRemindersEnabled = preferences.getBoolean(KEY_EXPIRY_REMINDERS, false),
             shoppingRemindersEnabled = preferences.getBoolean(KEY_SHOPPING_REMINDERS, false),
             shoppingDayOfWeek = preferences.getInt(
                 KEY_SHOPPING_DAY,

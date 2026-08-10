@@ -5,7 +5,7 @@ PantryPal is a local-first Android kitchen companion built with Kotlin, Jetpack 
 ## User journeys
 
 - **Dashboard:** see expired/due-soon stock and aggregate low-stock suggestions, then add a restock item directly.
-- **First run:** move through onboarding covering pantry tracking, scanning, the four-week rotation, shopping-list generation, privacy, and permissions.
+- **First run:** choose one goal—pantry/expiry, meals, shopping, or reducing waste—then go straight to one small first success. Meal planning is optional, and notification/location permissions are requested only when a reminder or location feature is enabled.
 - **Kitchen cupboard:** search, filter, sort and stocktake batches; track storage location, opened state, expiry, always-stocked status, and low-stock thresholds.
 - **Scan in / scan out:** identify products by barcode and add or consume a whole or partial quantity.
 - **Meal plan:** maintain four rotating weeks, rename and reorder the weekly rhythm, reuse meals or whole weeks, open the recipe book, and preview a pantry-aware shopping build.
