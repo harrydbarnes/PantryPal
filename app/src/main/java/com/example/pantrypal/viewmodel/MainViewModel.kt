@@ -35,6 +35,7 @@ import com.example.pantrypal.util.normalizedIngredients
 import com.example.pantrypal.util.rotatingWeek
 import com.example.pantrypal.util.startOfWeek
 import com.example.pantrypal.util.AppPreferences
+import com.example.pantrypal.util.AddItemDefaults
 import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
 import com.example.pantrypal.util.ExpiryStatus
@@ -100,6 +101,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     private val _appSettings = MutableStateFlow(AppPreferences.readSettings(application))
     val appSettings: StateFlow<AppSettings> = _appSettings.asStateFlow()
+
+    private val _addItemDefaults = MutableStateFlow(AppPreferences.readAddItemDefaults(application))
+    val addItemDefaults: StateFlow<AddItemDefaults> = _addItemDefaults.asStateFlow()
 
     private val _shoppingLocations = MutableStateFlow(ShoppingLocationStore.read(application))
     val shoppingLocations: StateFlow<List<ShoppingLocation>> = _shoppingLocations.asStateFlow()
@@ -482,6 +486,17 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                 if (isUsual || lowStockThreshold != null) {
                     repository.updateStockSettings(itemId, isUsual, lowStockThreshold)
                 }
+                val defaults = AddItemDefaults(
+                    unit = unit.trim().ifBlank { "pcs" },
+                    category = category.trim().ifBlank { "General" },
+                    storageLocation = storageLocation.trim().ifBlank { InventoryEntity.LOCATION_PANTRY }
+                )
+                _addItemDefaults.value = defaults
+                prefs.edit()
+                    .putString(AppPreferences.KEY_ADD_ITEM_UNIT, defaults.unit)
+                    .putString(AppPreferences.KEY_ADD_ITEM_CATEGORY, defaults.category)
+                    .putString(AppPreferences.KEY_ADD_ITEM_LOCATION, defaults.storageLocation)
+                    .apply()
             }
         }
     }

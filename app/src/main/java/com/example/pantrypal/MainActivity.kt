@@ -795,7 +795,9 @@ fun KitchenApp(
                             onOpenRecipes = { currentScreen = AppScreen.Recipes }
                         )
                         AppScreen.AddManual -> {
+                            val addItemDefaults by viewModel.addItemDefaults.collectAsState()
                             AddScreen(
+                                defaults = addItemDefaults,
                                 onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened ->
                                     viewModel.addItem(
                                         name,
@@ -1328,6 +1330,7 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
     var foundItem by remember { mutableStateOf<ItemEntity?>(null) }
     var showManualAdd by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    val addItemDefaults by viewModel.addItemDefaults.collectAsState()
 
     // Logic to handle detection
     LaunchedEffect(detectedBarcode) {
@@ -1351,6 +1354,7 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
     } else if (showManualAdd && detectedBarcode != null) {
         // Navigate to add screen pre-filled
         AddScreen(
+            defaults = addItemDefaults,
             barcode = detectedBarcode,
             onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened ->
                 viewModel.addItem(
@@ -1382,6 +1386,7 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         if (isTempItem) {
              // Redirect to AddScreen with pre-filled data
              AddScreen(
+                defaults = addItemDefaults,
                 barcode = detectedBarcode,
                 onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened ->
                     viewModel.addItem(
