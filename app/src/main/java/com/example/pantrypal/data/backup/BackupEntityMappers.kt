@@ -269,6 +269,7 @@ data class BackupEntitySnapshot(
     val recipeIngredients: List<RecipeIngredientEntity> = emptyList(),
     val priceHistory: List<PriceHistoryEntity> = emptyList(),
     val weeklyBudgets: List<BudgetWeeklyEntity> = emptyList(),
+    val shoppingLocations: List<BackupShoppingLocation> = emptyList(),
     val preferences: BackupPreferences = BackupPreferences()
 ) {
     fun toPayload(): BackupPayload = BackupPayload(
@@ -284,6 +285,7 @@ data class BackupEntitySnapshot(
         recipeIngredients = recipeIngredients.map(RecipeIngredientEntity::toBackupRecipeIngredient),
         priceHistory = priceHistory.map(PriceHistoryEntity::toBackupPriceHistory),
         weeklyBudgets = weeklyBudgets.map(BudgetWeeklyEntity::toBackupWeeklyBudget),
+        shoppingLocations = shoppingLocations,
         preferences = preferences
     )
 }

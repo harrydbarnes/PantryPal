@@ -40,6 +40,8 @@ import com.example.pantrypal.util.AppThemeMode
 import com.example.pantrypal.util.ExpiryStatus
 import com.example.pantrypal.util.ShoppingNeedStatus
 import com.example.pantrypal.util.ShoppingReconciliationLine
+import com.example.pantrypal.util.ShoppingLocation
+import com.example.pantrypal.util.ShoppingLocationStore
 import com.example.pantrypal.util.classifyExpiry
 import com.example.pantrypal.util.expiryLabel
 import com.example.pantrypal.util.reconcileShoppingIngredients
@@ -87,6 +89,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     private val _appSettings = MutableStateFlow(AppPreferences.readSettings(application))
     val appSettings: StateFlow<AppSettings> = _appSettings.asStateFlow()
+
+    private val _shoppingLocations = MutableStateFlow(ShoppingLocationStore.read(application))
+    val shoppingLocations: StateFlow<List<ShoppingLocation>> = _shoppingLocations.asStateFlow()
 
     fun setCurrentWeek(week: String) {
         _currentWeek.value = week
@@ -140,6 +145,30 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         val safeTime = minutesSinceMidnight.coerceIn(0, 23 * 60 + 59)
         _appSettings.value = _appSettings.value.copy(shoppingTimeMinutes = safeTime)
         prefs.edit().putInt(AppPreferences.KEY_SHOPPING_TIME, safeTime).apply()
+    }
+
+    fun setNearbyShoppingRemindersEnabled(enabled: Boolean) {
+        _appSettings.value = _appSettings.value.copy(nearbyShoppingRemindersEnabled = enabled)
+        prefs.edit().putBoolean(AppPreferences.KEY_NEARBY_SHOPPING_REMINDERS, enabled).apply()
+    }
+
+    fun addShoppingLocation(name: String, latitude: Double, longitude: Double) {
+        val location = ShoppingLocation(
+            name = name.trim(),
+            latitude = latitude,
+            longitude = longitude
+        )
+        if (!location.isValid()) return
+        val updated = (_shoppingLocations.value + location)
+            .take(ShoppingLocationStore.MAX_LOCATIONS)
+        _shoppingLocations.value = updated
+        ShoppingLocationStore.write(getApplication(), updated)
+    }
+
+    fun deleteShoppingLocation(location: ShoppingLocation) {
+        val updated = _shoppingLocations.value.filterNot { it.id == location.id }
+        _shoppingLocations.value = updated
+        ShoppingLocationStore.write(getApplication(), updated)
     }
 
     // UI State for Inventory

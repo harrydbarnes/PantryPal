@@ -30,6 +30,7 @@ data class BackupPayload(
     val recipeIngredients: List<BackupRecipeIngredient> = emptyList(),
     val priceHistory: List<BackupPriceHistory> = emptyList(),
     val weeklyBudgets: List<BackupWeeklyBudget> = emptyList(),
+    val shoppingLocations: List<BackupShoppingLocation> = emptyList(),
     val preferences: BackupPreferences = BackupPreferences()
 )
 
@@ -168,6 +169,14 @@ data class BackupWeeklyBudget(
     val updatedAt: Long = 0
 )
 
+data class BackupShoppingLocation(
+    val id: String = "",
+    val name: String = "",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val radiusMeters: Float = 200f
+)
+
 data class BackupPreferences(
     val onboardingComplete: Boolean = false,
     val themeMode: String = "SYSTEM",
@@ -176,6 +185,7 @@ data class BackupPreferences(
     val shoppingRemindersEnabled: Boolean = false,
     val shoppingDayOfWeek: Int = 6,
     val shoppingTimeMinutes: Int = 600,
+    val nearbyShoppingRemindersEnabled: Boolean = false,
     val activeMealWeekId: String? = null,
     val defaultCurrencyCode: String = "GBP",
     val householdName: String? = null,

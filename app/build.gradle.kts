@@ -145,6 +145,9 @@ dependencies {
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 
+    // Battery-efficient OS geofencing for optional nearby shopping nudges
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+
     // Gson for backup
     implementation("com.google.code.gson:gson:2.14.0")
 

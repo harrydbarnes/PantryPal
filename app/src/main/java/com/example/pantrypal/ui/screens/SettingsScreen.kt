@@ -17,11 +17,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Palette
@@ -36,8 +39,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -52,6 +57,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -64,6 +70,7 @@ import com.example.pantrypal.ui.components.PantryPalSpacing
 import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
+import com.example.pantrypal.util.ShoppingLocation
 import com.example.pantrypal.util.ShoppingReminderSchedule
 import java.time.DayOfWeek
 
@@ -90,6 +97,14 @@ fun SettingsScreen(
     onShoppingRemindersChange: (Boolean) -> Unit,
     onShoppingDayChange: (Int) -> Unit,
     onShoppingTimeChange: (Int) -> Unit,
+    onNearbyShoppingRemindersChange: (Boolean) -> Unit,
+    shoppingLocations: List<ShoppingLocation>,
+    locationPermissionGranted: Boolean,
+    backgroundLocationPermissionGranted: Boolean,
+    onRequestLocationPermission: () -> Unit,
+    onOpenLocationSettings: () -> Unit,
+    onAddShoppingLocation: (String) -> Unit,
+    onDeleteShoppingLocation: (ShoppingLocation) -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onLaunchOnboarding: () -> Unit,
     onOpenDataManagement: () -> Unit = {}
@@ -153,6 +168,17 @@ fun SettingsScreen(
                             onShoppingTimeChange = onShoppingTimeChange,
                             onOpenNotificationSettings = onOpenNotificationSettings
                         )
+                        NearbyShoppingSettingsCard(
+                            enabled = settings.nearbyShoppingRemindersEnabled,
+                            locations = shoppingLocations,
+                            locationPermissionGranted = locationPermissionGranted,
+                            backgroundLocationPermissionGranted = backgroundLocationPermissionGranted,
+                            onEnabledChange = onNearbyShoppingRemindersChange,
+                            onRequestLocationPermission = onRequestLocationPermission,
+                            onOpenLocationSettings = onOpenLocationSettings,
+                            onAddLocation = onAddShoppingLocation,
+                            onDeleteLocation = onDeleteShoppingLocation
+                        )
                         LearningCard(onLaunchOnboarding)
                         BuildDetailsCard()
                     }
@@ -175,6 +201,17 @@ fun SettingsScreen(
                     onShoppingDayChange = onShoppingDayChange,
                     onShoppingTimeChange = onShoppingTimeChange,
                     onOpenNotificationSettings = onOpenNotificationSettings
+                )
+                NearbyShoppingSettingsCard(
+                    enabled = settings.nearbyShoppingRemindersEnabled,
+                    locations = shoppingLocations,
+                    locationPermissionGranted = locationPermissionGranted,
+                    backgroundLocationPermissionGranted = backgroundLocationPermissionGranted,
+                    onEnabledChange = onNearbyShoppingRemindersChange,
+                    onRequestLocationPermission = onRequestLocationPermission,
+                    onOpenLocationSettings = onOpenLocationSettings,
+                    onAddLocation = onAddShoppingLocation,
+                    onDeleteLocation = onDeleteShoppingLocation
                 )
                 LearningCard(onLaunchOnboarding)
                 LocalDataCard(onOpenDataManagement)
@@ -396,6 +433,197 @@ private fun ReminderSettingsCard(
                 },
                 dismissButton = {
                     TextButton(onClick = { timePickerVisible = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun NearbyShoppingSettingsCard(
+    enabled: Boolean,
+    locations: List<ShoppingLocation>,
+    locationPermissionGranted: Boolean,
+    backgroundLocationPermissionGranted: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    onRequestLocationPermission: () -> Unit,
+    onOpenLocationSettings: () -> Unit,
+    onAddLocation: (String) -> Unit,
+    onDeleteLocation: (ShoppingLocation) -> Unit
+) {
+    var addLocationDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var newLocationName by rememberSaveable { mutableStateOf("") }
+    val backgroundPermissionNeeded = enabled &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !backgroundLocationPermissionGranted
+    val permissionNeedsAttention = enabled &&
+        (!locationPermissionGranted || backgroundPermissionNeeded)
+
+    SettingsSectionCard(
+        icon = Icons.Default.LocationOn,
+        title = "Nearby shopping nudges",
+        supportingText = "Open your list when you linger near one of your saved shopping spots."
+    ) {
+        SettingSwitchRow(
+            title = "Remind me near saved places",
+            supportingText = if (enabled) {
+                "Only your saved spots are monitored. Background monitoring is opt-in."
+            } else {
+                "Off by default. PantryPal will not monitor location in the background until you enable it."
+            },
+            checked = enabled,
+            onCheckedChange = onEnabledChange
+        )
+        Text(
+            "This uses Android geofencing instead of continuous location tracking. Alerts can arrive a few minutes after you arrive, which helps preserve battery.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Location access", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    when {
+                        !locationPermissionGranted -> "Needed to save and monitor shopping spots."
+                        backgroundPermissionNeeded -> "Allow all the time so reminders work while the app is closed."
+                        locations.isEmpty() -> "Add a spot to make this useful."
+                        else -> "Ready to watch your saved spots."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            StatusPill(
+                label = when {
+                    !enabled -> "Off"
+                    permissionNeedsAttention -> "Action needed"
+                    locations.isEmpty() -> "Add a place"
+                    else -> "Ready"
+                },
+                containerColor = if (permissionNeedsAttention) {
+                    MaterialTheme.colorScheme.errorContainer
+                } else {
+                    MaterialTheme.colorScheme.secondaryContainer
+                },
+                contentColor = if (permissionNeedsAttention) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                }
+            )
+        }
+        if (!locationPermissionGranted) {
+            OutlinedButton(
+                onClick = onRequestLocationPermission,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.LocationOn, contentDescription = null)
+                Spacer(Modifier.width(PantryPalSpacing.xs))
+                Text("Allow location access")
+            }
+        } else if (backgroundPermissionNeeded) {
+            OutlinedButton(
+                onClick = onOpenLocationSettings,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Allow background location")
+            }
+        }
+        if (locations.isEmpty()) {
+            Text(
+                "Save a spot while you are there, such as “Supermarket” or “Farm shop”. The default radius is ${ShoppingLocation.DEFAULT_RADIUS_METERS.toInt()} metres.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            locations.forEach { location ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = PantryPalSpacing.xs)
+                    ) {
+                        Text(location.name, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Within ${location.radiusMeters.toInt()} metres",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(
+                        onClick = { onDeleteLocation(location) }
+                    ) {
+                        Icon(
+                            Icons.Default.DeleteOutline,
+                            contentDescription = "Remove ${location.name}"
+                        )
+                    }
+                }
+            }
+        }
+        OutlinedButton(
+            onClick = { addLocationDialogVisible = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(Modifier.width(PantryPalSpacing.xs))
+            Text("Add current location")
+        }
+        if (addLocationDialogVisible) {
+            AlertDialog(
+                onDismissRequest = {
+                    addLocationDialogVisible = false
+                    newLocationName = ""
+                },
+                title = { Text("Add a shopping spot") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.xs)) {
+                        Text(
+                            "Stand at the place you want to save. PantryPal will use your current location once, then rely on Android geofencing.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        OutlinedTextField(
+                            value = newLocationName,
+                            onValueChange = { newLocationName = it },
+                            label = { Text("Spot name") },
+                            placeholder = { Text("Supermarket") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = newLocationName.trim().isNotEmpty(),
+                        onClick = {
+                            onAddLocation(newLocationName.trim())
+                            newLocationName = ""
+                            addLocationDialogVisible = false
+                        }
+                    ) {
+                        Text("Save spot")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            addLocationDialogVisible = false
+                            newLocationName = ""
+                        }
+                    ) {
                         Text("Cancel")
                     }
                 }

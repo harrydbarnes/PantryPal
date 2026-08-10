@@ -10,6 +10,7 @@ import com.example.pantrypal.data.backup.BackupDocument
 import com.example.pantrypal.data.backup.BackupEntitySnapshot
 import com.example.pantrypal.data.backup.BackupPayload
 import com.example.pantrypal.data.backup.BackupPreferences
+import com.example.pantrypal.data.backup.BackupShoppingLocation
 import com.example.pantrypal.data.backup.toEntity
 import com.example.pantrypal.data.database.KitchenDatabase
 import com.example.pantrypal.data.entity.BudgetWeeklyEntity
@@ -33,6 +34,8 @@ import com.example.pantrypal.domain.recipe.RecipePantryIngredient
 import com.example.pantrypal.util.AppPreferences
 import com.example.pantrypal.util.RecipeJsonLdImporter
 import com.example.pantrypal.util.RecipeMealConversion
+import com.example.pantrypal.util.ShoppingLocation
+import com.example.pantrypal.util.ShoppingLocationStore
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -301,6 +304,15 @@ class PantryFeaturesRepository(
             recipeIngredients = backupDao.recipeIngredients(),
             priceHistory = backupDao.priceHistory(),
             weeklyBudgets = backupDao.weeklyBudgets(),
+            shoppingLocations = ShoppingLocationStore.read(context).map { location ->
+                BackupShoppingLocation(
+                    id = location.id,
+                    name = location.name,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    radiusMeters = location.radiusMeters
+                )
+            },
             preferences = BackupPreferences(
                 onboardingComplete = preferences.getBoolean(
                     AppPreferences.KEY_ONBOARDING_COMPLETE,
@@ -329,6 +341,10 @@ class PantryFeaturesRepository(
                 shoppingTimeMinutes = preferences.getInt(
                     AppPreferences.KEY_SHOPPING_TIME,
                     AppPreferences.DEFAULT_SHOPPING_TIME_MINUTES
+                ),
+                nearbyShoppingRemindersEnabled = preferences.getBoolean(
+                    AppPreferences.KEY_NEARBY_SHOPPING_REMINDERS,
+                    false
                 ),
                 activeMealWeekId = preferences.getString(KEY_CURRENT_WEEK, null),
                 defaultCurrencyCode = DEFAULT_CURRENCY,
@@ -395,10 +411,26 @@ class PantryFeaturesRepository(
                 AppPreferences.KEY_SHOPPING_TIME,
                 restored.shoppingTimeMinutes.coerceIn(0, 23 * 60 + 59)
             )
+            .putBoolean(
+                AppPreferences.KEY_NEARBY_SHOPPING_REMINDERS,
+                restored.nearbyShoppingRemindersEnabled
+            )
             .putString(KEY_CURRENT_WEEK, restored.activeMealWeekId ?: MealEntity.WEEK_A)
             .putString(KEY_HOUSEHOLD_NAME, restored.householdName)
             .putString(KEY_HOUSEHOLD_ID, restored.householdId)
             .apply()
+        ShoppingLocationStore.write(
+            context,
+            payload.shoppingLocations.map { location ->
+                ShoppingLocation(
+                    id = location.id,
+                    name = location.name,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    radiusMeters = location.radiusMeters
+                )
+            }
+        )
     }
 
     private fun householdId(): String =

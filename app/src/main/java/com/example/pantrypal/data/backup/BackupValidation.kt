@@ -67,6 +67,11 @@ object BackupValidator {
             payload.weeklyBudgets.map(BackupWeeklyBudget::weekStartEpochDay),
             errors
         )
+        checkUniqueStrings(
+            "shopping location",
+            payload.shoppingLocations.map(BackupShoppingLocation::id),
+            errors
+        )
 
         val itemIds = payload.items.map(BackupItem::itemId).toSet()
         val sectionIds = payload.shoppingSections.map(BackupShoppingSection::sectionId).toSet()
@@ -207,6 +212,19 @@ object BackupValidator {
         payload.weeklyBudgets.forEachIndexed { index, budget ->
             if (budget.budgetMinor < 0) errors += "weeklyBudgets[$index] has a negative target."
             validateCurrency(budget.currencyCode, "weeklyBudgets[$index]", errors)
+        }
+        payload.shoppingLocations.forEachIndexed { index, location ->
+            if (location.id.isBlank()) errors += "shoppingLocations[$index] has a missing ID."
+            if (location.name.isBlank()) errors += "shoppingLocations[$index] has a blank name."
+            if (location.latitude !in -90.0..90.0) {
+                errors += "shoppingLocations[$index] has an invalid latitude."
+            }
+            if (location.longitude !in -180.0..180.0) {
+                errors += "shoppingLocations[$index] has an invalid longitude."
+            }
+            if (location.radiusMeters !in 100f..500f) {
+                errors += "shoppingLocations[$index] has an invalid radius."
+            }
         }
         validateCurrency(
             payload.preferences.defaultCurrencyCode,

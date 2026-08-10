@@ -86,9 +86,14 @@ import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
 import com.example.pantrypal.util.ExpiryStatus
 import com.example.pantrypal.util.InventorySort
+import com.example.pantrypal.util.ShoppingLocation
+import com.example.pantrypal.util.ShoppingLocationGeofenceManager
 import com.example.pantrypal.util.ShoppingReminderScheduler
 import com.example.pantrypal.util.ShoppingReminderWorker
 import coil.compose.AsyncImage
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -134,6 +139,7 @@ class MainActivity : ComponentActivity() {
             val featuresViewModel: PantryFeaturesViewModel =
                 androidx.lifecycle.viewmodel.compose.viewModel(factory = featuresViewModelFactory)
             val appSettings by viewModel.appSettings.collectAsState()
+            val shoppingLocations by viewModel.shoppingLocations.collectAsState()
             val systemDarkTheme = isSystemInDarkTheme()
             val darkTheme = when (appSettings.themeMode) {
                 AppThemeMode.SYSTEM -> systemDarkTheme
@@ -151,7 +157,6 @@ class MainActivity : ComponentActivity() {
             ) {
                 ShoppingReminderScheduler.update(this@MainActivity, appSettings)
             }
-
             PantryPalTheme(
                 darkTheme = darkTheme,
                 dynamicColor = appSettings.dynamicColorEnabled
@@ -164,6 +169,7 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         featuresViewModel = featuresViewModel,
                         appSettings = appSettings,
+                        shoppingLocations = shoppingLocations,
                         incomingSharedRecipeUrl = sharedRecipeUrl,
                         onSharedRecipeUrlConsumed = { sharedRecipeUrl.value = null },
                         incomingShoppingReminderAction = shoppingReminderAction,
@@ -227,6 +233,7 @@ fun KitchenApp(
     viewModel: MainViewModel,
     featuresViewModel: PantryFeaturesViewModel,
     appSettings: AppSettings,
+    shoppingLocations: List<ShoppingLocation>,
     incomingSharedRecipeUrl: StateFlow<String?>,
     onSharedRecipeUrlConsumed: () -> Unit,
     incomingShoppingReminderAction: StateFlow<String?>,
@@ -245,6 +252,121 @@ fun KitchenApp(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    val locationClient = remember(context) {
+        LocationServices.getFusedLocationProviderClient(context)
+    }
+    var hasLocationPermission by remember {
+        mutableStateOf(ShoppingLocationGeofenceManager.hasForegroundPermission(context))
+    }
+    var hasBackgroundLocationPermission by remember {
+        mutableStateOf(ShoppingLocationGeofenceManager.hasRequiredPermissions(context))
+    }
+    var pendingShoppingLocationName by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun refreshLocationPermissions() {
+        hasLocationPermission = ShoppingLocationGeofenceManager.hasForegroundPermission(context)
+        hasBackgroundLocationPermission =
+            ShoppingLocationGeofenceManager.hasRequiredPermissions(context)
+    }
+
+    LaunchedEffect(
+        appSettings.nearbyShoppingRemindersEnabled,
+        shoppingLocations,
+        hasLocationPermission,
+        hasBackgroundLocationPermission
+    ) {
+        ShoppingLocationGeofenceManager.update(
+            context = context,
+            enabled = appSettings.nearbyShoppingRemindersEnabled,
+            locations = shoppingLocations
+        )
+    }
+
+    fun captureCurrentLocation(name: String) {
+        if (!ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
+            refreshLocationPermissions()
+            scope.launch {
+                snackbarHostState.showSnackbar("Allow location access before saving a spot.")
+            }
+            return
+        }
+
+        runCatching {
+            locationClient.getCurrentLocation(
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                CancellationTokenSource().token
+            )
+                .addOnSuccessListener { location ->
+                    if (location == null) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "I could not get a location yet. Try again in a moment."
+                            )
+                        }
+                    } else {
+                        viewModel.addShoppingLocation(
+                            name = name,
+                            latitude = location.latitude,
+                            longitude = location.longitude
+                        )
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Saved $name as a shopping spot.")
+                        }
+                    }
+                }
+                .addOnFailureListener {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            "I could not get your location. Try again in a moment."
+                        )
+                    }
+                }
+        }.onFailure {
+            refreshLocationPermissions()
+            scope.launch {
+                snackbarHostState.showSnackbar("Location access is unavailable right now.")
+            }
+        }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = {
+            refreshLocationPermissions()
+            pendingShoppingLocationName?.let { name ->
+                if (ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
+                    pendingShoppingLocationName = null
+                    captureCurrentLocation(name)
+                }
+            }
+        }
+    )
+    val locationSettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+        onResult = { refreshLocationPermissions() }
+    )
+
+    fun requestLocationPermission() {
+        if (!ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        } else {
+            refreshLocationPermissions()
+        }
+    }
+
+    fun openLocationSettings() {
+        locationSettingsLauncher.launch(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+        )
+    }
 
     val incomingRecipeUrl by incomingSharedRecipeUrl.collectAsState()
     LaunchedEffect(incomingRecipeUrl) {
@@ -445,12 +567,17 @@ fun KitchenApp(
         showOnboarding,
         appSettings.expiryRemindersEnabled,
         appSettings.shoppingRemindersEnabled,
+        appSettings.nearbyShoppingRemindersEnabled,
         hasNotificationPermission,
         notificationPermissionRequested
     ) {
         if (
             !showOnboarding &&
-            (appSettings.expiryRemindersEnabled || appSettings.shoppingRemindersEnabled) &&
+            (
+                appSettings.expiryRemindersEnabled ||
+                    appSettings.shoppingRemindersEnabled ||
+                    appSettings.nearbyShoppingRemindersEnabled
+                ) &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !hasNotificationPermission &&
             !notificationPermissionRequested
@@ -691,6 +818,28 @@ fun KitchenApp(
                             onShoppingRemindersChange = viewModel::setShoppingRemindersEnabled,
                             onShoppingDayChange = viewModel::setShoppingReminderDay,
                             onShoppingTimeChange = viewModel::setShoppingReminderTime,
+                            onNearbyShoppingRemindersChange = { enabled ->
+                                viewModel.setNearbyShoppingRemindersEnabled(enabled)
+                                if (enabled) {
+                                    requestLocationPermission()
+                                }
+                            },
+                            shoppingLocations = shoppingLocations,
+                            locationPermissionGranted = hasLocationPermission,
+                            backgroundLocationPermissionGranted =
+                                hasBackgroundLocationPermission,
+                            onRequestLocationPermission = ::requestLocationPermission,
+                            onOpenLocationSettings = ::openLocationSettings,
+                            onAddShoppingLocation = { name ->
+                                pendingShoppingLocationName = name
+                                if (ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
+                                    pendingShoppingLocationName = null
+                                    captureCurrentLocation(name)
+                                } else {
+                                    requestLocationPermission()
+                                }
+                            },
+                            onDeleteShoppingLocation = viewModel::deleteShoppingLocation,
                             onOpenNotificationSettings = {
                                 notificationSettingsLauncher.launch(
                                     Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {

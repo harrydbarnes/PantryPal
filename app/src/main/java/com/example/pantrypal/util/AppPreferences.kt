@@ -19,7 +19,8 @@ data class AppSettings(
     val expiryRemindersEnabled: Boolean = true,
     val shoppingRemindersEnabled: Boolean = false,
     val shoppingDayOfWeek: Int = AppPreferences.DEFAULT_SHOPPING_DAY,
-    val shoppingTimeMinutes: Int = AppPreferences.DEFAULT_SHOPPING_TIME_MINUTES
+    val shoppingTimeMinutes: Int = AppPreferences.DEFAULT_SHOPPING_TIME_MINUTES,
+    val nearbyShoppingRemindersEnabled: Boolean = false
 )
 
 object AppPreferences {
@@ -31,6 +32,7 @@ object AppPreferences {
     const val KEY_SHOPPING_REMINDERS = "shopping_reminders"
     const val KEY_SHOPPING_DAY = "shopping_day"
     const val KEY_SHOPPING_TIME = "shopping_time"
+    const val KEY_NEARBY_SHOPPING_REMINDERS = "nearby_shopping_reminders"
 
     const val DEFAULT_SHOPPING_DAY = 6 // Saturday
     const val DEFAULT_SHOPPING_TIME_MINUTES = 10 * 60
@@ -51,7 +53,11 @@ object AppPreferences {
             shoppingTimeMinutes = preferences.getInt(
                 KEY_SHOPPING_TIME,
                 DEFAULT_SHOPPING_TIME_MINUTES
-            ).coerceIn(0, 23 * 60 + 59)
+            ).coerceIn(0, 23 * 60 + 59),
+            nearbyShoppingRemindersEnabled = preferences.getBoolean(
+                KEY_NEARBY_SHOPPING_REMINDERS,
+                false
+            )
         )
     }
 }
