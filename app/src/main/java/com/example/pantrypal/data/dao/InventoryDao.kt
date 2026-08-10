@@ -31,6 +31,9 @@ interface InventoryDao {
     @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.lowStockThreshold, items.imageUrl, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE inventory.expirationDate IS NOT NULL AND inventory.expirationDate < :dueSoonCutoff ORDER BY inventory.expirationDate ASC")
     fun getExpiringItems(dueSoonCutoff: Long): Flow<List<InventoryWithItemMap>>
 
+    @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.lowStockThreshold, items.imageUrl, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE inventory.expirationDate IS NOT NULL AND inventory.expirationDate <= :dueSoonCutoff ORDER BY inventory.expirationDate ASC LIMIT :limit")
+    suspend fun getExpiringItemsSnapshot(dueSoonCutoff: Long, limit: Int): List<InventoryWithItemMap>
+
     @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.lowStockThreshold, items.imageUrl, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE items.barcode = :barcode")
     suspend fun getInventoryByBarcode(barcode: String): List<InventoryWithItemMap>
 

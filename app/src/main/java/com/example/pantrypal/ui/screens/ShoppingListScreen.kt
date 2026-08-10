@@ -1,6 +1,8 @@
 package com.example.pantrypal.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -30,14 +32,16 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -47,6 +51,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -56,11 +62,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.example.pantrypal.data.entity.ShoppingHistoryEntity
 import com.example.pantrypal.data.entity.InventoryEntity
@@ -70,6 +79,7 @@ import com.example.pantrypal.ui.components.ExpressiveHero
 import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.viewmodel.MainViewModel
 import com.example.pantrypal.util.ShoppingNeedStatus
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -99,25 +109,51 @@ fun ShoppingListScreen(
         }
     }
 
+    var showPlanningControls by rememberSaveable { mutableStateOf(false) }
+    var quickAddName by rememberSaveable { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val shoppingModeItems = remember(visibleItems) { splitShoppingItemsForShoppingMode(visibleItems) }
+    val defaultQuickAddSection = sections.firstOrNull { it.systemKey == ShoppingSectionEntity.KEY_THE_REST }
+        ?: sections.firstOrNull()
+
+    fun submitQuickAdd() {
+        val section = defaultQuickAddSection ?: return
+        val name = quickAddName.trim()
+        if (name.isNotEmpty()) {
+            viewModel.addShoppingItem(name, 1.0, "pcs", section.sectionId, if (section.recursEveryWeek) null else selectedWeek)
+            quickAddName = ""
+        }
+    }
+
+    fun deleteWithUndo(item: ShoppingItemEntity) {
+        viewModel.deleteShoppingItem(item)
+        scope.launch {
+            if (snackbarHostState.showSnackbar("${item.name} removed", "Undo") == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                viewModel.restoreShoppingItem(item)
+            }
+        }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    editingItem = null
-                    itemEditorSection = sections.firstOrNull { it.systemKey == ShoppingSectionEntity.KEY_THE_REST }
-                        ?: sections.firstOrNull()
-                },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Add item") }
-            )
-        }
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                QuickAddShoppingItem(
+                    value = quickAddName,
+                    onValueChange = { quickAddName = it },
+                    onSubmit = ::submitQuickAdd,
+                    suggestions = history.map { it.displayName }
+                )
+            }
+
+            if (showPlanningControls) {
             item {
                 ExpressiveHero(
                     eyebrow = currentWeekDetails?.displayName ?: "Week $selectedWeek",
@@ -216,8 +252,11 @@ fun ShoppingListScreen(
                 }
             }
 
+            }
+
             sections.forEach { section ->
-                val sectionItems = visibleItems.filter { it.sectionId == section.sectionId }
+                val sectionItems = shoppingModeItems.active.filter { it.sectionId == section.sectionId }
+                if (sectionItems.isEmpty()) return@forEach
                 item(key = "section-${section.sectionId}") {
                     ShoppingSectionCard(
                         section = section,
@@ -239,8 +278,60 @@ fun ShoppingListScreen(
                             itemEditorSection = section
                         },
                         onToggleItem = viewModel::toggleShoppingItem,
-                        onDeleteItem = viewModel::deleteShoppingItem
+                        onDeleteItem = ::deleteWithUndo
                     )
+                }
+            }
+
+            if (shoppingModeItems.active.isEmpty()) {
+                item {
+                    Text(
+                        "No active items. Add something above or prepare your next list.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (shoppingModeItems.checked.isNotEmpty()) {
+                item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) }
+                item { Text("Checked items (${shoppingModeItems.checked.size})", style = MaterialTheme.typography.titleMedium) }
+                sections.forEach { section ->
+                    val sectionItems = shoppingModeItems.checked.filter { it.sectionId == section.sectionId }
+                    if (sectionItems.isEmpty()) return@forEach
+                    item(key = "checked-section-${section.sectionId}") {
+                        ShoppingSectionCard(
+                            section = section,
+                            items = sectionItems,
+                            onAdd = null,
+                            onEditSection = null,
+                            onEditItem = { item ->
+                                editingItem = item
+                                itemEditorSection = section
+                            },
+                            onToggleItem = viewModel::toggleShoppingItem,
+                            onDeleteItem = ::deleteWithUndo
+                        )
+                    }
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AssistChip(
+                            onClick = { viewModel.clearCheckedShoppingItems(selectedWeek) },
+                            label = { Text("Clear checked") }
+                        )
+                        AssistChip(
+                            onClick = { showPutAwayDialog = true },
+                            label = { Text("Finish shop & put away") },
+                            leadingIcon = { Icon(Icons.Default.Inventory2, contentDescription = null) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                OutlinedButton(onClick = { showPlanningControls = !showPlanningControls }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (showPlanningControls) "Hide planning & preparation" else "Plan & prepare")
                 }
             }
 
@@ -343,6 +434,51 @@ fun ShoppingListScreen(
 
 private fun Double.shoppingNumber(): String =
     if (this % 1.0 == 0.0) toLong().toString() else toString()
+
+internal data class ShoppingModeItems(
+    val active: List<ShoppingItemEntity>,
+    val checked: List<ShoppingItemEntity>
+)
+
+internal fun splitShoppingItemsForShoppingMode(items: List<ShoppingItemEntity>): ShoppingModeItems =
+    ShoppingModeItems(
+        active = items.filterNot { it.isChecked },
+        checked = items.filter { it.isChecked }
+    )
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuickAddShoppingItem(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    suggestions: List<String>
+) {
+    val matchingSuggestions = remember(suggestions, value) {
+        suggestions.filter { value.isBlank() || it.contains(value, ignoreCase = true) }
+            .filterNot { it.equals(value, ignoreCase = true) }
+            .take(5)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text("Quick add") },
+            placeholder = { Text("Type an item, then press done") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onSubmit() }),
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (matchingSuggestions.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                matchingSuggestions.forEach { suggestion ->
+                    AssistChip(onClick = { onValueChange(suggestion) }, label = { Text(suggestion) })
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun ShoppingBuildPreviewDialog(
@@ -645,6 +781,7 @@ fun ShoppingListItemRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var actionsExpanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle)
             .padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
@@ -669,11 +806,25 @@ fun ShoppingListItemRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        IconButton(onClick = onEdit) {
-            Icon(Icons.Default.Edit, contentDescription = "Edit ${item.name}")
+        IconButton(onClick = { actionsExpanded = true }) {
+            Icon(Icons.Default.MoreVert, contentDescription = "More options for ${item.name}")
         }
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Delete, contentDescription = "Delete ${item.name}", tint = MaterialTheme.colorScheme.error)
+        DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Edit") },
+                onClick = {
+                    actionsExpanded = false
+                    onEdit()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Delete") },
+                onClick = {
+                    actionsExpanded = false
+                    onDelete()
+                },
+                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
+            )
         }
     }
 }

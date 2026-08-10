@@ -6,11 +6,12 @@ PantryPal is a local-first Android kitchen companion built with Kotlin, Jetpack 
 
 - **Dashboard:** see expired/due-soon stock and aggregate low-stock suggestions, then add a restock item directly.
 - **First run:** choose one goal—pantry/expiry, meals, shopping, or reducing waste—then go straight to one small first success. Meal planning is optional, and notification/location permissions are requested only when a reminder or location feature is enabled.
+- **Add an item:** enter only a name and quantity to add quickly. Unit, location and category start from the most recently used values; expand **Item details** for location, opened state, category and expiry, or **Preferences and restock** for dietary flags and low-stock reminders. The sticky action bar keeps **Add item** reachable and offers **Save and add another** for a run of entries.
 - **Kitchen cupboard:** search, filter, sort and stocktake batches; track storage location, opened state, expiry, always-stocked status, and low-stock thresholds.
 - **Scan in / scan out:** identify products by barcode and add or consume a whole or partial quantity.
 - **Meal plan:** maintain four rotating weeks, rename and reorder the weekly rhythm, reuse meals or whole weeks, open the recipe book, and preview a pantry-aware shopping build.
 - **Recipes:** reuse meals as saved recipes, search locally, see cook-now/use-soon/missing-one-or-two ideas, search TheMealDB, import schema.org recipe links, favourite/rate recipes, add a recipe to the plan, and send missing ingredients to shopping.
-- **Shopping:** plan any rotation week, distinguish buy/home/check-stock ingredients, maintain custom or recurring sections, and finish a shop into pantry inventory.
+- **Shopping:** use an in-store-first checklist with an always-ready quick-add field and history suggestions; unchecked items come first, completed items collapse below, and row actions live in an accessible overflow menu with undo for accidental deletes. Use **Plan & prepare** for rotation-week choice, meal-plan review, receipt, and budget tools; custom/recurring sections, shopping builds, and finish-and-put-away remain available.
 - **Receipts and budget:** select an image for on-device text recognition or paste receipt text, correct uncertain names, quantities and prices, add purchases to pantry and price history, compare unit-price changes, and track weekly spending against a target.
 - **Past items:** review consumption history.
 - **Settings and data:** control appearance/reminders, export or restore a complete backup, exchange checksummed household snapshots, replay onboarding, and view build information.
@@ -32,6 +33,7 @@ The app uses manual screen state in `MainActivity` rather than Navigation Compos
 
 - Keep historical or other large derived calculations in Room queries where practical. For example, `ConsumptionDao.getRestockCandidates` derives the average consumption interval in SQL, so the app does not need to load and filter the full history in memory.
 - Do not place a clickable overlay over a text field without explicit semantics. If that interaction is necessary, expose the field label and current value through a `contentDescription` so TalkBack users retain the same context.
+- The add-item flow retains its barcode and prefilled-item paths. Only name and a positive quantity are required; expandable sections use button semantics and the expiry control announces its current value to TalkBack.
 
 ## Material 3 design system
 
@@ -45,7 +47,7 @@ Reusable building blocks live in `ui/components/ExpressiveComponents.kt`:
 - `FriendlyEmptyState` turns empty data into useful guidance.
 - `PantryPalSpacing` keeps screen rhythm consistent.
 
-Compact windows use four primary destinations: Home, Pantry, Plan, and Shop. Windows at 600dp and above use a navigation rail with the same hierarchy. Scan in/out remain contextual Pantry actions. Recipes, receipt review, budget/prices, backup, and household sharing are secondary destinations under Plan, Shop, or Settings, so the primary hierarchy remains stable.
+Compact windows use four primary destinations: Home, Pantry, Plan, and Shop. Windows at 600dp and above use a navigation rail with the same hierarchy. Scan in/out and the Past Items Log remain contextual Pantry actions; Recipes are reached from Plan; receipt review and Budget & Prices are reached from Shop; and Data & Sharing is reached from Settings. Settings is always a direct app-bar action with an explicit accessibility label, while Home stays focused on stock and restock guidance rather than a second menu. Secondary screens retain their parent-aware back behaviour.
 
 ## Data model
 
