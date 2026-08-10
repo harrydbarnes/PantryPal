@@ -45,7 +45,7 @@ Reusable building blocks live in `ui/components/ExpressiveComponents.kt`:
 - `FriendlyEmptyState` turns empty data into useful guidance.
 - `PantryPalSpacing` keeps screen rhythm consistent.
 
-Compact windows use four primary destinations: Home, Pantry, Plan, and Shop. Windows at 600dp and above use a navigation rail with the same hierarchy. Scan in/out remain contextual Pantry actions. Recipes, receipt review, budget/prices, backup, and household sharing are secondary destinations under Plan, Shop, or Settings, so the primary hierarchy remains stable.
+Compact windows use four primary destinations: Home, Pantry, Plan, and Shop. Windows at 600dp and above use a navigation rail with the same hierarchy. Scan in/out and the Past Items Log remain contextual Pantry actions; Recipes are reached from Plan; receipt review and Budget & Prices are reached from Shop; and Data & Sharing is reached from Settings. Settings is always a direct app-bar action with an explicit accessibility label, while Home stays focused on stock and restock guidance rather than a second menu. Secondary screens retain their parent-aware back behaviour.
 
 ## Data model
 
