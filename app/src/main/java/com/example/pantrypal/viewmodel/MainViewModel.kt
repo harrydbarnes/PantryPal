@@ -700,6 +700,12 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
+    fun restoreShoppingItem(item: ShoppingItemEntity) {
+        viewModelScope.launch {
+            repository.addShoppingItem(item)
+        }
+    }
+
     fun clearCheckedShoppingItems(weekId: String = _currentWeek.value) {
         viewModelScope.launch {
             repository.deleteCheckedShoppingItems(weekId)
