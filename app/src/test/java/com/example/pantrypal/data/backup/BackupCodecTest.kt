@@ -232,6 +232,8 @@ class BackupCodecTest {
             ),
             preferences = BackupPreferences(
                 onboardingComplete = true,
+                mealPlanIntroSeen = true,
+                settingsIntroSeen = true,
                 activeMealWeekId = "A",
                 householdName = "Home",
                 householdId = "household-1"

@@ -179,6 +179,8 @@ data class BackupShoppingLocation(
 
 data class BackupPreferences(
     val onboardingComplete: Boolean = false,
+    val mealPlanIntroSeen: Boolean = false,
+    val settingsIntroSeen: Boolean = false,
     val themeMode: String = "SYSTEM",
     val dynamicColorEnabled: Boolean = true,
     val expiryRemindersEnabled: Boolean = true,

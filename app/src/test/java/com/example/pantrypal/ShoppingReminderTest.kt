@@ -2,6 +2,7 @@ package com.example.pantrypal
 
 import com.example.pantrypal.util.ShoppingReminderCopybook
 import com.example.pantrypal.util.ShoppingReminderSchedule
+import com.example.pantrypal.util.ShoppingReminderTiming
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -46,6 +47,34 @@ class ShoppingReminderTest {
     }
 
     @Test
+    fun schedulesTheMorningOfTheUsualShopWhenRequested() {
+        val now = ZonedDateTime.of(2026, 8, 10, 12, 0, 0, 0, london)
+
+        val result = ShoppingReminderSchedule.nextReminderAt(
+            now = now,
+            shoppingDayOfWeek = DayOfWeek.SATURDAY.value,
+            shoppingTimeMinutes = 10 * 60,
+            timing = ShoppingReminderTiming.MORNING_OF
+        )
+
+        assertEquals(ZonedDateTime.of(2026, 8, 15, 8, 0, 0, 0, london), result)
+    }
+
+    @Test
+    fun schedulesOneHourBeforeTheUsualShopWhenRequested() {
+        val now = ZonedDateTime.of(2026, 8, 10, 12, 0, 0, 0, london)
+
+        val result = ShoppingReminderSchedule.nextReminderAt(
+            now = now,
+            shoppingDayOfWeek = DayOfWeek.SATURDAY.value,
+            shoppingTimeMinutes = 10 * 60,
+            timing = ShoppingReminderTiming.HOUR_BEFORE
+        )
+
+        assertEquals(ZonedDateTime.of(2026, 8, 15, 9, 0, 0, 0, london), result)
+    }
+
+    @Test
     fun reminderCopybookVariesByDateButIsStableForRetries() {
         val first = ShoppingReminderCopybook.forDate(
             date = java.time.LocalDate.of(2026, 8, 10),
@@ -63,5 +92,17 @@ class ShoppingReminderTest {
         assertEquals(first, sameDateRetry)
         assertNotEquals(first, nextWeek)
         assertTrue(first.message.contains("10:00 AM"))
+    }
+
+    @Test
+    fun sameDayReminderCopyDoesNotSayTomorrow() {
+        val copy = ShoppingReminderCopybook.forTiming(
+            date = java.time.LocalDate.of(2026, 8, 15),
+            shoppingTime = "10:00 AM",
+            timing = ShoppingReminderTiming.MORNING_OF
+        )
+
+        assertTrue(copy.message.contains("today"))
+        assertTrue(copy.message.contains("10:00 AM"))
     }
 }

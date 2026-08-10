@@ -24,7 +24,8 @@ object ShoppingReminderScheduler {
         val nextReminder = ShoppingReminderSchedule.nextReminderAt(
             now = now,
             shoppingDayOfWeek = settings.shoppingDayOfWeek,
-            shoppingTimeMinutes = settings.shoppingTimeMinutes
+            shoppingTimeMinutes = settings.shoppingTimeMinutes,
+            timing = settings.shoppingReminderTiming
         )
         val delay = Duration.between(now, nextReminder).toMillis().coerceAtLeast(0L)
         val request = OneTimeWorkRequestBuilder<ShoppingReminderWorker>()

@@ -30,28 +30,55 @@ object ShoppingReminderCopybook {
         val (title, messageTemplate) = variations[index]
         return ShoppingReminderCopy(title, messageTemplate.format(shoppingTime))
     }
+
+    fun forTiming(
+        date: LocalDate,
+        shoppingTime: String,
+        timing: ShoppingReminderTiming
+    ): ShoppingReminderCopy = when (timing) {
+        ShoppingReminderTiming.NIGHT_BEFORE -> forDate(date, shoppingTime)
+        ShoppingReminderTiming.MORNING_OF -> ShoppingReminderCopy(
+            "Shopping day check-in",
+            "Shopping around $shoppingTime today? Your list is ready for one last look."
+        )
+        ShoppingReminderTiming.HOUR_BEFORE -> ShoppingReminderCopy(
+            "Nearly shopping time",
+            "Your shop is around $shoppingTime. Open your list for a quick trolley check."
+        )
+    }
 }
 
 object ShoppingReminderSchedule {
     const val REMINDER_HOUR = 20
+    const val MORNING_REMINDER_HOUR = 8
 
     fun nextReminderAt(
         now: ZonedDateTime,
         shoppingDayOfWeek: Int,
-        shoppingTimeMinutes: Int
+        shoppingTimeMinutes: Int,
+        timing: ShoppingReminderTiming = ShoppingReminderTiming.NIGHT_BEFORE
     ): ZonedDateTime {
         val shoppingDay = DayOfWeek.of(shoppingDayOfWeek.coerceIn(1, 7))
-        val reminderTime = LocalTime.of(REMINDER_HOUR, 0)
 
         for (daysAhead in 0..7) {
             val shoppingDate = now.toLocalDate().plusDays(daysAhead.toLong())
             if (shoppingDate.dayOfWeek != shoppingDay) continue
 
-            val candidate = ZonedDateTime.of(
-                shoppingDate.minusDays(1),
-                reminderTime,
-                now.zone
+            val shoppingTime = LocalTime.of(
+                shoppingTimeMinutes.coerceIn(0, 23 * 60 + 59) / 60,
+                shoppingTimeMinutes.coerceIn(0, 23 * 60 + 59) % 60
             )
+            val candidate = when (timing) {
+                ShoppingReminderTiming.NIGHT_BEFORE -> ZonedDateTime.of(
+                    shoppingDate.minusDays(1), LocalTime.of(REMINDER_HOUR, 0), now.zone
+                )
+                ShoppingReminderTiming.MORNING_OF -> ZonedDateTime.of(
+                    shoppingDate, LocalTime.of(MORNING_REMINDER_HOUR, 0), now.zone
+                )
+                ShoppingReminderTiming.HOUR_BEFORE -> ZonedDateTime.of(
+                    shoppingDate, shoppingTime, now.zone
+                ).minusHours(1)
+            }
             if (candidate.isAfter(now)) return candidate
         }
 

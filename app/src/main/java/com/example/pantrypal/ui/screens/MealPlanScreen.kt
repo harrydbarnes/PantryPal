@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -47,12 +48,14 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,7 +83,9 @@ fun MealPlanScreen(
     val meals by viewModel.mealsState.collectAsState()
     val weeks by viewModel.mealWeeksState.collectAsState()
     val inventory by viewModel.inventoryState.collectAsState()
+    val hasSeenMealPlanIntro by viewModel.hasSeenMealPlanIntro.collectAsState()
     var displayedWeek by remember(currentWeek) { mutableStateOf(currentWeek) }
+    var showMealPlanIntro by rememberSaveable { mutableStateOf(!hasSeenMealPlanIntro) }
     var editingMeal by remember { mutableStateOf<MealEntity?>(null) }
     var showEditor by remember { mutableStateOf(false) }
     var showCopyWeekDialog by remember { mutableStateOf(false) }
@@ -88,6 +93,10 @@ fun MealPlanScreen(
     var copyingMeal by remember { mutableStateOf<MealEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        viewModel.markMealPlanIntroSeen()
+    }
 
     val weekMeals = remember(meals, displayedWeek) {
         meals.filter { it.week == displayedWeek }
@@ -128,15 +137,31 @@ fun MealPlanScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                ExpressiveHero(
-                    eyebrow = "Four-week rhythm",
-                    title = "Dinner plans, minus the daily scramble",
-                    supportingText = "Shape each week once, reuse the good bits, and turn ingredients into a tidy shop.",
-                    icon = Icons.Default.Restaurant,
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                )
+            if (showMealPlanIntro) {
+                item {
+                    ExpressiveHero(
+                        eyebrow = "Four-week rhythm",
+                        title = "Dinner plans, minus the daily scramble",
+                        supportingText = "Shape each week once, reuse the good bits, and turn ingredients into a tidy shop.",
+                        icon = Icons.Default.Restaurant,
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        trailingContent = {
+                            IconButton(
+                                onClick = {
+                                    showMealPlanIntro = false
+                                    viewModel.markMealPlanIntroSeen()
+                                },
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Dismiss meal plan introduction"
+                                )
+                            }
+                        }
+                    )
+                }
             }
 
             item {
@@ -156,11 +181,7 @@ fun MealPlanScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     StatusPill(
-                        label = "${weekMeals.size} meal${if (weekMeals.size == 1) "" else "s"} planned",
-                        icon = Icons.Default.CalendarMonth
-                    )
-                    StatusPill(
-                        label = if (displayedWeek == currentWeek) "Current rotation" else "Template preview",
+                        label = if (displayedWeek == currentWeek) "Current rotation" else "Week preview",
                         icon = if (displayedWeek == currentWeek) Icons.Default.AutoAwesome else Icons.Default.ContentCopy,
                         containerColor = if (displayedWeek == currentWeek) {
                             MaterialTheme.colorScheme.primaryContainer
@@ -172,6 +193,10 @@ fun MealPlanScreen(
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         }
+                    )
+                    StatusPill(
+                        label = "${weekMeals.size} meal${if (weekMeals.size == 1) "" else "s"} planned",
+                        icon = Icons.Default.CalendarMonth
                     )
                 }
             }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
@@ -53,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +73,7 @@ import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
 import com.example.pantrypal.util.ShoppingLocation
+import com.example.pantrypal.util.ShoppingReminderTiming
 import com.example.pantrypal.util.ShoppingReminderSchedule
 import java.time.DayOfWeek
 
@@ -89,6 +92,8 @@ private val ThemeChoices = listOf(
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
+    hasSeenSettingsIntro: Boolean,
+    onSettingsIntroSeen: () -> Unit,
     notificationPermissionGranted: Boolean,
     notificationPermissionRequired: Boolean,
     onThemeModeChange: (AppThemeMode) -> Unit,
@@ -97,6 +102,7 @@ fun SettingsScreen(
     onShoppingRemindersChange: (Boolean) -> Unit,
     onShoppingDayChange: (Int) -> Unit,
     onShoppingTimeChange: (Int) -> Unit,
+    onShoppingReminderTimingChange: (ShoppingReminderTiming) -> Unit,
     onNearbyShoppingRemindersChange: (Boolean) -> Unit,
     shoppingLocations: List<ShoppingLocation>,
     locationPermissionGranted: Boolean,
@@ -109,6 +115,12 @@ fun SettingsScreen(
     onLaunchOnboarding: () -> Unit,
     onOpenDataManagement: () -> Unit = {}
 ) {
+    var showSettingsIntro by rememberSaveable { mutableStateOf(!hasSeenSettingsIntro) }
+
+    LaunchedEffect(Unit) {
+        onSettingsIntroSeen()
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useTwoColumns = maxWidth >= 720.dp
         Column(
@@ -125,14 +137,30 @@ fun SettingsScreen(
                 ),
             verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
         ) {
-            ExpressiveHero(
-                eyebrow = "Make it yours",
-                title = "PantryPal, set up your way",
-                supportingText = "Choose how the app looks, when it nudges you, and revisit the essentials whenever you like.",
-                icon = Icons.Default.Spa,
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-            )
+            if (showSettingsIntro) {
+                ExpressiveHero(
+                    eyebrow = "Make it yours",
+                    title = "PantryPal, set up your way",
+                    supportingText = "Choose how the app looks, when it nudges you, and revisit the essentials whenever you like.",
+                    icon = Icons.Default.Spa,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    trailingContent = {
+                        IconButton(
+                            onClick = {
+                                showSettingsIntro = false
+                                onSettingsIntroSeen()
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Dismiss settings introduction"
+                            )
+                        }
+                    }
+                )
+            }
 
             if (useTwoColumns) {
                 Row(
@@ -160,12 +188,14 @@ fun SettingsScreen(
                             shoppingRemindersEnabled = settings.shoppingRemindersEnabled,
                             shoppingDayOfWeek = settings.shoppingDayOfWeek,
                             shoppingTimeMinutes = settings.shoppingTimeMinutes,
+                            shoppingReminderTiming = settings.shoppingReminderTiming,
                             permissionGranted = notificationPermissionGranted,
                             permissionRequired = notificationPermissionRequired,
                             onEnabledChange = onExpiryRemindersChange,
                             onShoppingRemindersChange = onShoppingRemindersChange,
                             onShoppingDayChange = onShoppingDayChange,
                             onShoppingTimeChange = onShoppingTimeChange,
+                            onShoppingReminderTimingChange = onShoppingReminderTimingChange,
                             onOpenNotificationSettings = onOpenNotificationSettings
                         )
                         NearbyShoppingSettingsCard(
@@ -194,12 +224,14 @@ fun SettingsScreen(
                     shoppingRemindersEnabled = settings.shoppingRemindersEnabled,
                     shoppingDayOfWeek = settings.shoppingDayOfWeek,
                     shoppingTimeMinutes = settings.shoppingTimeMinutes,
+                    shoppingReminderTiming = settings.shoppingReminderTiming,
                     permissionGranted = notificationPermissionGranted,
                     permissionRequired = notificationPermissionRequired,
                     onEnabledChange = onExpiryRemindersChange,
                     onShoppingRemindersChange = onShoppingRemindersChange,
                     onShoppingDayChange = onShoppingDayChange,
                     onShoppingTimeChange = onShoppingTimeChange,
+                    onShoppingReminderTimingChange = onShoppingReminderTimingChange,
                     onOpenNotificationSettings = onOpenNotificationSettings
                 )
                 NearbyShoppingSettingsCard(
@@ -278,12 +310,14 @@ private fun ReminderSettingsCard(
     shoppingRemindersEnabled: Boolean,
     shoppingDayOfWeek: Int,
     shoppingTimeMinutes: Int,
+    shoppingReminderTiming: ShoppingReminderTiming,
     permissionGranted: Boolean,
     permissionRequired: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onShoppingRemindersChange: (Boolean) -> Unit,
     onShoppingDayChange: (Int) -> Unit,
     onShoppingTimeChange: (Int) -> Unit,
+    onShoppingReminderTimingChange: (ShoppingReminderTiming) -> Unit,
     onOpenNotificationSettings: () -> Unit
 ) {
     var dayMenuExpanded by remember { mutableStateOf(false) }
@@ -308,7 +342,7 @@ private fun ReminderSettingsCard(
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Text("Shopping nudge", style = MaterialTheme.typography.titleMedium)
         Text(
-            "A friendly prompt arrives at 8:00 PM the evening before your usual shop.",
+            "Choose whether the prompt arrives the night before, morning of, or one hour before your usual shop.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -358,12 +392,23 @@ private fun ReminderSettingsCard(
                     Text(ShoppingReminderSchedule.formatShoppingTime(shoppingTimeMinutes))
                 }
             }
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                listOf(
+                    ShoppingReminderTiming.NIGHT_BEFORE to "Night before",
+                    ShoppingReminderTiming.MORNING_OF to "Morning",
+                    ShoppingReminderTiming.HOUR_BEFORE to "1 hour before"
+                ).forEachIndexed { index, (timing, label) ->
+                    SegmentedButton(
+                        selected = shoppingReminderTiming == timing,
+                        onClick = { onShoppingReminderTimingChange(timing) },
+                        shape = SegmentedButtonDefaults.itemShape(index, 3)
+                    ) { Text(label) }
+                }
+            }
             Text(
                 "Usual shop: ${ShoppingReminderSchedule.formatShoppingDay(shoppingDayOfWeek)} " +
                     "around ${ShoppingReminderSchedule.formatShoppingTime(shoppingTimeMinutes)}. " +
-                    "Nudge: ${ShoppingReminderSchedule.formatShoppingDay(
-                        DayOfWeek.of(shoppingDayOfWeek.coerceIn(1, 7)).minus(1).value
-                    )} evening.",
+                    "Nudge: ${shoppingReminderTiming.settingsLabel(shoppingDayOfWeek)}.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -439,6 +484,13 @@ private fun ReminderSettingsCard(
             )
         }
     }
+}
+
+private fun ShoppingReminderTiming.settingsLabel(shoppingDayOfWeek: Int): String = when (this) {
+    ShoppingReminderTiming.NIGHT_BEFORE ->
+        "${ShoppingReminderSchedule.formatShoppingDay(DayOfWeek.of(shoppingDayOfWeek.coerceIn(1, 7)).minus(1).value)} evening"
+    ShoppingReminderTiming.MORNING_OF -> "the morning of your shop"
+    ShoppingReminderTiming.HOUR_BEFORE -> "one hour before your shop"
 }
 
 @Composable

@@ -318,6 +318,14 @@ class PantryFeaturesRepository(
                     AppPreferences.KEY_ONBOARDING_COMPLETE,
                     false
                 ),
+                mealPlanIntroSeen = preferences.getBoolean(
+                    AppPreferences.KEY_MEAL_PLAN_INTRO_SEEN,
+                    false
+                ),
+                settingsIntroSeen = preferences.getBoolean(
+                    AppPreferences.KEY_SETTINGS_INTRO_SEEN,
+                    false
+                ),
                 themeMode = preferences.getString(
                     AppPreferences.KEY_THEME_MODE,
                     "SYSTEM"
@@ -398,6 +406,8 @@ class PantryFeaturesRepository(
         val restored = payload.preferences
         preferences.edit()
             .putBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, restored.onboardingComplete)
+            .putBoolean(AppPreferences.KEY_MEAL_PLAN_INTRO_SEEN, restored.mealPlanIntroSeen)
+            .putBoolean(AppPreferences.KEY_SETTINGS_INTRO_SEEN, restored.settingsIntroSeen)
             .putString(AppPreferences.KEY_THEME_MODE, restored.themeMode)
             .putBoolean(AppPreferences.KEY_DYNAMIC_COLOR, restored.dynamicColorEnabled)
             .putBoolean(AppPreferences.KEY_EXPIRY_REMINDERS, restored.expiryRemindersEnabled)

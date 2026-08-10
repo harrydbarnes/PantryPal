@@ -42,6 +42,7 @@ import com.example.pantrypal.util.ShoppingNeedStatus
 import com.example.pantrypal.util.ShoppingReconciliationLine
 import com.example.pantrypal.util.ShoppingLocation
 import com.example.pantrypal.util.ShoppingLocationStore
+import com.example.pantrypal.util.ShoppingReminderTiming
 import com.example.pantrypal.util.classifyExpiry
 import com.example.pantrypal.util.expiryLabel
 import com.example.pantrypal.util.reconcileShoppingIngredients
@@ -87,6 +88,16 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     )
     val hasCompletedOnboarding: StateFlow<Boolean> = _hasCompletedOnboarding.asStateFlow()
 
+    private val _hasSeenMealPlanIntro = MutableStateFlow(
+        prefs.getBoolean(AppPreferences.KEY_MEAL_PLAN_INTRO_SEEN, false)
+    )
+    val hasSeenMealPlanIntro: StateFlow<Boolean> = _hasSeenMealPlanIntro.asStateFlow()
+
+    private val _hasSeenSettingsIntro = MutableStateFlow(
+        prefs.getBoolean(AppPreferences.KEY_SETTINGS_INTRO_SEEN, false)
+    )
+    val hasSeenSettingsIntro: StateFlow<Boolean> = _hasSeenSettingsIntro.asStateFlow()
+
     private val _appSettings = MutableStateFlow(AppPreferences.readSettings(application))
     val appSettings: StateFlow<AppSettings> = _appSettings.asStateFlow()
 
@@ -113,6 +124,18 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     fun completeOnboarding() {
         _hasCompletedOnboarding.value = true
         prefs.edit().putBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, true).apply()
+    }
+
+    fun markMealPlanIntroSeen() {
+        if (_hasSeenMealPlanIntro.value) return
+        _hasSeenMealPlanIntro.value = true
+        prefs.edit().putBoolean(AppPreferences.KEY_MEAL_PLAN_INTRO_SEEN, true).apply()
+    }
+
+    fun markSettingsIntroSeen() {
+        if (_hasSeenSettingsIntro.value) return
+        _hasSeenSettingsIntro.value = true
+        prefs.edit().putBoolean(AppPreferences.KEY_SETTINGS_INTRO_SEEN, true).apply()
     }
 
     fun setThemeMode(themeMode: AppThemeMode) {
@@ -145,6 +168,11 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         val safeTime = minutesSinceMidnight.coerceIn(0, 23 * 60 + 59)
         _appSettings.value = _appSettings.value.copy(shoppingTimeMinutes = safeTime)
         prefs.edit().putInt(AppPreferences.KEY_SHOPPING_TIME, safeTime).apply()
+    }
+
+    fun setShoppingReminderTiming(timing: ShoppingReminderTiming) {
+        _appSettings.value = _appSettings.value.copy(shoppingReminderTiming = timing)
+        prefs.edit().putString(AppPreferences.KEY_SHOPPING_REMINDER_TIMING, timing.name).apply()
     }
 
     fun setNearbyShoppingRemindersEnabled(enabled: Boolean) {

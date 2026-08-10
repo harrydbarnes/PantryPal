@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.ui.screens.ScanOutScreen
 import com.example.pantrypal.ui.screens.SettingsScreen
 import com.example.pantrypal.ui.screens.PastItemsScreen
@@ -243,6 +244,7 @@ fun KitchenApp(
     val expiringItems by viewModel.expiringItemsState.collectAsState()
     val restockSuggestions by viewModel.restockSuggestionsState.collectAsState()
     val hasCompletedOnboarding by viewModel.hasCompletedOnboarding.collectAsState()
+    val hasSeenSettingsIntro by viewModel.hasSeenSettingsIntro.collectAsState()
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Dashboard) }
     var showOnboarding by rememberSaveable {
@@ -590,7 +592,43 @@ fun KitchenApp(
     if (showOnboarding) {
         OnboardingScreen(
             isReplay = hasCompletedOnboarding,
-            onComplete = {
+            initialShoppingDay = appSettings.shoppingDayOfWeek,
+            initialShoppingTimeMinutes = appSettings.shoppingTimeMinutes,
+            initialShoppingReminderTiming = appSettings.shoppingReminderTiming,
+            onSaveShoppingRoutine = { day, time, timing ->
+                viewModel.setShoppingReminderDay(day)
+                viewModel.setShoppingReminderTime(time)
+                viewModel.setShoppingReminderTiming(timing)
+                viewModel.setShoppingRemindersEnabled(true)
+            },
+            onSaveRegulars = { regulars ->
+                regulars.forEach { regular ->
+                    viewModel.addShoppingItem(
+                        name = regular,
+                        quantity = 1.0,
+                        unit = "pcs",
+                        sectionId = ShoppingSectionEntity.ID_EVERY_WEEK
+                    )
+                }
+            },
+            onSaveShoppingSpot = { name ->
+                viewModel.setNearbyShoppingRemindersEnabled(true)
+                pendingShoppingLocationName = name
+                if (ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
+                    pendingShoppingLocationName = null
+                    captureCurrentLocation(name)
+                } else {
+                    requestLocationPermission()
+                }
+            },
+            onCompleteToMealPlan = {
+                viewModel.completeOnboarding()
+                showOnboarding = false
+                if (!hasCompletedOnboarding) {
+                    currentScreen = AppScreen.MealPlan
+                }
+            },
+            onSkip = {
                 viewModel.completeOnboarding()
                 showOnboarding = false
             }
@@ -809,6 +847,8 @@ fun KitchenApp(
                         }
                         AppScreen.Settings -> SettingsScreen(
                             settings = appSettings,
+                            hasSeenSettingsIntro = hasSeenSettingsIntro,
+                            onSettingsIntroSeen = viewModel::markSettingsIntroSeen,
                             notificationPermissionGranted = hasNotificationPermission,
                             notificationPermissionRequired =
                                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
@@ -818,6 +858,7 @@ fun KitchenApp(
                             onShoppingRemindersChange = viewModel::setShoppingRemindersEnabled,
                             onShoppingDayChange = viewModel::setShoppingReminderDay,
                             onShoppingTimeChange = viewModel::setShoppingReminderTime,
+                            onShoppingReminderTimingChange = viewModel::setShoppingReminderTiming,
                             onNearbyShoppingRemindersChange = { enabled ->
                                 viewModel.setNearbyShoppingRemindersEnabled(enabled)
                                 if (enabled) {

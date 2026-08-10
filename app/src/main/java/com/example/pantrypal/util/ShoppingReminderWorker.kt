@@ -35,9 +35,10 @@ class ShoppingReminderWorker(
     private fun showNotification(settings: AppSettings) {
         val channelId = Constants.SHOPPING_REMINDER_CHANNEL_ID
         val shoppingTime = ShoppingReminderSchedule.formatShoppingTime(settings.shoppingTimeMinutes)
-        val copy = ShoppingReminderCopybook.forDate(
+        val copy = ShoppingReminderCopybook.forTiming(
             date = ZonedDateTime.now().toLocalDate(),
-            shoppingTime = shoppingTime
+            shoppingTime = shoppingTime,
+            timing = settings.shoppingReminderTiming
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
