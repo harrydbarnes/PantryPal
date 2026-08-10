@@ -14,6 +14,7 @@ class KitchenWorkerFactory(private val repository: KitchenRepository) : WorkerFa
     ): ListenableWorker? {
         return when (workerClassName) {
             ExpirationWorker::class.java.name -> ExpirationWorker(appContext, workerParameters, repository)
+            ShoppingReminderWorker::class.java.name -> ShoppingReminderWorker(appContext, workerParameters)
             else -> null
         }
     }

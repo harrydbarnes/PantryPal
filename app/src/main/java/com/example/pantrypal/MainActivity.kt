@@ -86,6 +86,8 @@ import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
 import com.example.pantrypal.util.ExpiryStatus
 import com.example.pantrypal.util.InventorySort
+import com.example.pantrypal.util.ShoppingReminderScheduler
+import com.example.pantrypal.util.ShoppingReminderWorker
 import coil.compose.AsyncImage
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -114,11 +116,13 @@ sealed class AppScreen(@StringRes val titleResId: Int) {
 
 class MainActivity : ComponentActivity() {
     private val sharedRecipeUrl = MutableStateFlow<String?>(null)
+    private val shoppingReminderAction = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         sharedRecipeUrl.value = extractSharedRecipeUrl(intent)
+        shoppingReminderAction.value = extractShoppingReminderAction(intent)
 
         val app = application as PantryPalApplication
         val repository = app.repository
@@ -140,6 +144,13 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(appSettings.expiryRemindersEnabled) {
                 updateExpirationWork(this@MainActivity, appSettings.expiryRemindersEnabled)
             }
+            LaunchedEffect(
+                appSettings.shoppingRemindersEnabled,
+                appSettings.shoppingDayOfWeek,
+                appSettings.shoppingTimeMinutes
+            ) {
+                ShoppingReminderScheduler.update(this@MainActivity, appSettings)
+            }
 
             PantryPalTheme(
                 darkTheme = darkTheme,
@@ -154,7 +165,9 @@ class MainActivity : ComponentActivity() {
                         featuresViewModel = featuresViewModel,
                         appSettings = appSettings,
                         incomingSharedRecipeUrl = sharedRecipeUrl,
-                        onSharedRecipeUrlConsumed = { sharedRecipeUrl.value = null }
+                        onSharedRecipeUrlConsumed = { sharedRecipeUrl.value = null },
+                        incomingShoppingReminderAction = shoppingReminderAction,
+                        onShoppingReminderActionConsumed = { shoppingReminderAction.value = null }
                     )
                 }
             }
@@ -164,6 +177,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         sharedRecipeUrl.value = extractSharedRecipeUrl(intent)
+        shoppingReminderAction.value = extractShoppingReminderAction(intent)
     }
 }
 
@@ -171,6 +185,12 @@ private fun extractSharedRecipeUrl(intent: Intent?): String? {
     if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return null
     val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
     return Regex("""https?://\S+""").find(sharedText)?.value?.trimEnd('.', ',', ')')
+}
+
+private fun extractShoppingReminderAction(intent: Intent?): String? = when (intent?.action) {
+    ShoppingReminderWorker.ACTION_UPDATE_LIST,
+    ShoppingReminderWorker.ACTION_OPEN_LIST -> intent.action
+    else -> null
 }
 
 private const val MAX_IMPORT_FILE_CHARS = 10_000_000
@@ -208,7 +228,9 @@ fun KitchenApp(
     featuresViewModel: PantryFeaturesViewModel,
     appSettings: AppSettings,
     incomingSharedRecipeUrl: StateFlow<String?>,
-    onSharedRecipeUrlConsumed: () -> Unit
+    onSharedRecipeUrlConsumed: () -> Unit,
+    incomingShoppingReminderAction: StateFlow<String?>,
+    onShoppingReminderActionConsumed: () -> Unit
 ) {
     val inventory by viewModel.inventoryState.collectAsState()
     val expiringItems by viewModel.expiringItemsState.collectAsState()
@@ -230,6 +252,17 @@ fun KitchenApp(
             currentScreen = AppScreen.Recipes
             featuresViewModel.importRecipeUrl(url)
             onSharedRecipeUrlConsumed()
+        }
+    }
+
+    val incomingReminderAction by incomingShoppingReminderAction.collectAsState()
+    LaunchedEffect(incomingReminderAction) {
+        incomingReminderAction?.let { action ->
+            currentScreen = AppScreen.ShoppingList
+            if (action == ShoppingReminderWorker.ACTION_UPDATE_LIST) {
+                viewModel.buildShoppingListForWeek(viewModel.currentWeek.value)
+            }
+            onShoppingReminderActionConsumed()
         }
     }
 
@@ -411,12 +444,13 @@ fun KitchenApp(
     LaunchedEffect(
         showOnboarding,
         appSettings.expiryRemindersEnabled,
+        appSettings.shoppingRemindersEnabled,
         hasNotificationPermission,
         notificationPermissionRequested
     ) {
         if (
             !showOnboarding &&
-            appSettings.expiryRemindersEnabled &&
+            (appSettings.expiryRemindersEnabled || appSettings.shoppingRemindersEnabled) &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !hasNotificationPermission &&
             !notificationPermissionRequested
@@ -654,6 +688,9 @@ fun KitchenApp(
                             onThemeModeChange = viewModel::setThemeMode,
                             onDynamicColorChange = viewModel::setDynamicColorEnabled,
                             onExpiryRemindersChange = viewModel::setExpiryRemindersEnabled,
+                            onShoppingRemindersChange = viewModel::setShoppingRemindersEnabled,
+                            onShoppingDayChange = viewModel::setShoppingReminderDay,
+                            onShoppingTimeChange = viewModel::setShoppingReminderTime,
                             onOpenNotificationSettings = {
                                 notificationSettingsLauncher.launch(
                                     Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {

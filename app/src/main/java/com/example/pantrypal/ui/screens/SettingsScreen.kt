@@ -2,6 +2,7 @@ package com.example.pantrypal.ui.screens
 
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,9 @@ import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,7 +44,14 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -53,6 +64,8 @@ import com.example.pantrypal.ui.components.PantryPalSpacing
 import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
+import com.example.pantrypal.util.ShoppingReminderSchedule
+import java.time.DayOfWeek
 
 private data class ThemeChoice(
     val mode: AppThemeMode,
@@ -74,6 +87,9 @@ fun SettingsScreen(
     onThemeModeChange: (AppThemeMode) -> Unit,
     onDynamicColorChange: (Boolean) -> Unit,
     onExpiryRemindersChange: (Boolean) -> Unit,
+    onShoppingRemindersChange: (Boolean) -> Unit,
+    onShoppingDayChange: (Int) -> Unit,
+    onShoppingTimeChange: (Int) -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onLaunchOnboarding: () -> Unit,
     onOpenDataManagement: () -> Unit = {}
@@ -126,9 +142,15 @@ fun SettingsScreen(
                     ) {
                         ReminderSettingsCard(
                             enabled = settings.expiryRemindersEnabled,
+                            shoppingRemindersEnabled = settings.shoppingRemindersEnabled,
+                            shoppingDayOfWeek = settings.shoppingDayOfWeek,
+                            shoppingTimeMinutes = settings.shoppingTimeMinutes,
                             permissionGranted = notificationPermissionGranted,
                             permissionRequired = notificationPermissionRequired,
                             onEnabledChange = onExpiryRemindersChange,
+                            onShoppingRemindersChange = onShoppingRemindersChange,
+                            onShoppingDayChange = onShoppingDayChange,
+                            onShoppingTimeChange = onShoppingTimeChange,
                             onOpenNotificationSettings = onOpenNotificationSettings
                         )
                         LearningCard(onLaunchOnboarding)
@@ -143,9 +165,15 @@ fun SettingsScreen(
                 )
                 ReminderSettingsCard(
                     enabled = settings.expiryRemindersEnabled,
+                    shoppingRemindersEnabled = settings.shoppingRemindersEnabled,
+                    shoppingDayOfWeek = settings.shoppingDayOfWeek,
+                    shoppingTimeMinutes = settings.shoppingTimeMinutes,
                     permissionGranted = notificationPermissionGranted,
                     permissionRequired = notificationPermissionRequired,
                     onEnabledChange = onExpiryRemindersChange,
+                    onShoppingRemindersChange = onShoppingRemindersChange,
+                    onShoppingDayChange = onShoppingDayChange,
+                    onShoppingTimeChange = onShoppingTimeChange,
                     onOpenNotificationSettings = onOpenNotificationSettings
                 )
                 LearningCard(onLaunchOnboarding)
@@ -206,19 +234,29 @@ private fun AppearanceSettingsCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReminderSettingsCard(
     enabled: Boolean,
+    shoppingRemindersEnabled: Boolean,
+    shoppingDayOfWeek: Int,
+    shoppingTimeMinutes: Int,
     permissionGranted: Boolean,
     permissionRequired: Boolean,
     onEnabledChange: (Boolean) -> Unit,
+    onShoppingRemindersChange: (Boolean) -> Unit,
+    onShoppingDayChange: (Int) -> Unit,
+    onShoppingTimeChange: (Int) -> Unit,
     onOpenNotificationSettings: () -> Unit
 ) {
-    val permissionNeedsAttention = enabled && permissionRequired && !permissionGranted
+    var dayMenuExpanded by remember { mutableStateOf(false) }
+    var timePickerVisible by remember { mutableStateOf(false) }
+    val anyReminderEnabled = enabled || shoppingRemindersEnabled
+    val permissionNeedsAttention = anyReminderEnabled && permissionRequired && !permissionGranted
     SettingsSectionCard(
         icon = Icons.Default.NotificationsActive,
-        title = "Expiry reminders",
-        supportingText = "A daily background check can flag food that is close to its use-by date."
+        title = "Reminders & nudges",
+        supportingText = "Helpful check-ins for food that needs attention and shopping trips you already make."
     ) {
         SettingSwitchRow(
             title = "Remind me about expiring food",
@@ -230,6 +268,69 @@ private fun ReminderSettingsCard(
             checked = enabled,
             onCheckedChange = onEnabledChange
         )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text("Shopping nudge", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "A friendly prompt arrives at 8:00 PM the evening before your usual shop.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        SettingSwitchRow(
+            title = "Remind me before my usual shop",
+            supportingText = if (shoppingRemindersEnabled) {
+                "PantryPal will ask if you are still shopping and offer to refresh your list."
+            } else {
+                "Choose your usual day and time to get an optional pre-shop nudge."
+            },
+            checked = shoppingRemindersEnabled,
+            onCheckedChange = onShoppingRemindersChange
+        )
+        if (shoppingRemindersEnabled) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.xs)
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = { dayMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(ShoppingReminderSchedule.formatShoppingDay(shoppingDayOfWeek))
+                    }
+                    DropdownMenu(
+                        expanded = dayMenuExpanded,
+                        onDismissRequest = { dayMenuExpanded = false }
+                    ) {
+                        (1..7).forEach { day ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(ShoppingReminderSchedule.formatShoppingDay(day))
+                                },
+                                onClick = {
+                                    onShoppingDayChange(day)
+                                    dayMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = { timePickerVisible = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(ShoppingReminderSchedule.formatShoppingTime(shoppingTimeMinutes))
+                }
+            }
+            Text(
+                "Usual shop: ${ShoppingReminderSchedule.formatShoppingDay(shoppingDayOfWeek)} " +
+                    "around ${ShoppingReminderSchedule.formatShoppingTime(shoppingTimeMinutes)}. " +
+                    "Nudge: ${ShoppingReminderSchedule.formatShoppingDay(
+                        DayOfWeek.of(shoppingDayOfWeek.coerceIn(1, 7)).minus(1).value
+                    )} evening.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -249,7 +350,7 @@ private fun ReminderSettingsCard(
             }
             StatusPill(
                 label = when {
-                    !enabled -> "Paused"
+                    !anyReminderEnabled -> "Paused"
                     permissionNeedsAttention -> "Action needed"
                     else -> "Ready"
                 },
@@ -272,6 +373,33 @@ private fun ReminderSettingsCard(
             ) {
                 Text("Manage Android notifications")
             }
+        }
+        if (timePickerVisible) {
+            val timePickerState = rememberTimePickerState(
+                initialHour = shoppingTimeMinutes / 60,
+                initialMinute = shoppingTimeMinutes % 60,
+                is24Hour = false
+            )
+            AlertDialog(
+                onDismissRequest = { timePickerVisible = false },
+                title = { Text("When do you usually shop?") },
+                text = { TimePicker(state = timePickerState) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onShoppingTimeChange(timePickerState.hour * 60 + timePickerState.minute)
+                            timePickerVisible = false
+                        }
+                    ) {
+                        Text("Save time")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { timePickerVisible = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

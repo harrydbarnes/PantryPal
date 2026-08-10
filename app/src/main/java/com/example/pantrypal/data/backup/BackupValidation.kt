@@ -216,6 +216,14 @@ object BackupValidator {
         if (payload.preferences.themeMode !in setOf("SYSTEM", "LIGHT", "DARK")) {
             errors += "preferences.themeMode is unsupported."
         }
+        // Zero is accepted for backups created before shopping reminders existed;
+        // restore normalizes it to the default Saturday setting.
+        if (payload.preferences.shoppingDayOfWeek !in 0..7) {
+            errors += "preferences.shoppingDayOfWeek is unsupported."
+        }
+        if (payload.preferences.shoppingTimeMinutes !in 0..(23 * 60 + 59)) {
+            errors += "preferences.shoppingTimeMinutes is unsupported."
+        }
         if (
             payload.preferences.activeMealWeekId != null &&
             mealWeekIds.isNotEmpty() &&

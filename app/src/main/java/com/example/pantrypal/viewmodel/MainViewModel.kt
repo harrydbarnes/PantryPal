@@ -125,6 +125,23 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         prefs.edit().putBoolean(AppPreferences.KEY_EXPIRY_REMINDERS, enabled).apply()
     }
 
+    fun setShoppingRemindersEnabled(enabled: Boolean) {
+        _appSettings.value = _appSettings.value.copy(shoppingRemindersEnabled = enabled)
+        prefs.edit().putBoolean(AppPreferences.KEY_SHOPPING_REMINDERS, enabled).apply()
+    }
+
+    fun setShoppingReminderDay(dayOfWeek: Int) {
+        val safeDay = dayOfWeek.coerceIn(1, 7)
+        _appSettings.value = _appSettings.value.copy(shoppingDayOfWeek = safeDay)
+        prefs.edit().putInt(AppPreferences.KEY_SHOPPING_DAY, safeDay).apply()
+    }
+
+    fun setShoppingReminderTime(minutesSinceMidnight: Int) {
+        val safeTime = minutesSinceMidnight.coerceIn(0, 23 * 60 + 59)
+        _appSettings.value = _appSettings.value.copy(shoppingTimeMinutes = safeTime)
+        prefs.edit().putInt(AppPreferences.KEY_SHOPPING_TIME, safeTime).apply()
+    }
+
     // UI State for Inventory
     val inventoryState: StateFlow<List<InventoryUiModel>> = repository.currentInventory
         .map { list ->

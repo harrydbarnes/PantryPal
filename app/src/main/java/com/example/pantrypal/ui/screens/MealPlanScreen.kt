@@ -92,6 +92,12 @@ fun MealPlanScreen(
         meals.filter { it.week == displayedWeek }
             .sortedWith(compareBy<MealEntity> { it.dayOfWeek }.thenBy { MealEntity.SLOTS.indexOf(it.mealSlot) })
     }
+    val mealsByDay = remember(weekMeals) {
+        weekMeals.groupBy(MealEntity::dayOfWeek)
+    }
+    val hasIngredients = remember(weekMeals) {
+        weekMeals.any { it.ingredients.isNotEmpty() }
+    }
     val displayedWeekDetails = weeks.firstOrNull { it.weekId == displayedWeek }
     val weekOrder = weeks.map { it.weekId }
 
@@ -234,7 +240,7 @@ fun MealPlanScreen(
                                     viewModel.buildShoppingListForWeek(displayedWeek)
                                     scope.launch { snackbarHostState.showSnackbar("Week $displayedWeek added for review") }
                                 },
-                                enabled = weekMeals.any { it.ingredients.isNotEmpty() },
+                                enabled = hasIngredients,
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.Default.ShoppingCart, contentDescription = null)
@@ -273,7 +279,7 @@ fun MealPlanScreen(
                     )
                 }
                 (1..7).forEach { day ->
-                    val dayMeals = weekMeals.filter { it.dayOfWeek == day }
+                    val dayMeals = mealsByDay[day].orEmpty()
                     item(key = "day-$day") {
                         DaySchedule(
                             day = day,
@@ -518,6 +524,8 @@ private fun MealRow(
     onCopy: (MealEntity) -> Unit,
     onDelete: (MealEntity) -> Unit
 ) {
+    val ingredientSummary = remember(meal.ingredients) { meal.ingredients.joinToString() }
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -532,7 +540,7 @@ private fun MealRow(
             Text(meal.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             if (meal.ingredients.isNotEmpty()) {
                 Text(
-                    meal.ingredients.joinToString(),
+                    ingredientSummary,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,

@@ -318,6 +318,18 @@ class PantryFeaturesRepository(
                     AppPreferences.KEY_EXPIRY_REMINDERS,
                     true
                 ),
+                shoppingRemindersEnabled = preferences.getBoolean(
+                    AppPreferences.KEY_SHOPPING_REMINDERS,
+                    false
+                ),
+                shoppingDayOfWeek = preferences.getInt(
+                    AppPreferences.KEY_SHOPPING_DAY,
+                    AppPreferences.DEFAULT_SHOPPING_DAY
+                ),
+                shoppingTimeMinutes = preferences.getInt(
+                    AppPreferences.KEY_SHOPPING_TIME,
+                    AppPreferences.DEFAULT_SHOPPING_TIME_MINUTES
+                ),
                 activeMealWeekId = preferences.getString(KEY_CURRENT_WEEK, null),
                 defaultCurrencyCode = DEFAULT_CURRENCY,
                 householdName = preferences.getString(KEY_HOUSEHOLD_NAME, null),
@@ -373,6 +385,16 @@ class PantryFeaturesRepository(
             .putString(AppPreferences.KEY_THEME_MODE, restored.themeMode)
             .putBoolean(AppPreferences.KEY_DYNAMIC_COLOR, restored.dynamicColorEnabled)
             .putBoolean(AppPreferences.KEY_EXPIRY_REMINDERS, restored.expiryRemindersEnabled)
+            .putBoolean(AppPreferences.KEY_SHOPPING_REMINDERS, restored.shoppingRemindersEnabled)
+            .putInt(
+                AppPreferences.KEY_SHOPPING_DAY,
+                restored.shoppingDayOfWeek.takeIf { it in 1..7 }
+                    ?: AppPreferences.DEFAULT_SHOPPING_DAY
+            )
+            .putInt(
+                AppPreferences.KEY_SHOPPING_TIME,
+                restored.shoppingTimeMinutes.coerceIn(0, 23 * 60 + 59)
+            )
             .putString(KEY_CURRENT_WEEK, restored.activeMealWeekId ?: MealEntity.WEEK_A)
             .putString(KEY_HOUSEHOLD_NAME, restored.householdName)
             .putString(KEY_HOUSEHOLD_ID, restored.householdId)
