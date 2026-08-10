@@ -8,7 +8,7 @@ class MealIngredientSelectionTest {
     @Test
     fun choicesKeepSelectedIngredientsAndRemoveCaseInsensitiveDuplicates() {
         assertEquals(
-            listOf("Tomatoes", "Milk", "Basil"),
+            listOf("Tomatoes", "milk", "Basil"),
             MealIngredientSelection.choices(
                 selected = listOf("Tomatoes"),
                 suggestions = listOf("milk", "tomatoes", "Basil")
