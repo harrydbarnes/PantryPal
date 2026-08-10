@@ -6,6 +6,7 @@ import com.example.pantrypal.data.database.KitchenDatabase
 import com.example.pantrypal.data.repository.KitchenRepository
 import com.example.pantrypal.data.repository.PantryFeaturesRepository
 import com.example.pantrypal.util.KitchenWorkerFactory
+import com.example.pantrypal.widget.PantryPalWidgetProvider
 
 class PantryPalApplication : Application(), Configuration.Provider {
 
@@ -28,6 +29,18 @@ class PantryPalApplication : Application(), Configuration.Provider {
 
     val featuresRepository: PantryFeaturesRepository by lazy {
         PantryFeaturesRepository(this, database, repository)
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        database.invalidationTracker.addObserver(object : androidx.room.InvalidationTracker.Observer(
+            "shopping_list",
+            "inventory"
+        ) {
+            override fun onInvalidated(tables: Set<String>) {
+                PantryPalWidgetProvider.updateWidgets(this@PantryPalApplication)
+            }
+        })
     }
 
     override val workManagerConfiguration: Configuration

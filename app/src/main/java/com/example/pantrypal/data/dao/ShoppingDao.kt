@@ -9,6 +9,9 @@ interface ShoppingDao {
     @Query("SELECT * FROM shopping_list ORDER BY isChecked ASC, addedAt DESC")
     fun getAllShoppingItems(): Flow<List<ShoppingItemEntity>>
 
+    @Query("SELECT COUNT(*) FROM shopping_list WHERE isChecked = 0")
+    suspend fun countOpenShoppingItems(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertShoppingItem(item: ShoppingItemEntity): Long
 

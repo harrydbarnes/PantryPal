@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">PantryPal</string>
+    <string name="pantry_widget_name">PantryPal shopping</string>
+    <string name="widget_quick_add_hint">Add to shopping list</string>
     <string name="item_not_found_in_inventory">Item not found in inventory</string>
     <string name="open_kitchen_cupboard">Open Kitchen Cupboard</string>
     <string name="this_is_current_week">This is the current week</string>
