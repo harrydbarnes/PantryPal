@@ -50,6 +50,11 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".widget.WidgetQuickAddActivity"
+            android:exported="false"
+            android:label="@string/widget_quick_add_title"
+            android:theme="@style/Theme.PantryPal" />
         <receiver
             android:name=".util.ShoppingLocationGeofenceReceiver"
             android:exported="false">
