@@ -10,7 +10,7 @@ PantryPal is a local-first Android kitchen companion built with Kotlin, Jetpack 
 - **Scan in / scan out:** identify products by barcode and add or consume a whole or partial quantity.
 - **Meal plan:** maintain four rotating weeks, rename and reorder the weekly rhythm, reuse meals or whole weeks, open the recipe book, and preview a pantry-aware shopping build.
 - **Recipes:** reuse meals as saved recipes, search locally, see cook-now/use-soon/missing-one-or-two ideas, search TheMealDB, import schema.org recipe links, favourite/rate recipes, add a recipe to the plan, and send missing ingredients to shopping.
-- **Shopping:** plan any rotation week, distinguish buy/home/check-stock ingredients, maintain custom or recurring sections, and finish a shop into pantry inventory.
+- **Shopping:** use an in-store-first checklist with an always-ready quick-add field and history suggestions; unchecked items come first, completed items collapse below, and row actions live in an accessible overflow menu with undo for accidental deletes. Use **Plan & prepare** for rotation-week choice, meal-plan review, receipt, and budget tools; custom/recurring sections, shopping builds, and finish-and-put-away remain available.
 - **Receipts and budget:** select an image for on-device text recognition or paste receipt text, correct uncertain names, quantities and prices, add purchases to pantry and price history, compare unit-price changes, and track weekly spending against a target.
 - **Past items:** review consumption history.
 - **Settings and data:** control appearance/reminders, export or restore a complete backup, exchange checksummed household snapshots, replay onboarding, and view build information.
