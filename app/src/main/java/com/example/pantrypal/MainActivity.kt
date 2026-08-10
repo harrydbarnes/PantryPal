@@ -967,19 +967,6 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm)
     ) {
         item {
-            ExpressiveHero(
-                eyebrow = "Your kitchen today",
-                title = if (expiringItems.isEmpty()) {
-                    "Everything’s looking fresh"
-                } else {
-                    "${expiringItems.size} item${if (expiringItems.size == 1) "" else "s"} need a little love"
-                },
-                supportingText = "A quick peek at what to use next and what belongs on the next shop.",
-                icon = Icons.Default.Kitchen
-            )
-        }
-
-        item {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
