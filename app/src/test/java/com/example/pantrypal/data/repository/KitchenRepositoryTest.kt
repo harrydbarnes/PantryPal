@@ -33,6 +33,10 @@ class KitchenRepositoryTest {
         override fun getInventoryJoined(): Flow<List<InventoryWithItemMap>> = flowOf(emptyList())
         override suspend fun getAllInventorySnapshot(): List<InventoryEntity> = emptyList()
         override fun getExpiringItems(currentTime: Long): Flow<List<InventoryWithItemMap>> = flowOf(emptyList())
+        override suspend fun getExpiringItemsSnapshot(
+            dueSoonCutoff: Long,
+            limit: Int
+        ): List<InventoryWithItemMap> = emptyList()
         override suspend fun getInventoryByBarcode(barcode: String): List<InventoryWithItemMap> = emptyList()
         override suspend fun countInventoryForItem(itemId: Long): Int = 0
         override suspend fun updateStockSettings(itemId: Long, isUsual: Boolean, lowStockThreshold: Double?) {}
@@ -60,6 +64,7 @@ class KitchenRepositoryTest {
 
     class FakeShoppingDao : ShoppingDao {
         override fun getAllShoppingItems(): Flow<List<ShoppingItemEntity>> = flowOf(emptyList())
+        override suspend fun countOpenShoppingItems(): Int = 0
         override suspend fun insertShoppingItem(item: ShoppingItemEntity): Long = 0
         override suspend fun updateShoppingItem(item: ShoppingItemEntity) {}
         override suspend fun deleteShoppingItem(item: ShoppingItemEntity) {}
