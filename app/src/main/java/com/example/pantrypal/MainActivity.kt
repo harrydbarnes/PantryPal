@@ -26,7 +26,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Kitchen
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.Settings as SettingsIcon
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -636,8 +637,6 @@ fun KitchenApp(
         return
     }
 
-    var showMenu by remember { mutableStateOf(false) }
-
     val configuration = LocalConfiguration.current
     val isWideScreen = configuration.screenWidthDp >= 600
     val primaryScreens = PrimaryNavigationDestinations.map { it.screen }.toSet()
@@ -687,47 +686,18 @@ fun KitchenApp(
                     )
                 },
                 actions = {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More")
+                    if (currentScreen == AppScreen.Inventory) {
+                        IconButton(onClick = { currentScreen = AppScreen.PastItems }) {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = "Open past items log"
+                            )
+                        }
                     }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Recipes") },
-                            onClick = {
-                                currentScreen = AppScreen.Recipes
-                                showMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Budget & prices") },
-                            onClick = {
-                                currentScreen = AppScreen.ShoppingTools
-                                showMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Data & sharing") },
-                            onClick = {
-                                currentScreen = AppScreen.DataManagement
-                                showMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Past Items Log") },
-                            onClick = {
-                                currentScreen = AppScreen.PastItems
-                                showMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Settings") },
-                            onClick = {
-                                currentScreen = AppScreen.Settings
-                                showMenu = false
-                            }
+                    IconButton(onClick = { currentScreen = AppScreen.Settings }) {
+                        Icon(
+                            Icons.Default.SettingsIcon,
+                            contentDescription = "Open settings"
                         )
                     }
                 }
@@ -1099,20 +1069,20 @@ fun KitchenApp(
     }
 }
 
-private data class PantryNavigationDestination(
+internal data class PantryNavigationDestination(
     val screen: AppScreen,
     val label: String,
     val icon: ImageVector
 )
 
-private val PrimaryNavigationDestinations = listOf(
+internal val PrimaryNavigationDestinations = listOf(
     PantryNavigationDestination(AppScreen.Dashboard, "Home", Icons.Default.Home),
     PantryNavigationDestination(AppScreen.Inventory, "Pantry", Icons.Default.Inventory2),
     PantryNavigationDestination(AppScreen.MealPlan, "Plan", Icons.Default.DateRange),
     PantryNavigationDestination(AppScreen.ShoppingList, "Shop", Icons.Default.ShoppingCart)
 )
 
-private fun parentScreenFor(screen: AppScreen): AppScreen = when (screen) {
+internal fun parentScreenFor(screen: AppScreen): AppScreen = when (screen) {
     AppScreen.AddManual,
     AppScreen.ScanIn,
     AppScreen.ScanOut -> AppScreen.Inventory
