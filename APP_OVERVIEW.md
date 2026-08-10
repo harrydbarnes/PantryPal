@@ -6,6 +6,7 @@ PantryPal is a local-first Android kitchen companion built with Kotlin, Jetpack 
 
 - **Dashboard:** see expired/due-soon stock and aggregate low-stock suggestions, then add a restock item directly.
 - **First run:** move through onboarding covering pantry tracking, scanning, the four-week rotation, shopping-list generation, privacy, and permissions.
+- **Add an item:** enter only a name and quantity to add quickly. Unit, location and category start from the most recently used values; expand **Item details** for location, opened state, category and expiry, or **Preferences and restock** for dietary flags and low-stock reminders. The sticky action bar keeps **Add item** reachable and offers **Save and add another** for a run of entries.
 - **Kitchen cupboard:** search, filter, sort and stocktake batches; track storage location, opened state, expiry, always-stocked status, and low-stock thresholds.
 - **Scan in / scan out:** identify products by barcode and add or consume a whole or partial quantity.
 - **Meal plan:** maintain four rotating weeks, rename and reorder the weekly rhythm, reuse meals or whole weeks, open the recipe book, and preview a pantry-aware shopping build.
@@ -32,6 +33,7 @@ The app uses manual screen state in `MainActivity` rather than Navigation Compos
 
 - Keep historical or other large derived calculations in Room queries where practical. For example, `ConsumptionDao.getRestockCandidates` derives the average consumption interval in SQL, so the app does not need to load and filter the full history in memory.
 - Do not place a clickable overlay over a text field without explicit semantics. If that interaction is necessary, expose the field label and current value through a `contentDescription` so TalkBack users retain the same context.
+- The add-item flow retains its barcode and prefilled-item paths. Only name and a positive quantity are required; expandable sections use button semantics and the expiry control announces its current value to TalkBack.
 
 ## Material 3 design system
 
