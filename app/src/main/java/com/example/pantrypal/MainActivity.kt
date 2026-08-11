@@ -575,11 +575,11 @@ fun KitchenApp(
             initialShoppingDay = appSettings.shoppingDayOfWeek,
             initialShoppingTimeMinutes = appSettings.shoppingTimeMinutes,
             initialShoppingReminderTiming = appSettings.shoppingReminderTiming,
-            onSaveShoppingRoutine = { day, time, timing ->
+            onSaveShoppingRoutine = { day, time, timing, remindersEnabled ->
                 viewModel.setShoppingReminderDay(day)
                 viewModel.setShoppingReminderTime(time)
                 viewModel.setShoppingReminderTiming(timing)
-                viewModel.setShoppingRemindersEnabled(true)
+                viewModel.setShoppingRemindersEnabled(remindersEnabled)
             },
             onSaveRegulars = { regulars ->
                 regulars.forEach { regular ->
@@ -592,11 +592,11 @@ fun KitchenApp(
                 }
             },
             onSaveMeals = { meals ->
-                meals.forEachIndexed { index, meal ->
+                meals.forEach { meal ->
                     viewModel.addMeal(
-                        name = meal,
+                        name = meal.name,
                         week = MealEntity.WEEK_A,
-                        dayOfWeek = listOf(1, 3, 5)[index],
+                        dayOfWeek = meal.dayOfWeek,
                         mealSlot = MealEntity.SLOT_DINNER,
                         ingredients = emptyList()
                     )
@@ -612,8 +612,8 @@ fun KitchenApp(
                     requestLocationPermission()
                 }
             },
-            onCompleteToMealPlan = {
-                requestNotificationPermissionIfNeeded()
+            onCompleteToMealPlan = { requestNotificationPermission ->
+                if (requestNotificationPermission) requestNotificationPermissionIfNeeded()
                 viewModel.completeOnboarding()
                 showOnboarding = false
                 if (!hasCompletedOnboarding) {

@@ -113,7 +113,6 @@ fun ShoppingListScreen(
     var quickAddName by rememberSaveable { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val shoppingModeItems = remember(visibleItems) { splitShoppingItemsForShoppingMode(visibleItems) }
     val defaultQuickAddSection = sections.firstOrNull { it.systemKey == ShoppingSectionEntity.KEY_THE_REST }
         ?: sections.firstOrNull()
 
@@ -255,7 +254,7 @@ fun ShoppingListScreen(
             }
 
             sections.forEach { section ->
-                val sectionItems = shoppingModeItems.active.filter { it.sectionId == section.sectionId }
+                val sectionItems = shoppingItemsForSection(visibleItems, section.sectionId)
                 if (sectionItems.isEmpty()) return@forEach
                 item(key = "section-${section.sectionId}") {
                     ShoppingSectionCard(
@@ -283,49 +282,13 @@ fun ShoppingListScreen(
                 }
             }
 
-            if (shoppingModeItems.active.isEmpty()) {
+            if (visibleItems.none { !it.isChecked }) {
                 item {
                     Text(
-                        "No active items. Add something above or prepare your next list.",
+                        if (visibleItems.isEmpty()) "No items yet. Add something above or prepare your next list." else "Everything is ticked off. Add something above or prepare your next list.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-            }
-
-            if (shoppingModeItems.checked.isNotEmpty()) {
-                item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) }
-                item { Text("Checked items (${shoppingModeItems.checked.size})", style = MaterialTheme.typography.titleMedium) }
-                sections.forEach { section ->
-                    val sectionItems = shoppingModeItems.checked.filter { it.sectionId == section.sectionId }
-                    if (sectionItems.isEmpty()) return@forEach
-                    item(key = "checked-section-${section.sectionId}") {
-                        ShoppingSectionCard(
-                            section = section,
-                            items = sectionItems,
-                            onAdd = null,
-                            onEditSection = null,
-                            onEditItem = { item ->
-                                editingItem = item
-                                itemEditorSection = section
-                            },
-                            onToggleItem = viewModel::toggleShoppingItem,
-                            onDeleteItem = ::deleteWithUndo
-                        )
-                    }
-                }
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssistChip(
-                            onClick = { viewModel.clearCheckedShoppingItems(selectedWeek) },
-                            label = { Text("Clear checked") }
-                        )
-                        AssistChip(
-                            onClick = { showPutAwayDialog = true },
-                            label = { Text("Finish shop & put away") },
-                            leadingIcon = { Icon(Icons.Default.Inventory2, contentDescription = null) }
-                        )
-                    }
                 }
             }
 
@@ -435,16 +398,11 @@ fun ShoppingListScreen(
 private fun Double.shoppingNumber(): String =
     if (this % 1.0 == 0.0) toLong().toString() else toString()
 
-internal data class ShoppingModeItems(
-    val active: List<ShoppingItemEntity>,
-    val checked: List<ShoppingItemEntity>
-)
-
-internal fun splitShoppingItemsForShoppingMode(items: List<ShoppingItemEntity>): ShoppingModeItems =
-    ShoppingModeItems(
-        active = items.filterNot { it.isChecked },
-        checked = items.filter { it.isChecked }
-    )
+internal fun shoppingItemsForSection(
+    items: List<ShoppingItemEntity>,
+    sectionId: Long
+): List<ShoppingItemEntity> =
+    items.filter { it.sectionId == sectionId }.sortedBy { it.isChecked }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

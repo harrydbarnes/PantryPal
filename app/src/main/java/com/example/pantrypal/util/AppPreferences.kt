@@ -24,19 +24,6 @@ enum class ShoppingReminderTiming {
     }
 }
 
-/** The optional intent chosen during the lightweight first-run journey. */
-enum class OnboardingGoal {
-    PANTRY_EXPIRY,
-    MEAL_PLANNING,
-    SHOPPING_LIST,
-    REDUCE_WASTE;
-
-    companion object {
-        fun fromStoredValue(value: String?): OnboardingGoal? =
-            entries.firstOrNull { it.name == value }
-    }
-}
-
 data class AppSettings(
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val dynamicColorEnabled: Boolean = true,
@@ -58,7 +45,6 @@ data class AddItemDefaults(
 object AppPreferences {
     const val FILE_NAME = "pantry_prefs"
     const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
-    const val KEY_ONBOARDING_GOAL = "onboarding_goal"
     const val KEY_MEAL_PLAN_INTRO_SEEN = "meal_plan_intro_seen"
     const val KEY_SETTINGS_INTRO_SEEN = "settings_intro_seen"
     const val KEY_THEME_MODE = "theme_mode"

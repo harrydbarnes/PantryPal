@@ -1,21 +1,22 @@
 package com.example.pantrypal
 
-import com.example.pantrypal.util.OnboardingGoal
+import com.example.pantrypal.ui.screens.OnboardingMeal
+import com.example.pantrypal.ui.screens.onboardingMeals
+import com.example.pantrypal.ui.screens.onboardingRegulars
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
-class OnboardingGoalTest {
+class OnboardingSetupTest {
     @Test
-    fun storedGoal_decodesEachSupportedChoice() {
-        OnboardingGoal.entries.forEach { goal ->
-            assertEquals(goal, OnboardingGoal.fromStoredValue(goal.name))
-        }
+    fun regulars_areTrimmedDeduplicatedAndBlankEntriesAreRemoved() {
+        assertEquals(listOf("milk", "Bread", "coffee"), onboardingRegulars(" milk, Bread, milk, , coffee "))
     }
 
     @Test
-    fun missingOrUnknownStoredGoal_isCompatibleWithExistingUsers() {
-        assertNull(OnboardingGoal.fromStoredValue(null))
-        assertNull(OnboardingGoal.fromStoredValue("old_goal"))
+    fun meals_keepTheChosenDayWhileRemovingBlankAndDuplicateNames() {
+        assertEquals(
+            listOf(OnboardingMeal("Pasta", 1), OnboardingMeal("Curry", 5)),
+            onboardingMeals(listOf(OnboardingMeal(" Pasta ", 1), OnboardingMeal("pasta", 3), OnboardingMeal("", 4), OnboardingMeal("Curry", 5)))
+        )
     }
 }

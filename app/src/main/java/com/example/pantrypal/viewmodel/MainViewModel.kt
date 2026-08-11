@@ -38,7 +38,6 @@ import com.example.pantrypal.util.AppPreferences
 import com.example.pantrypal.util.AddItemDefaults
 import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
-import com.example.pantrypal.util.OnboardingGoal
 import com.example.pantrypal.util.ExpiryStatus
 import com.example.pantrypal.util.ShoppingNeedStatus
 import com.example.pantrypal.util.ShoppingReconciliationLine
@@ -126,13 +125,10 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         _shoppingWeek.value = week
     }
 
-    fun completeOnboarding(goal: OnboardingGoal? = null) {
+    fun completeOnboarding() {
         _hasCompletedOnboarding.value = true
         prefs.edit()
             .putBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, true)
-            .also { editor ->
-                if (goal != null) editor.putString(AppPreferences.KEY_ONBOARDING_GOAL, goal.name)
-            }
             .apply()
     }
 
