@@ -60,6 +60,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.MealEntity
+import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.ui.screens.ScanOutScreen
 import com.example.pantrypal.ui.screens.SettingsScreen
 import com.example.pantrypal.ui.screens.PastItemsScreen
@@ -85,7 +87,6 @@ import java.util.concurrent.TimeUnit
 import com.example.pantrypal.util.ExpirationWorker
 import com.example.pantrypal.util.AppSettings
 import com.example.pantrypal.util.AppThemeMode
-import com.example.pantrypal.util.OnboardingGoal
 import com.example.pantrypal.util.ExpiryStatus
 import com.example.pantrypal.util.InventorySort
 import com.example.pantrypal.util.ShoppingLocation
@@ -571,16 +572,52 @@ fun KitchenApp(
     if (showOnboarding) {
         OnboardingScreen(
             isReplay = hasCompletedOnboarding,
-            onComplete = { goal ->
-                viewModel.completeOnboarding(goal)
+            initialShoppingDay = appSettings.shoppingDayOfWeek,
+            initialShoppingTimeMinutes = appSettings.shoppingTimeMinutes,
+            initialShoppingReminderTiming = appSettings.shoppingReminderTiming,
+            onSaveShoppingRoutine = { day, time, timing ->
+                viewModel.setShoppingReminderDay(day)
+                viewModel.setShoppingReminderTime(time)
+                viewModel.setShoppingReminderTiming(timing)
+                viewModel.setShoppingRemindersEnabled(true)
+            },
+            onSaveRegulars = { regulars ->
+                regulars.forEach { regular ->
+                    viewModel.addShoppingItem(
+                        name = regular,
+                        quantity = 1.0,
+                        unit = "pcs",
+                        sectionId = ShoppingSectionEntity.ID_EVERY_WEEK
+                    )
+                }
+            },
+            onSaveMeals = { meals ->
+                meals.forEachIndexed { index, meal ->
+                    viewModel.addMeal(
+                        name = meal,
+                        week = MealEntity.WEEK_A,
+                        dayOfWeek = listOf(1, 3, 5)[index],
+                        mealSlot = MealEntity.SLOT_DINNER,
+                        ingredients = emptyList()
+                    )
+                }
+            },
+            onSaveShoppingSpot = { name ->
+                viewModel.setNearbyShoppingRemindersEnabled(true)
+                pendingShoppingLocationName = name
+                if (ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
+                    pendingShoppingLocationName = null
+                    captureCurrentLocation(name)
+                } else {
+                    requestLocationPermission()
+                }
+            },
+            onCompleteToMealPlan = {
+                requestNotificationPermissionIfNeeded()
+                viewModel.completeOnboarding()
                 showOnboarding = false
                 if (!hasCompletedOnboarding) {
-                    currentScreen = when (goal) {
-                        OnboardingGoal.PANTRY_EXPIRY -> AppScreen.AddManual
-                        OnboardingGoal.MEAL_PLANNING -> AppScreen.MealPlan
-                        OnboardingGoal.SHOPPING_LIST -> AppScreen.ShoppingList
-                        OnboardingGoal.REDUCE_WASTE -> AppScreen.AddManual
-                    }
+                    currentScreen = AppScreen.MealPlan
                 }
             },
             onSkip = {
