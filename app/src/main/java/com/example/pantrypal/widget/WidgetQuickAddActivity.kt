@@ -1,17 +1,18 @@
 package com.example.pantrypal.widget
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import com.example.pantrypal.PantryPalApplication
 import com.example.pantrypal.R
+import androidx.lifecycle.lifecycleScope
 import com.example.pantrypal.data.entity.ShoppingItemEntity
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-class WidgetQuickAddActivity : Activity() {
+class WidgetQuickAddActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,11 +25,12 @@ class WidgetQuickAddActivity : Activity() {
                 nameInput.error = getString(R.string.widget_quick_add_hint)
                 return@setOnClickListener
             }
-            CoroutineScope(Dispatchers.IO).launch {
+            lifecycleScope.launch(Dispatchers.IO) {
                 val app = application as PantryPalApplication
-                app.database.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = name))
+                app.repository.addShoppingItem(ShoppingItemEntity(name = name))
+                app.repository.rememberShoppingItem(name)
                 PantryPalWidgetProvider.updateWidgets(applicationContext)
-                runOnUiThread(::finish)
+                withContext(Dispatchers.Main) { finish() }
             }
         }
     }

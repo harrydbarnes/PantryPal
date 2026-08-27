@@ -27,8 +27,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PantryFeaturesViewModel(
     private val repository: PantryFeaturesRepository
@@ -42,6 +45,8 @@ class PantryFeaturesViewModel(
     val receiptResult = _receiptResult.asStateFlow()
     private val _receiptProcessing = MutableStateFlow(false)
     val receiptProcessing = _receiptProcessing.asStateFlow()
+    private val _receiptError = MutableStateFlow<String?>(null)
+    val receiptError = _receiptError.asStateFlow()
 
     private val _dataState = MutableStateFlow(DataManagementUiState())
     val dataState = _dataState.asStateFlow()
@@ -283,12 +288,31 @@ class PantryFeaturesViewModel(
     }
 
     fun parseReceiptText(text: String) {
-        _receiptProcessing.value = false
-        _receiptResult.value = ReceiptParser.parse(text)
+        _receiptProcessing.value = true
+        _receiptError.value = null
+        viewModelScope.launch {
+            try {
+                val parsed = withContext(Dispatchers.Default) {
+                    ReceiptParser.parse(text)
+                }
+                _receiptResult.value = parsed
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _receiptResult.value = null
+                _receiptError.value = error.userMessage("Receipt could not be read")
+            } finally {
+                _receiptProcessing.value = false
+            }
+        }
     }
 
     fun setReceiptProcessing(processing: Boolean) {
         _receiptProcessing.value = processing
+        if (processing) {
+            _receiptResult.value = null
+            _receiptError.value = null
+        }
     }
 
     fun updateReceiptCandidate(candidate: ReceiptReviewCandidate) {
@@ -305,6 +329,7 @@ class PantryFeaturesViewModel(
 
     fun importReceipt(candidates: List<ReceiptReviewCandidate>) {
         _receiptProcessing.value = true
+        _receiptError.value = null
         viewModelScope.launch {
             runCatching { repository.importReceiptPurchases(candidates) }
                 .onSuccess { count ->
@@ -322,7 +347,8 @@ class PantryFeaturesViewModel(
 
     fun setReceiptError(error: Throwable) {
         _receiptProcessing.value = false
-        _shoppingMessage.value = error.userMessage("Receipt could not be read")
+        _receiptResult.value = null
+        _receiptError.value = error.userMessage("Receipt could not be read")
     }
 
     fun setWeeklyBudget(amountMinor: Long) {

@@ -7,6 +7,7 @@ import com.example.pantrypal.util.InventoryFilter
 import com.example.pantrypal.util.InventorySort
 import com.example.pantrypal.util.ShoppingNeedStatus
 import com.example.pantrypal.util.classifyExpiry
+import com.example.pantrypal.util.normalizeShoppingName
 import com.example.pantrypal.util.filterAndSortInventory
 import com.example.pantrypal.util.reconcileShoppingIngredients
 import java.time.LocalDate
@@ -25,6 +26,12 @@ class InventoryShoppingLogicTest {
         assertEquals(ExpiryStatus.DUE_SOON, classifyExpiry(millis(today.plusDays(7)), now, zoneId = ZoneOffset.UTC))
         assertEquals(ExpiryStatus.LATER, classifyExpiry(millis(today.plusDays(8)), now, zoneId = ZoneOffset.UTC))
         assertEquals(ExpiryStatus.NO_DATE, classifyExpiry(null, now, zoneId = ZoneOffset.UTC))
+    }
+
+    @Test
+    fun `shopping normalisation singularises plural names consistently`() {
+        assertEquals("tomato", normalizeShoppingName("Tomatoes"))
+        assertEquals("tomato", normalizeShoppingName("2 tomatoes"))
     }
 
     @Test

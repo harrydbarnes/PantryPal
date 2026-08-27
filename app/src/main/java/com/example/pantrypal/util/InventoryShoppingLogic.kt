@@ -7,6 +7,12 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 
+const val EXPIRING_WINDOW_DAYS = 7L
+private const val MILLIS_PER_DAY = 24L * 60L * 60L * 1_000L
+
+fun expiringCutoffMillis(nowMillis: Long = System.currentTimeMillis()): Long =
+    nowMillis + EXPIRING_WINDOW_DAYS * MILLIS_PER_DAY
+
 enum class ExpiryStatus {
     EXPIRED,
     TODAY,
@@ -50,7 +56,7 @@ data class ShoppingReconciliationLine(
 fun classifyExpiry(
     expirationDateMillis: Long?,
     nowMillis: Long = System.currentTimeMillis(),
-    dueSoonDays: Long = 7,
+    dueSoonDays: Long = EXPIRING_WINDOW_DAYS,
     zoneId: ZoneId = ZoneId.systemDefault()
 ): ExpiryStatus {
     if (expirationDateMillis == null) return ExpiryStatus.NO_DATE

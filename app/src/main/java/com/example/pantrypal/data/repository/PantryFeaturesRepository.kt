@@ -25,7 +25,6 @@ import com.example.pantrypal.data.entity.toEntity as toRecipeEntity
 import com.example.pantrypal.data.household.HouseholdSnapshotCodec
 import com.example.pantrypal.data.household.HouseholdSnapshotDecodeResult
 import com.example.pantrypal.data.household.HouseholdSnapshotPayload
-import com.example.pantrypal.domain.receipt.ReceiptParser
 import com.example.pantrypal.domain.receipt.ReceiptReviewCandidate
 import com.example.pantrypal.domain.recipe.Recipe
 import com.example.pantrypal.domain.recipe.RecipeExternalSearchMode
@@ -33,6 +32,7 @@ import com.example.pantrypal.domain.recipe.RecipeIngredient
 import com.example.pantrypal.domain.recipe.RecipePantryIngredient
 import com.example.pantrypal.util.AppPreferences
 import com.example.pantrypal.util.RecipeJsonLdImporter
+import com.example.pantrypal.util.normalizeShoppingName
 import com.example.pantrypal.util.RecipeMealConversion
 import com.example.pantrypal.util.ShoppingLocation
 import com.example.pantrypal.util.ShoppingLocationStore
@@ -42,11 +42,14 @@ import java.net.URL
 import java.time.LocalDate
 import java.util.UUID
 import java.io.Reader
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Repository for the optional planning tools layered on top of the core kitchen repository.
@@ -67,6 +70,7 @@ class PantryFeaturesRepository(
     private val backupCodec = BackupCodec()
     private val householdCodec = HouseholdSnapshotCodec()
     private val recipeImporter = RecipeJsonLdImporter()
+    private val recipeBootstrapMutex = Mutex()
     private val recipeSearch by lazy { RecipeTheMealDbSearch.create() }
 
     val recipes: Flow<List<Recipe>> = recipeDao.observeRecipes()
@@ -90,18 +94,26 @@ class PantryFeaturesRepository(
     val budgets: Flow<List<BudgetWeeklyEntity>> = budgetDao.observeAll()
 
     suspend fun bootstrapRecipesFromMeals() {
-        val existing = recipes.first()
-        val generated = RecipeMealConversion.fromMeals(
-            meals = kitchenRepository.allMeals.first(),
-            existingRecipes = existing
-        )
-        generated.forEach { saveRecipe(it) }
+        recipeBootstrapMutex.withLock {
+            if (preferences.getBoolean(KEY_RECIPE_BOOTSTRAP_COMPLETE, false)) return@withLock
+
+            val existing = recipes.first()
+            val generated = RecipeMealConversion.fromMeals(
+                meals = kitchenRepository.allMeals.first(),
+                existingRecipes = existing
+            )
+            generated.forEach { saveRecipe(it) }
+            preferences.edit().putBoolean(KEY_RECIPE_BOOTSTRAP_COMPLETE, true).apply()
+        }
     }
 
-    suspend fun saveRecipe(recipe: Recipe): Long = recipeDao.saveRecipe(
-        recipe = recipe.copy(updatedAt = System.currentTimeMillis()).toRecipeEntity(),
-        ingredients = recipe.ingredients.map { it.toRecipeEntity(recipe.id) }
-    )
+    suspend fun saveRecipe(recipe: Recipe): Long {
+        requireValidRecipe(recipe)
+        return recipeDao.saveRecipe(
+            recipe = recipe.copy(updatedAt = System.currentTimeMillis()).toRecipeEntity(),
+            ingredients = recipe.ingredients.map { it.toRecipeEntity(recipe.id) }
+        )
+    }
 
     suspend fun searchOnline(
         query: String,
@@ -135,6 +147,9 @@ class PantryFeaturesRepository(
     }
 
     suspend fun addRecipeToPlan(recipe: Recipe, weekId: String): MealEntity {
+        requireValidRecipe(recipe)
+        require(weekId.isNotBlank()) { "Meal plan week must not be blank." }
+
         val weekMeals = kitchenRepository.allMeals.first().filter { it.week == weekId }
         val occupiedDays = weekMeals
             .filter { it.mealSlot == MealEntity.SLOT_DINNER }
@@ -160,12 +175,20 @@ class PantryFeaturesRepository(
         ingredients: List<RecipeIngredient>,
         weekId: String
     ): Int {
+        require(weekId.isNotBlank()) { "Shopping week must not be blank." }
+        ingredients
+            .filterNot(RecipeIngredient::isOptional)
+            .forEachIndexed { index, ingredient ->
+                requireValidRecipeIngredient(ingredient, "Shopping ingredient $index")
+            }
+
         val existing = kitchenRepository.shoppingList.first()
             .filterNot { it.isChecked }
-            .mapTo(mutableSetOf()) { ReceiptParser.normalizeName(it.name) }
+            .mapTo(mutableSetOf()) { normalizeShoppingName(it.name) }
         var added = 0
         ingredients.filterNot(RecipeIngredient::isOptional).forEach { ingredient ->
-            if (ingredient.normalizedName !in existing) {
+            val normalizedName = normalizeShoppingName(ingredient.name)
+            if (normalizedName !in existing) {
                 kitchenRepository.addShoppingItem(
                     ShoppingItemEntity(
                         name = ingredient.name,
@@ -176,7 +199,7 @@ class PantryFeaturesRepository(
                     )
                 )
                 kitchenRepository.rememberShoppingItem(ingredient.name)
-                existing += ingredient.normalizedName
+                existing += normalizedName
                 added += 1
             }
         }
@@ -187,7 +210,8 @@ class PantryFeaturesRepository(
         candidates: List<ReceiptReviewCandidate>,
         storageLocation: String = InventoryEntity.LOCATION_PANTRY
     ): Int = database.withTransaction {
-        val selected = candidates.filter { it.isIncluded && it.name.isNotBlank() }
+        val selected = candidates.filter { it.isIncluded }
+        selected.forEach(::requireValidReceiptCandidate)
         val now = System.currentTimeMillis()
         priceHistoryDao.upsertAll(
             selected.map { candidate ->
@@ -221,35 +245,42 @@ class PantryFeaturesRepository(
         amountMinor: Long,
         currencyCode: String = DEFAULT_CURRENCY
     ) {
+        require(amountMinor >= 0) { "Weekly budget must not be negative." }
+        requireCurrencyCode(currencyCode)
+
         val week = com.example.pantrypal.domain.budget.BudgetCalculator
             .mondayFor(LocalDate.now())
         budgetDao.upsert(
             BudgetWeeklyEntity(
                 weekStartEpochDay = week.toEpochDay(),
-                budgetMinor = amountMinor.coerceAtLeast(0),
+                budgetMinor = amountMinor,
                 currencyCode = currencyCode,
                 updatedAt = System.currentTimeMillis()
             )
         )
     }
 
-    suspend fun exportBackupJson(): String = backupCodec.encode(
-        BackupDocument(
-            appVersion = BuildConfig.VERSION_NAME,
-            payload = snapshot().toPayload()
-        ),
-        pretty = true
-    )
+    suspend fun exportBackupJson(): String = withContext(Dispatchers.Default) {
+        backupCodec.encode(
+            BackupDocument(
+                appVersion = BuildConfig.VERSION_NAME,
+                payload = snapshot().toPayload()
+            ),
+            pretty = true
+        )
+    }
 
     suspend fun restoreBackupJson(json: String): BackupDecodeResult {
-        val result = backupCodec.decode(json)
+        val result = withContext(Dispatchers.Default) {
+            backupCodec.decode(json)
+        }
         if (result is BackupDecodeResult.Success) {
             restore(result.document.payload)
         }
         return result
     }
 
-    suspend fun exportHouseholdSnapshot(): String {
+    suspend fun exportHouseholdSnapshot(): String = withContext(Dispatchers.Default) {
         val backup = BackupDocument(
             appVersion = BuildConfig.VERSION_NAME,
             payload = snapshot().toPayload()
@@ -258,7 +289,7 @@ class PantryFeaturesRepository(
         val householdId = householdId()
         val revision = preferences.getLong(KEY_HOUSEHOLD_REVISION, 0L) + 1L
         preferences.edit().putLong(KEY_HOUSEHOLD_REVISION, revision).apply()
-        return householdCodec.encode(
+        householdCodec.encode(
             HouseholdSnapshotPayload(
                 householdId = householdId,
                 householdName = preferences.getString(KEY_HOUSEHOLD_NAME, null)
@@ -274,21 +305,29 @@ class PantryFeaturesRepository(
         )
     }
 
-    suspend fun importHouseholdSnapshot(json: String): Result<Int> =
-        when (val result = householdCodec.decode(json)) {
+    suspend fun importHouseholdSnapshot(json: String): Result<Int> {
+        val result = withContext(Dispatchers.Default) {
+            householdCodec.decode(json)
+        }
+        return when (result) {
             is HouseholdSnapshotDecodeResult.Failure ->
                 Result.failure(IllegalArgumentException(result.errors.joinToString("\n")))
 
-            is HouseholdSnapshotDecodeResult.Success -> runCatching {
+            is HouseholdSnapshotDecodeResult.Success -> try {
                 restore(result.payload.completeBackup.payload)
                 preferences.edit()
                     .putString(KEY_HOUSEHOLD_ID, result.payload.householdId)
                     .putString(KEY_HOUSEHOLD_NAME, result.payload.householdName)
                     .putLong(KEY_HOUSEHOLD_REVISION, result.payload.revision)
                     .apply()
-                result.warnings.size
+                Result.success(result.warnings.size)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Result.failure(error)
             }
         }
+    }
 
     private suspend fun snapshot(): BackupEntitySnapshot = database.withTransaction {
         BackupEntitySnapshot(
@@ -493,6 +532,65 @@ class PantryFeaturesRepository(
         )
     )
 
+    private fun requireValidRecipe(recipe: Recipe) {
+        require(recipe.title.isNotBlank()) { "Recipe title must not be blank." }
+        recipe.servings?.let { servings ->
+            require(servings.isFinite() && servings > 0.0) {
+                "Recipe servings must be finite and greater than zero."
+            }
+        }
+        listOf(recipe.prepTimeMinutes, recipe.cookTimeMinutes, recipe.totalTimeMinutes)
+            .forEach { minutes ->
+                require(minutes == null || minutes >= 0) {
+                    "Recipe timings must not be negative."
+                }
+            }
+        recipe.rating?.let { rating ->
+            require(rating in 1..5) { "Recipe rating must be between 1 and 5." }
+        }
+        recipe.ingredients.forEachIndexed { index, ingredient ->
+            requireValidRecipeIngredient(ingredient, "Recipe ingredient $index")
+        }
+    }
+
+    private fun requireValidRecipeIngredient(
+        ingredient: RecipeIngredient,
+        label: String
+    ) {
+        require(ingredient.name.isNotBlank()) {
+            "$label must not have a blank name."
+        }
+        ingredient.quantity?.let { quantity ->
+            require(quantity.isFinite() && quantity >= 0.0) {
+                "$label quantity must be finite and non-negative."
+            }
+        }
+        require(ingredient.sortOrder >= 0) {
+            "$label order must not be negative."
+        }
+    }
+
+    private fun requireValidReceiptCandidate(candidate: ReceiptReviewCandidate) {
+        require(candidate.name.isNotBlank()) { "Receipt item name must not be blank." }
+        require(candidate.normalizedName.isNotBlank()) {
+            "Receipt item normalised name must not be blank."
+        }
+        require(candidate.quantity.isFinite() && candidate.quantity > 0.0) {
+            "Receipt quantities must be finite and greater than zero."
+        }
+        require(candidate.totalPriceMinor >= 0) {
+            "Receipt prices must not be negative."
+        }
+        require(candidate.unit.isNotBlank()) { "Receipt item unit must not be blank." }
+        requireCurrencyCode(candidate.currencyCode)
+    }
+
+    private fun requireCurrencyCode(currencyCode: String) {
+        require(Regex("^[A-Z]{3}$").matches(currencyCode)) {
+            "Currency code must be an uppercase three-letter code."
+        }
+    }
+
     private fun Reader.readTextBounded(maxChars: Int): String {
         val output = StringBuilder(minOf(maxChars, 16_384))
         val buffer = CharArray(8_192)
@@ -517,6 +615,7 @@ class PantryFeaturesRepository(
         const val KEY_HOUSEHOLD_ID = "household_id"
         const val KEY_HOUSEHOLD_NAME = "household_name"
         const val KEY_HOUSEHOLD_REVISION = "household_revision"
+        const val KEY_RECIPE_BOOTSTRAP_COMPLETE = "recipes_bootstrapped_from_meals_v1"
         const val KEY_DEVICE_ID = "household_device_id"
     }
 }

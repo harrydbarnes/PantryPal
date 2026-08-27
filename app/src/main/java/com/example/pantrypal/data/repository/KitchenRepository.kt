@@ -19,6 +19,7 @@ import com.example.pantrypal.data.entity.MealWeekEntity
 import com.example.pantrypal.data.entity.ShoppingHistoryEntity
 import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.data.api.OpenFoodFactsApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import retrofit2.Retrofit
@@ -52,7 +53,10 @@ class KitchenRepository(
 
     suspend fun getItemById(id: Long): ItemEntity? = itemDao.getItemById(id)
     suspend fun getItemByBarcode(barcode: String): ItemEntity? = itemDao.getItemByBarcode(barcode)
-    suspend fun insertItem(item: ItemEntity): Long = itemDao.insertItem(item)
+    suspend fun insertItem(item: ItemEntity): Long {
+        requireValidItem(item)
+        return itemDao.insertItem(item)
+    }
 
     suspend fun getItemByBarcodeFromApi(barcode: String): ItemEntity? {
         return try {
@@ -72,6 +76,8 @@ class KitchenRepository(
             } else {
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("KitchenRepository", "Error fetching product from API: $e")
             null
@@ -85,16 +91,32 @@ class KitchenRepository(
 
     suspend fun getInventoryByBarcode(barcode: String) = inventoryDao.getInventoryByBarcode(barcode)
 
-    suspend fun addInventory(inventory: InventoryEntity) = inventoryDao.insertInventory(inventory)
-    suspend fun updateInventory(inventory: InventoryEntity) = inventoryDao.updateInventory(inventory)
+    suspend fun addInventory(inventory: InventoryEntity) {
+        requireValidInventory(inventory)
+        inventoryDao.insertInventory(inventory)
+    }
+
+    suspend fun updateInventory(inventory: InventoryEntity) {
+        requireValidInventory(inventory)
+        inventoryDao.updateInventory(inventory)
+    }
+
     suspend fun removeInventory(inventory: InventoryEntity) = inventoryDao.deleteInventory(inventory)
-    suspend fun updateStockSettings(itemId: Long, isUsual: Boolean, lowStockThreshold: Double?) =
+
+    suspend fun updateStockSettings(itemId: Long, isUsual: Boolean, lowStockThreshold: Double?) {
+        requireValidThreshold(lowStockThreshold)
         inventoryDao.updateStockSettings(itemId, isUsual, lowStockThreshold)
+    }
 
     suspend fun getInventorySnapshot() = inventoryDao.getAllInventorySnapshot()
 
     // Consumption
-    suspend fun logConsumption(consumption: ConsumptionEntity) = consumptionDao.insertConsumption(consumption)
+    suspend fun logConsumption(consumption: ConsumptionEntity) {
+        require(consumption.quantity.isFinite() && consumption.quantity >= 0.0) {
+            "Consumption quantity must be finite and non-negative."
+        }
+        consumptionDao.insertConsumption(consumption)
+    }
 
     suspend fun getUsageHistory(itemId: Long): List<ConsumptionEntity> = consumptionDao.getHistoryForItem(itemId)
 
@@ -105,8 +127,15 @@ class KitchenRepository(
     val shoppingSections: Flow<List<ShoppingSectionEntity>> = shoppingSectionDao.getAllSections()
     val shoppingHistory: Flow<List<ShoppingHistoryEntity>> = shoppingHistoryDao.getHistory()
 
-    suspend fun addShoppingItem(item: ShoppingItemEntity) = shoppingDao.insertShoppingItem(item)
-    suspend fun updateShoppingItem(item: ShoppingItemEntity) = shoppingDao.updateShoppingItem(item)
+    suspend fun addShoppingItem(item: ShoppingItemEntity) {
+        requireValidShoppingItem(item)
+        shoppingDao.insertShoppingItem(item)
+    }
+
+    suspend fun updateShoppingItem(item: ShoppingItemEntity) {
+        requireValidShoppingItem(item)
+        shoppingDao.updateShoppingItem(item)
+    }
     suspend fun deleteShoppingItem(item: ShoppingItemEntity) = shoppingDao.deleteShoppingItem(item)
     suspend fun deleteCheckedShoppingItems(weekId: String) {
         shoppingDao.deleteCheckedWeekItems(weekId)
@@ -126,17 +155,24 @@ class KitchenRepository(
             )
         }
     }
-    suspend fun insertShoppingSection(section: ShoppingSectionEntity) = shoppingSectionDao.insertSection(section)
-    suspend fun updateShoppingSection(section: ShoppingSectionEntity) = shoppingSectionDao.updateSection(section)
+    suspend fun insertShoppingSection(section: ShoppingSectionEntity) {
+        requireValidShoppingSection(section)
+        shoppingSectionDao.insertSection(section)
+    }
+
+    suspend fun updateShoppingSection(section: ShoppingSectionEntity) {
+        requireValidShoppingSection(section)
+        shoppingSectionDao.updateSection(section)
+    }
     suspend fun deleteShoppingSection(section: ShoppingSectionEntity) = shoppingSectionDao.deleteSection(section)
 
     suspend fun putAwayShoppingItems(
         shoppingItems: List<ShoppingItemEntity>,
         storageLocation: String
     ) {
-        val purchases = shoppingItems.filter {
-            it.name.isNotBlank() && it.quantity > 0
-        }
+        require(storageLocation.isNotBlank()) { "Inventory storage location must not be blank." }
+        shoppingItems.forEach(::requireValidShoppingItem)
+        val purchases = shoppingItems.filter { it.quantity > 0 }
         if (purchases.isEmpty()) return
 
         val knownItems = itemDao.getAllItemsSnapshot().toMutableList()
@@ -179,10 +215,22 @@ class KitchenRepository(
     val allMeals: Flow<List<MealEntity>> = mealDao.getAllMeals()
     val mealWeeks: Flow<List<MealWeekEntity>> = mealWeekDao.getAllWeeks()
     fun getMealsByWeek(week: String): Flow<List<MealEntity>> = mealDao.getMealsByWeek(week)
-    suspend fun insertMeal(meal: MealEntity) = mealDao.insertMeal(meal)
-    suspend fun updateMeal(meal: MealEntity) = mealDao.updateMeal(meal)
+    suspend fun insertMeal(meal: MealEntity) {
+        requireValidMeal(meal)
+        mealDao.insertMeal(meal)
+    }
+
+    suspend fun updateMeal(meal: MealEntity) {
+        requireValidMeal(meal)
+        mealDao.updateMeal(meal)
+    }
     suspend fun deleteMeal(meal: MealEntity) = mealDao.deleteMeal(meal)
-    suspend fun updateMealWeek(week: MealWeekEntity) = mealWeekDao.updateWeek(week)
+    suspend fun updateMealWeek(week: MealWeekEntity) {
+        require(week.weekId.isNotBlank()) { "Meal week ID must not be blank." }
+        require(week.name.isNotBlank()) { "Meal week name must not be blank." }
+        require(week.sortOrder >= 0) { "Meal week order must not be negative." }
+        mealWeekDao.updateWeek(week)
+    }
 
 
     // Smart Restock Logic
@@ -216,6 +264,62 @@ class KitchenRepository(
             inventory = inventoryDao.getAllInventorySnapshot(),
             history = consumptionDao.getAllHistory()
         )
+    }
+
+    private fun requireValidItem(item: ItemEntity) {
+        require(item.name.isNotBlank()) { "Item name must not be blank." }
+        require(item.defaultUnit.isNotBlank()) { "Item unit must not be blank." }
+        require(item.category.isNotBlank()) { "Item category must not be blank." }
+        requireValidThreshold(item.lowStockThreshold)
+    }
+
+    private fun requireValidInventory(inventory: InventoryEntity) {
+        require(inventory.quantity.isFinite() && inventory.quantity >= 0.0) {
+            "Inventory quantity must be finite and non-negative."
+        }
+        require(inventory.unit.isNotBlank()) { "Inventory unit must not be blank." }
+        require(inventory.storageLocation.isNotBlank()) {
+            "Inventory storage location must not be blank."
+        }
+    }
+
+    private fun requireValidShoppingItem(item: ShoppingItemEntity) {
+        require(item.name.isNotBlank()) { "Shopping item name must not be blank." }
+        require(item.quantity.isFinite() && item.quantity >= 0.0) {
+            "Shopping quantity must be finite and non-negative."
+        }
+        require(item.unit.isNotBlank()) { "Shopping unit must not be blank." }
+        item.weekId?.let { week ->
+            require(week.isNotBlank()) { "Shopping week must not be blank." }
+        }
+    }
+
+    private fun requireValidShoppingSection(section: ShoppingSectionEntity) {
+        require(section.name.isNotBlank()) { "Shopping section name must not be blank." }
+        require(section.sortOrder >= 0) { "Shopping section order must not be negative." }
+    }
+
+    private fun requireValidMeal(meal: MealEntity) {
+        require(meal.name.isNotBlank()) { "Meal name must not be blank." }
+        require(meal.week.isNotBlank()) { "Meal week must not be blank." }
+        require(meal.mealSlot.isNotBlank()) { "Meal slot must not be blank." }
+        require(meal.dayOfWeek in 1..7) { "Meal day must be between 1 and 7." }
+        require(meal.servings.isFinite() && meal.servings > 0.0) {
+            "Meal servings must be finite and greater than zero."
+        }
+        meal.ingredients.forEachIndexed { index, ingredient ->
+            require(ingredient.isNotBlank()) {
+                "Meal ingredient $index must not be blank."
+            }
+        }
+    }
+
+    private fun requireValidThreshold(threshold: Double?) {
+        threshold?.let {
+            require(it.isFinite() && it >= 0.0) {
+                "Low-stock threshold must be finite and non-negative."
+            }
+        }
     }
 }
 

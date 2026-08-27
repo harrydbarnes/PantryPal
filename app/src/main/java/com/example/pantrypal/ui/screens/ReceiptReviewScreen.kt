@@ -56,6 +56,7 @@ fun ReceiptReviewScreen(
     onPasteReceiptText: () -> Unit,
     onCandidateChange: (ReceiptReviewCandidate) -> Unit,
     onImportSelected: (List<ReceiptReviewCandidate>) -> Unit,
+    errorMessage: String? = null,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     showTopBar: Boolean = false
@@ -191,6 +192,22 @@ fun ReceiptReviewScreen(
                                 Text("Paste text")
                             }
                         }
+                    }
+                }
+            }
+
+            if (!errorMessage.isNullOrBlank()) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            errorMessage,
+                            modifier = Modifier.padding(PantryPalSpacing.md),
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
                     }
                 }
             }
