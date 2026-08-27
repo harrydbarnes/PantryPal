@@ -12,7 +12,10 @@ on:
       - '*.gradle.kts'
       - 'gradle.properties'
       - '.github/workflows/android_build.yml'
+      - '.github/scripts/**'
   pull_request:
+    branches:
+      - main
     paths:
       - 'app/**'
       - 'gradle/**'
@@ -21,6 +24,7 @@ on:
       - '*.gradle.kts'
       - 'gradle.properties'
       - '.github/workflows/android_build.yml'
+      - '.github/scripts/**'
   workflow_dispatch:
 
 permissions:
@@ -45,13 +49,11 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Set up Gradle cache
+    - name: Set up Gradle
       uses: gradle/actions/setup-gradle@v6
-      with:
-        cache-provider: basic
 
     - name: Test and build debug APK
-      run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --build-cache --stacktrace
+      run: bash .github/scripts/gradle-with-bounded-retry.sh ./gradlew :app:testDebugUnitTest :app:assembleDebug --build-cache --configuration-cache --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v7

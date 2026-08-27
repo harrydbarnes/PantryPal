@@ -6,10 +6,12 @@ plugins {
 }
 
 import java.io.ByteArrayOutputStream
+import java.io.Serializable
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import com.android.build.api.variant.BuildConfigField
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // ValueSource to fetch Git Hash
@@ -39,9 +41,48 @@ abstract class BuildDateValueSource : ValueSource<String, ValueSourceParameters.
     }
 }
 
+val gitHashProvider = providers.of(GitHashValueSource::class) {}
+val buildDateProvider = providers.of(BuildDateValueSource::class) {}
+val buildMetadataProvider = gitHashProvider.zip(buildDateProvider) { gitHash, buildDate ->
+    mapOf(
+        "GIT_HASH" to BuildConfigField<Serializable>("String", "\"$gitHash\"", null),
+        "BUILD_DATE" to BuildConfigField<Serializable>("String", "\"$buildDate\"", null),
+    )
+}
+
 android {
     namespace = "com.example.pantrypal"
     compileSdk = 36
+
+    val releaseSigningKeystore = providers.environmentVariable("PANTRYPAL_RELEASE_KEYSTORE")
+    val releaseSigningStorePassword = providers.environmentVariable("PANTRYPAL_RELEASE_STORE_PASSWORD")
+    val releaseSigningKeyAlias = providers.environmentVariable("PANTRYPAL_RELEASE_KEY_ALIAS")
+    val releaseSigningKeyPassword = providers.environmentVariable("PANTRYPAL_RELEASE_KEY_PASSWORD")
+    val releaseSigningValues = listOf(
+        releaseSigningKeystore,
+        releaseSigningStorePassword,
+        releaseSigningKeyAlias,
+        releaseSigningKeyPassword,
+    )
+    val releaseSigningConfigured = releaseSigningValues.any { it.isPresent }
+
+    if (releaseSigningConfigured && releaseSigningValues.any { !it.isPresent }) {
+        throw GradleException(
+            "PANTRYPAL_RELEASE_KEYSTORE, PANTRYPAL_RELEASE_STORE_PASSWORD, " +
+                "PANTRYPAL_RELEASE_KEY_ALIAS, and PANTRYPAL_RELEASE_KEY_PASSWORD must be provided together."
+        )
+    }
+
+    if (releaseSigningConfigured) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseSigningKeystore.get())
+                storePassword = releaseSigningStorePassword.get()
+                keyAlias = releaseSigningKeyAlias.get()
+                keyPassword = releaseSigningKeyPassword.get()
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.example.pantrypal"
@@ -54,14 +95,6 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-
-        // Use providers to fetch values. Note: Calling .get() forces resolution at configuration time,
-        // which has limitations with configuration caching but is currently required for buildConfigField.
-        val gitHashProvider = providers.of(GitHashValueSource::class) {}
-        val buildDateProvider = providers.of(BuildDateValueSource::class) {}
-
-        buildConfigField("String", "GIT_HASH", "\"${gitHashProvider.get()}\"")
-        buildConfigField("String", "BUILD_DATE", "\"${buildDateProvider.get()}\"")
     }
 
     buildTypes {
@@ -72,6 +105,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {
@@ -86,10 +122,21 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-        jniLibs {
-            keepDebugSymbols += "**/libbarhopper_v3.so"
-            keepDebugSymbols += "**/libimage_processing_util_jni.so"
-        }
+    }
+}
+
+androidComponents {
+    // Keep Git/date metadata lazy through AGP's variant-scoped MapProperty so
+    // configuration-cache builds do not force either provider during setup.
+    onVariants { variant ->
+        variant.buildConfigFields?.putAll(buildMetadataProvider)
+    }
+
+    // ML Kit's native libraries previously needed this only to silence debug
+    // packaging strip warnings. Keep the diagnostic symbols out of release APKs.
+    onVariants(selector().withBuildType("debug")) { variant ->
+        variant.packaging.jniLibs.keepDebugSymbols.add("**/libbarhopper_v3.so")
+        variant.packaging.jniLibs.keepDebugSymbols.add("**/libimage_processing_util_jni.so")
     }
 }
 

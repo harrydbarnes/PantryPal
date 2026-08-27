@@ -1,0 +1,106 @@
+name: Release Android Bundle
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or commit to release
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.ref || github.ref }}
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v5
+      with:
+        java-version: '17'
+        distribution: temurin
+
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v6
+
+    - name: Prepare release signing
+      shell: bash
+      env:
+        PANTRYPAL_RELEASE_KEYSTORE: ${{ runner.temp }}/pantrypal-release.jks
+        KEYSTORE_BASE64: ${{ secrets.PANTRYPAL_RELEASE_KEYSTORE_BASE64 }}
+        STORE_PASSWORD: ${{ secrets.PANTRYPAL_RELEASE_STORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.PANTRYPAL_RELEASE_KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.PANTRYPAL_RELEASE_KEY_PASSWORD }}
+      run: |
+        set -euo pipefail
+
+        missing=()
+        [[ -n "$KEYSTORE_BASE64" ]] || missing+=(PANTRYPAL_RELEASE_KEYSTORE_BASE64)
+        [[ -n "$STORE_PASSWORD" ]] || missing+=(PANTRYPAL_RELEASE_STORE_PASSWORD)
+        [[ -n "$KEY_ALIAS" ]] || missing+=(PANTRYPAL_RELEASE_KEY_ALIAS)
+        [[ -n "$KEY_PASSWORD" ]] || missing+=(PANTRYPAL_RELEASE_KEY_PASSWORD)
+
+        if (( ${#missing[@]} > 0 )); then
+          echo "::error::Missing required release secret(s): ${missing[*]}"
+          exit 1
+        fi
+
+        printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$PANTRYPAL_RELEASE_KEYSTORE"
+        test -s "$PANTRYPAL_RELEASE_KEYSTORE"
+
+    - name: Build signed release bundle
+      shell: bash
+      env:
+        PANTRYPAL_RELEASE_KEYSTORE: ${{ runner.temp }}/pantrypal-release.jks
+        PANTRYPAL_RELEASE_STORE_PASSWORD: ${{ secrets.PANTRYPAL_RELEASE_STORE_PASSWORD }}
+        PANTRYPAL_RELEASE_KEY_ALIAS: ${{ secrets.PANTRYPAL_RELEASE_KEY_ALIAS }}
+        PANTRYPAL_RELEASE_KEY_PASSWORD: ${{ secrets.PANTRYPAL_RELEASE_KEY_PASSWORD }}
+      run: bash .github/scripts/gradle-with-bounded-retry.sh ./gradlew :app:bundleRelease --build-cache --stacktrace
+
+    - name: Report release bundle size
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        bundle="app/build/outputs/bundle/release/app-release.aab"
+        test -f "$bundle"
+        bytes="$(stat -c '%s' "$bundle")"
+        mib="$(awk -v bytes="$bytes" 'BEGIN { printf "%.2f", bytes / 1048576 }')"
+
+        echo "Release bundle: ${bytes} bytes (${mib} MiB)"
+        {
+          echo "### Release bundle size"
+          echo "- ${bundle}: ${bytes} bytes (${mib} MiB)"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload signed release bundle
+      uses: actions/upload-artifact@v7
+      with:
+        name: pantrypal-release-bundle-${{ github.ref_name }}
+        path: app/build/outputs/bundle/release/app-release.aab
+        if-no-files-found: error
+        compression-level: 0
+        retention-days: 30
+
+    - name: Remove release signing material
+      if: always()
+      shell: bash
+      env:
+        PANTRYPAL_RELEASE_KEYSTORE: ${{ runner.temp }}/pantrypal-release.jks
+      run: rm -f "$PANTRYPAL_RELEASE_KEYSTORE"
