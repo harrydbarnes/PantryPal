@@ -40,7 +40,7 @@ interface InventoryDao {
     @Query("SELECT COUNT(*) FROM inventory WHERE itemId = :itemId")
     suspend fun countInventoryForItem(itemId: Long): Int
 
-    @Query("SELECT DISTINCT itemId FROM inventory WHERE itemId IN (:itemIds)")
+    @Query("SELECT DISTINCT itemId FROM inventory WHERE itemId IN (:itemIds) AND quantity > 0")
     suspend fun getInStockItemIds(itemIds: List<Long>): List<Long>
 
     @Query("UPDATE items SET isUsual = :isUsual, lowStockThreshold = :lowStockThreshold WHERE itemId = :itemId")

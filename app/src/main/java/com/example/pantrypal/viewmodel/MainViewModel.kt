@@ -42,10 +42,12 @@ import com.example.pantrypal.util.ExpiryStatus
 import com.example.pantrypal.util.ShoppingNeedStatus
 import com.example.pantrypal.util.ShoppingReconciliationLine
 import com.example.pantrypal.util.ShoppingLocation
+import com.example.pantrypal.util.normalizeShoppingName
 import com.example.pantrypal.util.ShoppingLocationStore
 import com.example.pantrypal.util.ShoppingReminderTiming
 import com.example.pantrypal.util.classifyExpiry
 import com.example.pantrypal.util.expiryLabel
+import com.example.pantrypal.util.expiringCutoffMillis
 import com.example.pantrypal.util.reconcileShoppingIngredients
 
 // Helper flow for periodic updates
@@ -220,7 +222,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     // UI State for Expiring Items
     val expiringItemsState: StateFlow<List<InventoryUiModel>> = tickerFlow(60_000L) // Check every minute
         .flatMapLatest {
-            repository.getExpiringItems(System.currentTimeMillis() + 8 * 24 * 60 * 60 * 1000L)
+            repository.getExpiringItems(expiringCutoffMillis())
         }
         .map { list ->
             list.map { it.toUiModel() }
@@ -398,7 +400,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             val namesAlreadyCovered = existing.filter {
                 it.sectionId in recurringSectionIds ||
                     (it.weekId == week && it.sectionId != ShoppingSectionEntity.ID_MEAL_PLAN)
-            }.map { it.name.lowercase() }.toSet()
+            }.map { normalizeShoppingName(it.name) }.toSet()
 
             repository.deleteShoppingItemsInSectionForWeek(ShoppingSectionEntity.ID_MEAL_PLAN, week)
             preview.lines
@@ -408,7 +410,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                 }
                 .forEach { line ->
                 repository.rememberShoppingItem(line.name)
-                if (line.name.lowercase() !in namesAlreadyCovered) {
+                if (normalizeShoppingName(line.name) !in namesAlreadyCovered) {
                     repository.addShoppingItem(
                         ShoppingItemEntity(
                             name = line.name,
@@ -541,7 +543,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                 .sumOf { it.quantity }
             val alreadyListed = item?.let { stockedItem ->
                 repository.shoppingList.first().any {
-                    !it.isChecked && it.name.equals(stockedItem.name, ignoreCase = true)
+                    !it.isChecked &&
+                        normalizeShoppingName(it.name) == normalizeShoppingName(stockedItem.name)
                 }
             } ?: false
             if (item != null && item.isUsual && totalRemaining <= restockBoundary && !alreadyListed) {
@@ -612,7 +615,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     fun addRestockToShopping(item: ItemEntity, weekId: String = _currentWeek.value) {
         viewModelScope.launch {
             val alreadyListed = repository.shoppingList.first().any {
-                !it.isChecked && it.name.equals(item.name, ignoreCase = true) &&
+                !it.isChecked &&
+                    normalizeShoppingName(it.name) == normalizeShoppingName(item.name) &&
                     (it.weekId == null || it.weekId == weekId)
             }
             if (!alreadyListed) {

@@ -10,6 +10,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.pantrypal.data.repository.KitchenRepository
 import kotlinx.coroutines.flow.first
+import com.example.pantrypal.util.expiringCutoffMillis
 
 class ExpirationWorker(
     context: Context,
@@ -24,7 +25,7 @@ class ExpirationWorker(
         if (!remindersEnabled) return Result.success()
 
         val now = System.currentTimeMillis()
-        val dueSoonCutoff = now + TWO_DAYS_IN_MILLIS
+        val dueSoonCutoff = expiringCutoffMillis(now)
         val expiringItems = repository.getExpiringItems(dueSoonCutoff).first()
 
         if (expiringItems.isNotEmpty()) {
@@ -90,6 +91,5 @@ class ExpirationWorker(
 
     companion object {
         const val UNIQUE_WORK_NAME = "ExpirationCheck"
-        private const val TWO_DAYS_IN_MILLIS = 2 * 24 * 60 * 60 * 1000L
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddShoppingCart
@@ -1030,9 +1031,9 @@ private fun RecipeDetailContent(
             item {
                 Text("Method", style = MaterialTheme.typography.titleMedium)
             }
-            items(recipe.instructions) { instruction ->
+            itemsIndexed(recipe.instructions) { index, instruction ->
                 Text(
-                    "${recipe.instructions.indexOf(instruction) + 1}. $instruction",
+                    "${index + 1}. $instruction",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }

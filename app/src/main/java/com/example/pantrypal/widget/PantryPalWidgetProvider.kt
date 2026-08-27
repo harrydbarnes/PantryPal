@@ -7,12 +7,15 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import androidx.work.BackoffPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.pantrypal.MainActivity
 import com.example.pantrypal.PantryPalApplication
 import com.example.pantrypal.R
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import com.example.pantrypal.util.EXPIRING_WINDOW_DAYS
+import com.example.pantrypal.util.expiringCutoffMillis
 import java.util.concurrent.TimeUnit
 
 class PantryPalWidgetProvider : AppWidgetProvider() {
@@ -22,22 +25,34 @@ class PantryPalWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        private const val EXPIRING_WINDOW_DAYS = 7L
+        private const val UNIQUE_WORK_NAME = "pantry_pal_widget_update"
 
         fun updateWidgets(context: Context) {
-            CoroutineScope(Dispatchers.IO).launch {
-                val app = context.applicationContext as PantryPalApplication
-                val database = app.database
-                val openCount = database.shoppingDao().countOpenShoppingItems()
-                val expiring = database.inventoryDao().getExpiringItemsSnapshot(
-                    System.currentTimeMillis() + TimeUnit.DAYS.toMillis(EXPIRING_WINDOW_DAYS),
-                    3
-                )
-                val manager = AppWidgetManager.getInstance(context)
-                val component = ComponentName(context, PantryPalWidgetProvider::class.java)
-                manager.getAppWidgetIds(component).forEach { widgetId ->
-                    manager.updateAppWidget(widgetId, createViews(context, openCount, expiring.map { it.name }))
-                }
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                UNIQUE_WORK_NAME,
+                ExistingWorkPolicy.KEEP,
+                OneTimeWorkRequestBuilder<WidgetUpdateWorker>()
+                    .setBackoffCriteria(
+                        BackoffPolicy.EXPONENTIAL,
+                        10L,
+                        TimeUnit.SECONDS
+                    )
+                    .build()
+            )
+        }
+
+        internal suspend fun updateWidgetsNow(context: Context) {
+            val app = context.applicationContext as PantryPalApplication
+            val database = app.database
+            val openCount = database.shoppingDao().countOpenShoppingItems()
+            val expiring = database.inventoryDao().getExpiringItemsSnapshot(
+                expiringCutoffMillis(),
+                3
+            )
+            val manager = AppWidgetManager.getInstance(context)
+            val component = ComponentName(context, PantryPalWidgetProvider::class.java)
+            manager.getAppWidgetIds(component).forEach { widgetId ->
+                manager.updateAppWidget(widgetId, createViews(context, openCount, expiring.map { it.name }))
             }
         }
 
@@ -49,8 +64,11 @@ class PantryPalWidgetProvider : AppWidgetProvider() {
                 )
                 setTextViewText(
                     R.id.widget_expiring,
-                    if (expiringNames.isEmpty()) "Nothing expiring in the next 7 days" else
+                    if (expiringNames.isEmpty()) {
+                        "Nothing expiring in the next ${EXPIRING_WINDOW_DAYS} days"
+                    } else {
                         "Expiring soon: ${expiringNames.joinToString(", ")}"
+                    }
                 )
                 setOnClickPendingIntent(R.id.widget_title, openAppIntent(context))
                 setOnClickPendingIntent(R.id.widget_shopping_count, openAppIntent(context))
@@ -66,10 +84,10 @@ class PantryPalWidgetProvider : AppWidgetProvider() {
         )
 
         private fun quickAddIntent(context: Context): PendingIntent = PendingIntent.getActivity(
-                context,
-                2,
-                Intent(context, WidgetQuickAddActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+            context,
+            2,
+            Intent(context, WidgetQuickAddActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 }

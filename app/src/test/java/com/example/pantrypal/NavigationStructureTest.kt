@@ -23,6 +23,6 @@ class NavigationStructureTest {
         assertEquals(AppScreen.ShoppingList, parentScreenFor(AppScreen.Receipt))
         assertEquals(AppScreen.ShoppingList, parentScreenFor(AppScreen.ShoppingTools))
         assertEquals(AppScreen.Settings, parentScreenFor(AppScreen.DataManagement))
-        assertEquals(AppScreen.Dashboard, parentScreenFor(AppScreen.PastItems))
+        assertEquals(AppScreen.Inventory, parentScreenFor(AppScreen.PastItems))
     }
 }

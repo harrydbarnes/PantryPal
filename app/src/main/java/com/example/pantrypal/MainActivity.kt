@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.Settings
 import android.net.Uri
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -632,6 +633,10 @@ fun KitchenApp(
     val isWideScreen = configuration.screenWidthDp >= 600
     val primaryScreens = PrimaryNavigationDestinations.map { it.screen }.toSet()
 
+    BackHandler(enabled = currentScreen !in primaryScreens) {
+        currentScreen = parentScreenFor(currentScreen)
+    }
+
     fun selectScreen(screen: AppScreen) {
         when (screen) {
             AppScreen.ScanIn -> checkCameraPermission { currentScreen = AppScreen.ScanIn }
@@ -907,9 +912,11 @@ fun KitchenApp(
                             val result by featuresViewModel.receiptResult.collectAsState()
                             val isProcessing by
                                 featuresViewModel.receiptProcessing.collectAsState()
+                            val receiptError by featuresViewModel.receiptError.collectAsState()
                             ReceiptReviewScreen(
                                 result = result,
                                 isProcessing = isProcessing,
+                                errorMessage = receiptError,
                                 onCaptureReceipt = {
                                     receiptImageLauncher.launch("image/*")
                                 },
@@ -1090,6 +1097,7 @@ internal fun parentScreenFor(screen: AppScreen): AppScreen = when (screen) {
     AppScreen.ShoppingTools -> AppScreen.ShoppingList
     AppScreen.DataManagement,
     AppScreen.Household -> AppScreen.Settings
+    AppScreen.PastItems -> AppScreen.Inventory
     else -> AppScreen.Dashboard
 }
 
