@@ -98,12 +98,14 @@ fun ShoppingListScreen(
     val selectedWeek by viewModel.shoppingWeek.collectAsState()
     val buildPreview by viewModel.shoppingBuildPreview.collectAsState()
     val lastShoppingChangeAt by viewModel.shoppingLastChangedAt.collectAsState()
+    val shoppingArchive by viewModel.shoppingArchiveState.collectAsState()
 
     var itemEditorSection by remember { mutableStateOf<ShoppingSectionEntity?>(null) }
     var editingItem by remember { mutableStateOf<ShoppingItemEntity?>(null) }
     var editingSection by remember { mutableStateOf<ShoppingSectionEntity?>(null) }
     var showSectionEditor by remember { mutableStateOf(false) }
     var showPutAwayDialog by remember { mutableStateOf(false) }
+    var showShoppingArchive by rememberSaveable { mutableStateOf(false) }
 
     val currentWeekDetails = mealWeeks.firstOrNull { it.weekId == selectedWeek }
     val visibleItems = remember(shoppingList, sections, selectedWeek) {
@@ -311,6 +313,53 @@ fun ShoppingListScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            if (shoppingArchive.isNotEmpty()) {
+                item {
+                    OutlinedButton(
+                        onClick = { showShoppingArchive = !showShoppingArchive },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (showShoppingArchive) "Hide recent shops" else "Show recent shops")
+                    }
+                }
+                if (showShoppingArchive) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("Recent shop history", style = MaterialTheme.typography.titleMedium)
+                                shoppingArchive.take(12).forEach { archived ->
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth()) {
+                                            Text(
+                                                archived.name,
+                                                modifier = Modifier.weight(1f),
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                "${formatQuantity(archived.quantity)} ${archived.unit}",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+                                        Text(
+                                            "${archived.sectionName} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(archived.completedAt))} · ${archived.storageLocation ?: "Location not recorded"}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
