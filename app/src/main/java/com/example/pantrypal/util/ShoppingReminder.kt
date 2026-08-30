@@ -25,32 +25,50 @@ object ShoppingReminderCopybook {
             "Shopping tomorrow around %s? Your list is ready for a quick pre-shop spritz."
     )
 
-    fun forDate(date: LocalDate, shoppingTime: String): ShoppingReminderCopy {
+    fun forDate(
+        date: LocalDate,
+        shoppingTime: String,
+        outstandingItemCount: Int? = null
+    ): ShoppingReminderCopy {
         val index = Math.floorMod(date.toEpochDay(), variations.size.toLong()).toInt()
         val (title, messageTemplate) = variations[index]
-        return ShoppingReminderCopy(title, messageTemplate.format(shoppingTime))
+        return ShoppingReminderCopy(
+            title,
+            messageTemplate.format(shoppingTime) + outstandingSummary(outstandingItemCount)
+        )
     }
 
     fun forTiming(
         date: LocalDate,
         shoppingTime: String,
-        timing: ShoppingReminderTiming
+        timing: ShoppingReminderTiming,
+        outstandingItemCount: Int? = null
     ): ShoppingReminderCopy = when (timing) {
-        ShoppingReminderTiming.NIGHT_BEFORE -> forDate(date, shoppingTime)
+        ShoppingReminderTiming.NIGHT_BEFORE ->
+            forDate(date, shoppingTime, outstandingItemCount)
         ShoppingReminderTiming.MORNING_OF -> ShoppingReminderCopy(
             "Shopping day check-in",
-            "Shopping around $shoppingTime today? Your list is ready for one last look."
+            "Shopping around $shoppingTime today? Your list is ready for one last look." +
+                outstandingSummary(outstandingItemCount)
         )
         ShoppingReminderTiming.HOUR_BEFORE -> ShoppingReminderCopy(
             "Nearly shopping time",
-            "Your shop is around $shoppingTime. Open your list for a quick trolley check."
+            "Your shop is around $shoppingTime. Open your list for a quick trolley check." +
+                outstandingSummary(outstandingItemCount)
         )
     }
+
+    private fun outstandingSummary(count: Int?): String =
+        count?.takeIf { it > 0 }?.let {
+            " You have $it item${if (it == 1) "" else "s"} still to gather."
+        }.orEmpty()
 }
 
 object ShoppingReminderSchedule {
     const val REMINDER_HOUR = 20
     const val MORNING_REMINDER_HOUR = 8
+
+    fun shouldNotify(outstandingItemCount: Int): Boolean = outstandingItemCount > 0
 
     fun nextReminderAt(
         now: ZonedDateTime,
