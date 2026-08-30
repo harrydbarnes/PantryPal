@@ -33,6 +33,11 @@ object BackupValidator {
         checkUniqueIds("consumption event", payload.consumption.map(BackupConsumption::eventId), errors)
         checkUniqueIds("shopping section", payload.shoppingSections.map(BackupShoppingSection::sectionId), errors)
         checkUniqueIds("shopping item", payload.shoppingItems.map(BackupShoppingItem::shoppingId), errors)
+        checkUniqueIds(
+            "shopping archive",
+            payload.shoppingArchive.map(BackupShoppingArchive::archiveId),
+            errors
+        )
         checkUniqueStrings(
             "shopping history name",
             payload.shoppingHistory.map(BackupShoppingHistory::normalizedName),
@@ -148,6 +153,24 @@ object BackupValidator {
                 errors += "shoppingItems[$index] refers to missing week '${item.weekId}'."
             }
         }
+        payload.shoppingArchive.forEachIndexed { index, archive ->
+            if (archive.tripId.isBlank()) errors += "shoppingArchive[$index] has a missing trip ID."
+            if (archive.weekId.isBlank()) errors += "shoppingArchive[$index] has a blank week."
+            if (archive.name.isBlank()) errors += "shoppingArchive[$index] has a blank name."
+            if (!archive.quantity.isFinite() || archive.quantity < 0) {
+                errors += "shoppingArchive[$index] has an invalid quantity."
+            }
+            if (archive.unit.isBlank()) errors += "shoppingArchive[$index] has a blank unit."
+            if (archive.sectionName.isBlank()) {
+                errors += "shoppingArchive[$index] has a blank section name."
+            }
+            if (archive.completedAt <= 0) {
+                errors += "shoppingArchive[$index] has an invalid completion time."
+            }
+            if (archive.storageLocation?.isBlank() == true) {
+                errors += "shoppingArchive[$index] has a blank storage location."
+            }
+        }
         payload.meals.forEachIndexed { index, meal ->
             if (meal.name.isBlank()) errors += "meals[$index] has a blank name."
             if (mealWeekIds.isNotEmpty() && meal.weekId !in mealWeekIds) {
@@ -241,6 +264,12 @@ object BackupValidator {
         }
         if (payload.preferences.shoppingTimeMinutes !in 0..(23 * 60 + 59)) {
             errors += "preferences.shoppingTimeMinutes is unsupported."
+        }
+        if (
+            payload.preferences.shoppingReminderTiming !in
+            setOf("NIGHT_BEFORE", "MORNING_OF", "HOUR_BEFORE")
+        ) {
+            errors += "preferences.shoppingReminderTiming is unsupported."
         }
         if (
             payload.preferences.activeMealWeekId != null &&
