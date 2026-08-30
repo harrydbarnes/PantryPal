@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.pantrypal.data.entity.BudgetWeeklyEntity
+import com.example.pantrypal.data.entity.ShoppingArchiveEntity
 import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
@@ -39,6 +40,9 @@ interface BackupDao {
 
     @Query("SELECT * FROM shopping_list")
     suspend fun shoppingItems(): List<ShoppingItemEntity>
+
+    @Query("SELECT * FROM shopping_archive")
+    suspend fun shoppingArchive(): List<ShoppingArchiveEntity>
 
     @Query("SELECT * FROM shopping_history")
     suspend fun shoppingHistory(): List<ShoppingHistoryEntity>
@@ -77,6 +81,9 @@ interface BackupDao {
     suspend fun insertShoppingItems(values: List<ShoppingItemEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertShoppingArchive(values: List<ShoppingArchiveEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertShoppingHistory(values: List<ShoppingHistoryEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -108,6 +115,9 @@ interface BackupDao {
 
     @Query("DELETE FROM shopping_list")
     suspend fun clearShoppingItems()
+
+    @Query("DELETE FROM shopping_archive")
+    suspend fun clearShoppingArchive()
 
     @Query("DELETE FROM shopping_history")
     suspend fun clearShoppingHistory()
