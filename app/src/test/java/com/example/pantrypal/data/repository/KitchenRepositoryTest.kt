@@ -62,12 +62,34 @@ class KitchenRepositoryTest {
         }
     }
 
-    class FakeShoppingDao : ShoppingDao {
-        override fun getAllShoppingItems(): Flow<List<ShoppingItemEntity>> = flowOf(emptyList())
-        override suspend fun countOpenShoppingItems(): Int = 0
-        override suspend fun insertShoppingItem(item: ShoppingItemEntity): Long = 0
-        override suspend fun updateShoppingItem(item: ShoppingItemEntity) {}
-        override suspend fun deleteShoppingItem(item: ShoppingItemEntity) {}
+    class FakeShoppingDao(
+        val rows: MutableList<ShoppingItemEntity> = mutableListOf()
+    ) : ShoppingDao {
+        override fun getAllShoppingItems(): Flow<List<ShoppingItemEntity>> = flowOf(rows.toList())
+        override fun getShoppingArchive(): Flow<List<ShoppingArchiveEntity>> = flowOf(emptyList())
+        override suspend fun getAllShoppingItemsSnapshot(): List<ShoppingItemEntity> = rows.toList()
+        override suspend fun getShoppingArchiveSnapshot(): List<ShoppingArchiveEntity> = emptyList()
+        override suspend fun countOpenShoppingItems(): Int = rows.count { !it.isChecked }
+        override suspend fun countOpenShoppingItemsForWeek(weekId: String): Int =
+            rows.count { !it.isChecked && (it.weekId == null || it.weekId == weekId) }
+
+        override suspend fun insertShoppingItem(item: ShoppingItemEntity): Long {
+            val id = if (item.shoppingId > 0) item.shoppingId else (rows.maxOfOrNull { it.shoppingId } ?: 0) + 1
+            rows += item.copy(shoppingId = id)
+            return id
+        }
+
+        override suspend fun updateShoppingItem(item: ShoppingItemEntity) {
+            val index = rows.indexOfFirst { it.shoppingId == item.shoppingId }
+            if (index >= 0) rows[index] = item
+        }
+
+        override suspend fun deleteShoppingItem(item: ShoppingItemEntity) {
+            rows.removeAll { it.shoppingId == item.shoppingId }
+        }
+
+        override suspend fun insertShoppingArchive(items: List<ShoppingArchiveEntity>) {}
+        override suspend fun clearShoppingArchive() {}
         override suspend fun deleteCheckedWeekItems(weekId: String) {}
         override suspend fun resetCheckedRecurringItems() {}
         override suspend fun deleteItemsInSection(sectionId: Long) {}
@@ -118,4 +140,44 @@ class KitchenRepositoryTest {
         assertEquals(1, suggestions.size)
         assertEquals(101L, suggestions[0].itemId)
     }
+    @Test
+    fun addShoppingItem_mergesUncheckedMatchingNameAndUnit() = runBlocking {
+        val shoppingDao = FakeShoppingDao(
+            mutableListOf(
+                ShoppingItemEntity(
+                    shoppingId = 1L,
+                    name = "Milk",
+                    quantity = 1.0,
+                    unit = "pcs",
+                    sectionId = ShoppingSectionEntity.ID_THE_REST,
+                    weekId = "A"
+                )
+            )
+        )
+        val repo = KitchenRepository(
+            FakeItemDao(),
+            FakeInventoryDao(),
+            FakeConsumptionDao(),
+            shoppingDao,
+            FakeMealDao(),
+            FakeMealWeekDao(),
+            FakeShoppingSectionDao(),
+            FakeShoppingHistoryDao()
+        )
+
+        repo.addShoppingItem(
+            ShoppingItemEntity(
+                name = "milk",
+                quantity = 2.0,
+                unit = "pcs",
+                sectionId = ShoppingSectionEntity.ID_THE_REST,
+                weekId = "A"
+            )
+        )
+
+        assertEquals(1, shoppingDao.rows.size)
+        assertEquals("Milk", shoppingDao.rows.single().name)
+        assertEquals(3.0, shoppingDao.rows.single().quantity, 0.0)
+    }
+
 }
