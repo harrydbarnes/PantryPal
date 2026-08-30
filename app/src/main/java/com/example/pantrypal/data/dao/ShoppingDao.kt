@@ -1,6 +1,7 @@
 package com.example.pantrypal.data.dao
 
 import androidx.room.*
+import com.example.pantrypal.data.entity.ShoppingArchiveEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -9,8 +10,38 @@ interface ShoppingDao {
     @Query("SELECT * FROM shopping_list ORDER BY isChecked ASC, addedAt DESC")
     fun getAllShoppingItems(): Flow<List<ShoppingItemEntity>>
 
+    @Query("SELECT * FROM shopping_archive ORDER BY completedAt DESC, archiveId DESC")
+    fun getShoppingArchive(): Flow<List<ShoppingArchiveEntity>>
+
+    @Query("SELECT * FROM shopping_list")
+    suspend fun getAllShoppingItemsSnapshot(): List<ShoppingItemEntity>
+
+    @Query("SELECT * FROM shopping_archive ORDER BY completedAt DESC, archiveId DESC")
+    suspend fun getShoppingArchiveSnapshot(): List<ShoppingArchiveEntity>
+
     @Query("SELECT COUNT(*) FROM shopping_list WHERE isChecked = 0")
     suspend fun countOpenShoppingItems(): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM shopping_list AS item
+        WHERE item.isChecked = 0
+          AND (
+              item.weekId IS NULL
+              OR item.weekId = :weekId
+              OR item.sectionId IN (
+                  SELECT sectionId FROM shopping_sections WHERE recursEveryWeek = 1
+              )
+          )
+        """
+    )
+    suspend fun countOpenShoppingItemsForWeek(weekId: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertShoppingArchive(items: List<ShoppingArchiveEntity>)
+
+    @Query("DELETE FROM shopping_archive")
+    suspend fun clearShoppingArchive()
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertShoppingItem(item: ShoppingItemEntity): Long

@@ -58,6 +58,7 @@ object AppPreferences {
     const val KEY_ADD_ITEM_UNIT = "add_item_unit"
     const val KEY_ADD_ITEM_CATEGORY = "add_item_category"
     const val KEY_ADD_ITEM_LOCATION = "add_item_location"
+    const val KEY_LAST_SHOPPING_CHANGE = "last_shopping_change"
 
     const val DEFAULT_SHOPPING_DAY = 6 // Saturday
     const val DEFAULT_SHOPPING_TIME_MINUTES = 10 * 60

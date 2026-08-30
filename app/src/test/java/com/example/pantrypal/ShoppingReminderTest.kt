@@ -4,6 +4,7 @@ import com.example.pantrypal.util.ShoppingReminderCopybook
 import com.example.pantrypal.util.ShoppingReminderSchedule
 import com.example.pantrypal.util.ShoppingReminderTiming
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -105,4 +106,23 @@ class ShoppingReminderTest {
         assertTrue(copy.message.contains("today"))
         assertTrue(copy.message.contains("10:00 AM"))
     }
+
+    @Test
+    fun onlyNotifiesWhenThereAreOutstandingItems() {
+        assertFalse(ShoppingReminderSchedule.shouldNotify(0))
+        assertTrue(ShoppingReminderSchedule.shouldNotify(1))
+    }
+
+    @Test
+    fun reminderCopyIncludesOutstandingItemCount() {
+        val copy = ShoppingReminderCopybook.forTiming(
+            date = java.time.LocalDate.of(2026, 8, 15),
+            shoppingTime = "10:00 AM",
+            timing = ShoppingReminderTiming.NIGHT_BEFORE,
+            outstandingItemCount = 3
+        )
+
+        assertTrue(copy.message.contains("3 items"))
+    }
+
 }

@@ -1,5 +1,6 @@
 package com.example.pantrypal.data.repository
 
+import androidx.room.withTransaction
 import com.example.pantrypal.data.dao.ConsumptionDao
 import com.example.pantrypal.data.dao.ConsumptionWithItem
 import com.example.pantrypal.data.dao.InventoryDao
@@ -13,18 +14,24 @@ import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.ShoppingArchiveEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.entity.MealEntity
 import com.example.pantrypal.data.entity.MealWeekEntity
 import com.example.pantrypal.data.entity.ShoppingHistoryEntity
 import com.example.pantrypal.data.entity.ShoppingSectionEntity
+import com.example.pantrypal.data.database.KitchenDatabase
 import com.example.pantrypal.data.api.OpenFoodFactsApi
+import com.example.pantrypal.util.normalizeShoppingName
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.Locale
+import java.util.UUID
 
 class KitchenRepository(
     private val itemDao: ItemDao,
@@ -34,7 +41,8 @@ class KitchenRepository(
     private val mealDao: MealDao,
     private val mealWeekDao: MealWeekDao,
     private val shoppingSectionDao: ShoppingSectionDao,
-    private val shoppingHistoryDao: ShoppingHistoryDao
+    private val shoppingHistoryDao: ShoppingHistoryDao,
+    private val database: KitchenDatabase? = null
 ) {
     private val api: OpenFoodFactsApi by lazy {
         Retrofit.Builder()
@@ -43,6 +51,8 @@ class KitchenRepository(
             .build()
             .create(OpenFoodFactsApi::class.java)
     }
+
+    private val shoppingMutationMutex = Mutex()
 
     companion object {
         private const val OPEN_FOOD_FACTS_API_BASE_URL = "https://world.openfoodfacts.org/"
@@ -126,20 +136,127 @@ class KitchenRepository(
     val shoppingList: Flow<List<ShoppingItemEntity>> = shoppingDao.getAllShoppingItems()
     val shoppingSections: Flow<List<ShoppingSectionEntity>> = shoppingSectionDao.getAllSections()
     val shoppingHistory: Flow<List<ShoppingHistoryEntity>> = shoppingHistoryDao.getHistory()
+    val shoppingArchive: Flow<List<ShoppingArchiveEntity>> = shoppingDao.getShoppingArchive()
+
+    suspend fun countOpenShoppingItemsForWeek(weekId: String): Int {
+        require(weekId.isNotBlank()) { "Shopping week must not be blank." }
+        return shoppingDao.countOpenShoppingItemsForWeek(weekId)
+    }
+
+    suspend fun getShoppingArchiveSnapshot(): List<ShoppingArchiveEntity> =
+        shoppingDao.getShoppingArchiveSnapshot()
 
     suspend fun addShoppingItem(item: ShoppingItemEntity) {
         requireValidShoppingItem(item)
-        shoppingDao.insertShoppingItem(item)
+        shoppingMutationMutex.withLock {
+            val recurringSectionIds = shoppingSectionDao.getAllSections()
+                .first()
+                .filter { it.recursEveryWeek }
+                .mapTo(mutableSetOf()) { it.sectionId }
+            val normalizedName = normalizeShoppingName(item.name)
+            val existing = shoppingDao.getAllShoppingItemsSnapshot().firstOrNull { candidate ->
+                !candidate.isChecked &&
+                    candidate.sectionId == item.sectionId &&
+                    normalizeShoppingName(candidate.name) == normalizedName &&
+                    candidate.unit.equals(item.unit, ignoreCase = true) &&
+                    (
+                        item.sectionId in recurringSectionIds ||
+                            candidate.weekId == item.weekId
+                        )
+            }
+            if (existing == null) {
+                shoppingDao.insertShoppingItem(item)
+            } else {
+                val combinedQuantity = existing.quantity + item.quantity
+                if (combinedQuantity.isFinite()) {
+                    shoppingDao.updateShoppingItem(existing.copy(quantity = combinedQuantity))
+                } else {
+                    shoppingDao.insertShoppingItem(item)
+                }
+            }
+        }
     }
 
     suspend fun updateShoppingItem(item: ShoppingItemEntity) {
         requireValidShoppingItem(item)
         shoppingDao.updateShoppingItem(item)
     }
+
     suspend fun deleteShoppingItem(item: ShoppingItemEntity) = shoppingDao.deleteShoppingItem(item)
+
+    /**
+     * Completion is intentionally archive-first: the active list can be cleaned up without
+     * losing what was bought or where it was put away.
+     */
+    suspend fun completeShoppingTrip(
+        checkedItems: List<ShoppingItemEntity>,
+        sections: List<ShoppingSectionEntity>,
+        weekId: String,
+        storageLocation: String?
+    ) {
+        require(weekId.isNotBlank()) { "Shopping week must not be blank." }
+        storageLocation?.let {
+            require(it.isNotBlank()) { "Inventory storage location must not be blank." }
+        }
+        checkedItems.forEach(::requireValidShoppingItem)
+
+        val recurringSectionIds = sections
+            .filter { it.recursEveryWeek }
+            .mapTo(mutableSetOf()) { it.sectionId }
+        val eligibleItems = checkedItems.filter {
+            it.isChecked &&
+                (it.sectionId in recurringSectionIds || it.weekId == null || it.weekId == weekId)
+        }
+        val sectionNames = sections.associate { it.sectionId to it.name }
+        val completedAt = System.currentTimeMillis()
+        val tripId = UUID.randomUUID().toString()
+        val archivedItems = eligibleItems.map { item ->
+            ShoppingArchiveEntity(
+                tripId = tripId,
+                weekId = weekId,
+                name = item.name.trim(),
+                quantity = item.quantity,
+                unit = item.unit.trim(),
+                sectionName = sectionNames[item.sectionId]?.trim().orEmpty().ifBlank { "Other" },
+                completedAt = completedAt,
+                storageLocation = storageLocation?.trim()?.takeIf(String::isNotBlank)
+            )
+        }
+        archiveAndClearCheckedItems(archivedItems, weekId)
+    }
+
+    private suspend fun archiveAndClearCheckedItems(
+        archivedItems: List<ShoppingArchiveEntity>,
+        weekId: String
+    ) {
+        suspend fun write() {
+            if (archivedItems.isNotEmpty()) shoppingDao.insertShoppingArchive(archivedItems)
+            shoppingDao.deleteCheckedWeekItems(weekId)
+            shoppingDao.resetCheckedRecurringItems()
+        }
+        if (database == null) write() else database.withTransaction { write() }
+    }
+
+    suspend fun archiveAndClearCheckedShoppingItems(weekId: String) {
+        require(weekId.isNotBlank()) { "Shopping week must not be blank." }
+        val sections = shoppingSections.first()
+        val recurringSectionIds = sections
+            .filter { it.recursEveryWeek }
+            .mapTo(mutableSetOf()) { it.sectionId }
+        val checkedItems = shoppingList.first().filter {
+            it.isChecked &&
+                (it.sectionId in recurringSectionIds || it.weekId == null || it.weekId == weekId)
+        }
+        completeShoppingTrip(
+            checkedItems = checkedItems,
+            sections = sections,
+            weekId = weekId,
+            storageLocation = null
+        )
+    }
+
     suspend fun deleteCheckedShoppingItems(weekId: String) {
-        shoppingDao.deleteCheckedWeekItems(weekId)
-        shoppingDao.resetCheckedRecurringItems()
+        archiveAndClearCheckedShoppingItems(weekId)
     }
     suspend fun deleteShoppingItemsInSection(sectionId: Long) = shoppingDao.deleteItemsInSection(sectionId)
     suspend fun deleteShoppingItemsInSectionForWeek(sectionId: Long, weekId: String) =

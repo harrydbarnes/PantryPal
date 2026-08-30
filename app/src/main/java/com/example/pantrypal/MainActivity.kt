@@ -157,7 +157,8 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(
                 appSettings.shoppingRemindersEnabled,
                 appSettings.shoppingDayOfWeek,
-                appSettings.shoppingTimeMinutes
+                appSettings.shoppingTimeMinutes,
+                appSettings.shoppingReminderTiming
             ) {
                 ShoppingReminderScheduler.update(this@MainActivity, appSettings)
             }
@@ -198,6 +199,7 @@ private fun extractSharedRecipeUrl(intent: Intent?): String? {
 }
 
 private fun extractShoppingReminderAction(intent: Intent?): String? = when (intent?.action) {
+    ShoppingReminderWorker.ACTION_REVIEW_LIST,
     ShoppingReminderWorker.ACTION_UPDATE_LIST,
     ShoppingReminderWorker.ACTION_OPEN_LIST -> intent.action
     else -> null
@@ -386,9 +388,6 @@ fun KitchenApp(
     LaunchedEffect(incomingReminderAction) {
         incomingReminderAction?.let { action ->
             currentScreen = AppScreen.ShoppingList
-            if (action == ShoppingReminderWorker.ACTION_UPDATE_LIST) {
-                viewModel.buildShoppingListForWeek(viewModel.currentWeek.value)
-            }
             onShoppingReminderActionConsumed()
         }
     }
@@ -972,10 +971,6 @@ fun KitchenApp(
                                     householdOpenLauncher.launch(
                                         arrayOf("application/json", "text/plain")
                                     )
-                                },
-                                onSyncNow = featuresViewModel::explainRealtimeSync,
-                                onResolveConflict = { _, _ ->
-                                    featuresViewModel.explainRealtimeSync()
                                 }
                             )
                         }

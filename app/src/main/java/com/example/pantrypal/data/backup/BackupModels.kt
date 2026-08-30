@@ -23,6 +23,7 @@ data class BackupPayload(
     val consumption: List<BackupConsumption> = emptyList(),
     val shoppingSections: List<BackupShoppingSection> = emptyList(),
     val shoppingItems: List<BackupShoppingItem> = emptyList(),
+    val shoppingArchive: List<BackupShoppingArchive> = emptyList(),
     val shoppingHistory: List<BackupShoppingHistory> = emptyList(),
     val mealWeeks: List<BackupMealWeek> = emptyList(),
     val meals: List<BackupMeal> = emptyList(),
@@ -86,6 +87,18 @@ data class BackupShoppingItem(
     val frequency: String = "One-Off",
     val sectionId: Long = 0,
     val weekId: String? = null
+)
+
+data class BackupShoppingArchive(
+    val archiveId: Long = 0,
+    val tripId: String = "",
+    val weekId: String = "",
+    val name: String = "",
+    val quantity: Double = 0.0,
+    val unit: String = "pcs",
+    val sectionName: String = "",
+    val completedAt: Long = 0,
+    val storageLocation: String? = null
 )
 
 data class BackupShoppingHistory(
@@ -187,6 +200,7 @@ data class BackupPreferences(
     val shoppingRemindersEnabled: Boolean = false,
     val shoppingDayOfWeek: Int = 6,
     val shoppingTimeMinutes: Int = 600,
+    val shoppingReminderTiming: String = "NIGHT_BEFORE",
     val nearbyShoppingRemindersEnabled: Boolean = false,
     val activeMealWeekId: String? = null,
     val defaultCurrencyCode: String = "GBP",

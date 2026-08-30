@@ -12,6 +12,7 @@ import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.ShoppingArchiveEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.entity.MealEntity
 import com.example.pantrypal.data.entity.MealWeekEntity
@@ -109,6 +110,17 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     private val _shoppingLocations = MutableStateFlow(ShoppingLocationStore.read(application))
     val shoppingLocations: StateFlow<List<ShoppingLocation>> = _shoppingLocations.asStateFlow()
+
+    private val _shoppingLastChangedAt = MutableStateFlow<Long?>(
+        prefs.getLong(AppPreferences.KEY_LAST_SHOPPING_CHANGE, 0L).takeIf { it > 0L }
+    )
+    val shoppingLastChangedAt: StateFlow<Long?> = _shoppingLastChangedAt.asStateFlow()
+
+    private fun markShoppingChanged() {
+        val changedAt = System.currentTimeMillis()
+        _shoppingLastChangedAt.value = changedAt
+        prefs.edit().putLong(AppPreferences.KEY_LAST_SHOPPING_CHANGE, changedAt).apply()
+    }
 
     fun setCurrentWeek(week: String) {
         _currentWeek.value = week
@@ -271,6 +283,13 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             initialValue = emptyList()
         )
 
+    val shoppingArchiveState: StateFlow<List<ShoppingArchiveEntity>> = repository.shoppingArchive
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     private val _shoppingBuildPreview = MutableStateFlow<ShoppingBuildPreview?>(null)
     val shoppingBuildPreview: StateFlow<ShoppingBuildPreview?> = _shoppingBuildPreview.asStateFlow()
 
@@ -403,6 +422,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             }.map { normalizeShoppingName(it.name) }.toSet()
 
             repository.deleteShoppingItemsInSectionForWeek(ShoppingSectionEntity.ID_MEAL_PLAN, week)
+            markShoppingChanged()
             preview.lines
                 .filter {
                     it.status == ShoppingNeedStatus.NEED_TO_BUY ||
@@ -557,6 +577,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                         weekId = _shoppingWeek.value
                     )
                 )
+                markShoppingChanged()
             }
         }
     }
@@ -630,6 +651,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     )
                 )
                 repository.rememberShoppingItem(item.name)
+                markShoppingChanged()
             }
         }
     }
@@ -652,6 +674,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
              )
              repository.addShoppingItem(item)
              repository.rememberShoppingItem(trimmedName)
+             markShoppingChanged()
         }
     }
 
@@ -662,6 +685,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                 item.copy(name = trimmedName, quantity = quantity, unit = unit.trim().ifEmpty { "pcs" })
             )
             repository.rememberShoppingItem(trimmedName)
+            markShoppingChanged()
         }
     }
 
@@ -675,6 +699,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     recursEveryWeek = recursEveryWeek
                 )
             )
+            markShoppingChanged()
         }
     }
 
@@ -683,6 +708,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             repository.updateShoppingSection(
                 section.copy(name = name.trim(), recursEveryWeek = recursEveryWeek)
             )
+            markShoppingChanged()
         }
     }
 
@@ -691,30 +717,35 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         viewModelScope.launch {
             repository.deleteShoppingItemsInSection(section.sectionId)
             repository.deleteShoppingSection(section)
+            markShoppingChanged()
         }
     }
 
     fun toggleShoppingItem(item: ShoppingItemEntity) {
         viewModelScope.launch {
             repository.updateShoppingItem(item.copy(isChecked = !item.isChecked))
+            markShoppingChanged()
         }
     }
 
     fun deleteShoppingItem(item: ShoppingItemEntity) {
         viewModelScope.launch {
             repository.deleteShoppingItem(item)
+            markShoppingChanged()
         }
     }
 
     fun restoreShoppingItem(item: ShoppingItemEntity) {
         viewModelScope.launch {
             repository.addShoppingItem(item)
+            markShoppingChanged()
         }
     }
 
     fun clearCheckedShoppingItems(weekId: String = _currentWeek.value) {
         viewModelScope.launch {
-            repository.deleteCheckedShoppingItems(weekId)
+            repository.archiveAndClearCheckedShoppingItems(weekId)
+            markShoppingChanged()
         }
     }
 
@@ -726,7 +757,13 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                 it.isChecked && (it.sectionId in recurringIds || it.weekId == null || it.weekId == weekId)
             }
             repository.putAwayShoppingItems(checked, storageLocation)
-            repository.deleteCheckedShoppingItems(weekId)
+            repository.completeShoppingTrip(
+                checkedItems = checked,
+                sections = sections,
+                weekId = weekId,
+                storageLocation = storageLocation
+            )
+            markShoppingChanged()
         }
     }
 
