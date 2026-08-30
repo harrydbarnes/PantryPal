@@ -200,6 +200,7 @@ data class BackupPreferences(
     val shoppingRemindersEnabled: Boolean = false,
     val shoppingDayOfWeek: Int = 6,
     val shoppingTimeMinutes: Int = 600,
+    val shoppingReminderTiming: String = "NIGHT_BEFORE",
     val nearbyShoppingRemindersEnabled: Boolean = false,
     val activeMealWeekId: String? = null,
     val defaultCurrencyCode: String = "GBP",
