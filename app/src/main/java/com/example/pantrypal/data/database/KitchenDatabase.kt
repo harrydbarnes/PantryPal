@@ -24,6 +24,7 @@ import com.example.pantrypal.data.entity.ItemEntity
 import com.example.pantrypal.data.entity.PriceHistoryEntity
 import com.example.pantrypal.data.entity.RecipeEntity
 import com.example.pantrypal.data.entity.RecipeIngredientEntity
+import com.example.pantrypal.data.entity.ShoppingArchiveEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.entity.MealEntity
 import com.example.pantrypal.data.entity.MealWeekEntity
@@ -41,6 +42,7 @@ import com.google.gson.Gson
         InventoryEntity::class,
         ConsumptionEntity::class,
         ShoppingItemEntity::class,
+        ShoppingArchiveEntity::class,
         MealEntity::class,
         MealWeekEntity::class,
         ShoppingSectionEntity::class,
@@ -50,7 +52,7 @@ import com.google.gson.Gson
         RecipeEntity::class,
         RecipeIngredientEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -153,6 +155,34 @@ abstract class KitchenDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `shopping_archive` (
+                        `archiveId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `tripId` TEXT NOT NULL,
+                        `weekId` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `quantity` REAL NOT NULL,
+                        `unit` TEXT NOT NULL,
+                        `sectionName` TEXT NOT NULL,
+                        `completedAt` INTEGER NOT NULL,
+                        `storageLocation` TEXT
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_shopping_archive_tripId` " +
+                        "ON `shopping_archive` (`tripId`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_shopping_archive_completedAt` " +
+                        "ON `shopping_archive` (`completedAt`)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): KitchenDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -165,7 +195,8 @@ abstract class KitchenDatabase : RoomDatabase() {
                     MIGRATION_2_3,
                     MIGRATION_3_4,
                     MIGRATION_4_5,
-                    MIGRATION_5_6
+                    MIGRATION_5_6,
+                    MIGRATION_6_7
                 )
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
