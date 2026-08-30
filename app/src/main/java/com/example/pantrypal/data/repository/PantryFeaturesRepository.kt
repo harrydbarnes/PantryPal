@@ -336,6 +336,7 @@ class PantryFeaturesRepository(
             consumption = backupDao.consumption(),
             shoppingSections = backupDao.shoppingSections(),
             shoppingItems = backupDao.shoppingItems(),
+            shoppingArchive = backupDao.shoppingArchive(),
             shoppingHistory = backupDao.shoppingHistory(),
             mealWeeks = backupDao.mealWeeks(),
             meals = backupDao.meals(),
@@ -389,6 +390,10 @@ class PantryFeaturesRepository(
                     AppPreferences.KEY_SHOPPING_TIME,
                     AppPreferences.DEFAULT_SHOPPING_TIME_MINUTES
                 ),
+                shoppingReminderTiming = preferences.getString(
+                    AppPreferences.KEY_SHOPPING_REMINDER_TIMING,
+                    "NIGHT_BEFORE"
+                ) ?: "NIGHT_BEFORE",
                 nearbyShoppingRemindersEnabled = preferences.getBoolean(
                     AppPreferences.KEY_NEARBY_SHOPPING_REMINDERS,
                     false
@@ -408,6 +413,7 @@ class PantryFeaturesRepository(
             backupDao.clearInventory()
             backupDao.clearConsumption()
             backupDao.clearShoppingItems()
+            backupDao.clearShoppingArchive()
             backupDao.clearShoppingHistory()
             backupDao.clearMeals()
             backupDao.clearPriceHistory()
@@ -437,6 +443,7 @@ class PantryFeaturesRepository(
             backupDao.insertInventory(payload.inventory.map { it.toEntity() })
             backupDao.insertConsumption(payload.consumption.map { it.toEntity() })
             backupDao.insertShoppingItems(payload.shoppingItems.map { it.toEntity() })
+            backupDao.insertShoppingArchive(payload.shoppingArchive.map { it.toEntity() })
             backupDao.insertShoppingHistory(payload.shoppingHistory.map { it.toEntity() })
             backupDao.insertMeals(payload.meals.map { it.toEntity() })
             backupDao.insertPriceHistory(payload.priceHistory.map { it.toEntity() })
@@ -459,6 +466,12 @@ class PantryFeaturesRepository(
             .putInt(
                 AppPreferences.KEY_SHOPPING_TIME,
                 restored.shoppingTimeMinutes.coerceIn(0, 23 * 60 + 59)
+            )
+            .putString(
+                AppPreferences.KEY_SHOPPING_REMINDER_TIMING,
+                restored.shoppingReminderTiming.takeIf {
+                    it in setOf("NIGHT_BEFORE", "MORNING_OF", "HOUR_BEFORE")
+                } ?: "NIGHT_BEFORE"
             )
             .putBoolean(
                 AppPreferences.KEY_NEARBY_SHOPPING_REMINDERS,
