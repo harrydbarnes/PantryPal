@@ -970,7 +970,6 @@ fun KitchenApp(
                                     householdOpenLauncher.launch(
                                         arrayOf("application/json", "text/plain")
                                     )
-                                },
                                 }
                             )
                         }
