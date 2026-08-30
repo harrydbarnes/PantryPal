@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -80,6 +81,8 @@ import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.viewmodel.MainViewModel
 import com.example.pantrypal.util.ShoppingNeedStatus
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -94,6 +97,7 @@ fun ShoppingListScreen(
     val mealWeeks by viewModel.mealWeeksState.collectAsState()
     val selectedWeek by viewModel.shoppingWeek.collectAsState()
     val buildPreview by viewModel.shoppingBuildPreview.collectAsState()
+    val lastShoppingChangeAt by viewModel.shoppingLastChangedAt.collectAsState()
 
     var itemEditorSection by remember { mutableStateOf<ShoppingSectionEntity?>(null) }
     var editingItem by remember { mutableStateOf<ShoppingItemEntity?>(null) }
@@ -150,6 +154,24 @@ fun ShoppingListScreen(
                     onSubmit = ::submitQuickAdd,
                     suggestions = history.map { it.displayName }
                 )
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatusPill(
+                        label = "Local only",
+                        icon = Icons.Outlined.CloudOff,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        lastShoppingChangeAt?.let {
+                            "Last updated by This device · ${DateFormat.getDateTimeInstance().format(Date(it))}"
+                        } ?: "Changes stay on this device until household sharing is set up.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             if (showPlanningControls) {
@@ -240,7 +262,7 @@ fun ShoppingListScreen(
                     if (visibleItems.any { it.isChecked }) {
                         AssistChip(
                             onClick = { viewModel.clearCheckedShoppingItems(selectedWeek) },
-                            label = { Text("Clear checked") }
+                            label = { Text("Archive checked") }
                         )
                         AssistChip(
                             onClick = { showPutAwayDialog = true },
