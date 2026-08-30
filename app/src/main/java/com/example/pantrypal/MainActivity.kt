@@ -836,6 +836,7 @@ fun KitchenApp(
                                 viewModel.setNearbyShoppingRemindersEnabled(enabled)
                                 if (enabled) {
                                     requestLocationPermission()
+                                }
                             },
                             shoppingLocations = shoppingLocations,
                             locationPermissionGranted = hasLocationPermission,
