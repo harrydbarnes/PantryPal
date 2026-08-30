@@ -403,7 +403,6 @@ class PantryFeaturesViewModel(
                 _householdState.update {
                     it.copy(
                         isWorking = false,
-                        revision = it.revision + 1,
                         lastSharedAtEpochMs = System.currentTimeMillis(),
                         message = "Household snapshot is ready to share."
                     )
@@ -427,7 +426,6 @@ class PantryFeaturesViewModel(
                     _householdState.update {
                         it.copy(
                             isWorking = false,
-                            revision = it.revision + 1,
                             lastImportedAtEpochMs = System.currentTimeMillis(),
                             message = buildString {
                                 append("Household snapshot imported.")
@@ -444,14 +442,6 @@ class PantryFeaturesViewModel(
                         )
                     }
                 }
-        }
-    }
-
-    fun explainRealtimeSync() {
-        _householdState.update {
-            it.copy(
-                message = "Portable sharing works now. Real-time sync needs an opt-in household service before it can be enabled."
-            )
         }
     }
 
