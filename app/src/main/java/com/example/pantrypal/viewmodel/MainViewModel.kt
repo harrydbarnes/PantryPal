@@ -12,6 +12,7 @@ import com.example.pantrypal.data.entity.ConsumptionEntity
 import com.example.pantrypal.data.entity.ConsumptionType
 import com.example.pantrypal.data.entity.InventoryEntity
 import com.example.pantrypal.data.entity.ItemEntity
+import com.example.pantrypal.data.entity.ShoppingArchiveEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.entity.MealEntity
 import com.example.pantrypal.data.entity.MealWeekEntity
@@ -276,6 +277,13 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         )
 
     val shoppingHistoryState: StateFlow<List<ShoppingHistoryEntity>> = repository.shoppingHistory
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val shoppingArchiveState: StateFlow<List<ShoppingArchiveEntity>> = repository.shoppingArchive
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
