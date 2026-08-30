@@ -65,6 +65,7 @@ class KitchenRepositoryTest {
     class FakeShoppingDao(
         val rows: MutableList<ShoppingItemEntity> = mutableListOf()
     ) : ShoppingDao {
+        val archives = mutableListOf<ShoppingArchiveEntity>()
         override fun getAllShoppingItems(): Flow<List<ShoppingItemEntity>> = flowOf(rows.toList())
         override fun getShoppingArchive(): Flow<List<ShoppingArchiveEntity>> = flowOf(emptyList())
         override suspend fun getAllShoppingItemsSnapshot(): List<ShoppingItemEntity> = rows.toList()
@@ -88,8 +89,13 @@ class KitchenRepositoryTest {
             rows.removeAll { it.shoppingId == item.shoppingId }
         }
 
-        override suspend fun insertShoppingArchive(items: List<ShoppingArchiveEntity>) {}
-        override suspend fun clearShoppingArchive() {}
+        override suspend fun insertShoppingArchive(items: List<ShoppingArchiveEntity>) {
+            archives += items
+        }
+
+        override suspend fun clearShoppingArchive() {
+            archives.clear()
+        }
         override suspend fun deleteCheckedWeekItems(weekId: String) {}
         override suspend fun resetCheckedRecurringItems() {}
         override suspend fun deleteItemsInSection(sectionId: Long) {}
@@ -178,6 +184,51 @@ class KitchenRepositoryTest {
         assertEquals(1, shoppingDao.rows.size)
         assertEquals("Milk", shoppingDao.rows.single().name)
         assertEquals(3.0, shoppingDao.rows.single().quantity, 0.0)
+    }
+
+
+    @Test
+    fun completingShoppingTripArchivesCheckedItems() = runBlocking {
+        val shoppingDao = FakeShoppingDao()
+        val repo = KitchenRepository(
+            FakeItemDao(),
+            FakeInventoryDao(),
+            FakeConsumptionDao(),
+            shoppingDao,
+            FakeMealDao(),
+            FakeMealWeekDao(),
+            FakeShoppingSectionDao(),
+            FakeShoppingHistoryDao()
+        )
+        val checked = ShoppingItemEntity(
+            shoppingId = 7L,
+            name = "Milk",
+            quantity = 2.0,
+            unit = "litres",
+            isChecked = true,
+            sectionId = ShoppingSectionEntity.ID_THE_REST,
+            weekId = "A"
+        )
+
+        repo.completeShoppingTrip(
+            checkedItems = listOf(checked),
+            sections = listOf(
+                ShoppingSectionEntity(
+                    sectionId = ShoppingSectionEntity.ID_THE_REST,
+                    name = "The rest",
+                    sortOrder = 3,
+                    recursEveryWeek = false,
+                    systemKey = ShoppingSectionEntity.KEY_THE_REST
+                )
+            ),
+            weekId = "A",
+            storageLocation = InventoryEntity.LOCATION_FRIDGE
+        )
+
+        assertEquals(1, shoppingDao.archives.size)
+        assertEquals("Milk", shoppingDao.archives.single().name)
+        assertEquals("A", shoppingDao.archives.single().weekId)
+        assertEquals(InventoryEntity.LOCATION_FRIDGE, shoppingDao.archives.single().storageLocation)
     }
 
 }
