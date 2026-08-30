@@ -58,16 +58,6 @@ interface ShoppingDao {
     @Query("UPDATE shopping_list SET isChecked = 0 WHERE isChecked = 1 AND sectionId IN (SELECT sectionId FROM shopping_sections WHERE recursEveryWeek = 1)")
     suspend fun resetCheckedRecurringItems()
 
-    @Transaction
-    suspend fun archiveAndClearCheckedItems(
-        archivedItems: List<ShoppingArchiveEntity>,
-        weekId: String
-    ) {
-        if (archivedItems.isNotEmpty()) insertShoppingArchive(archivedItems)
-        deleteCheckedWeekItems(weekId)
-        resetCheckedRecurringItems()
-    }
-
     @Query("DELETE FROM shopping_list WHERE sectionId = :sectionId")
     suspend fun deleteItemsInSection(sectionId: Long)
 
