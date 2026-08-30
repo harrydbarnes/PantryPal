@@ -1,5 +1,6 @@
 package com.example.pantrypal.data.repository
 
+import androidx.room.withTransaction
 import com.example.pantrypal.data.dao.ConsumptionDao
 import com.example.pantrypal.data.dao.ConsumptionWithItem
 import com.example.pantrypal.data.dao.InventoryDao
@@ -19,6 +20,7 @@ import com.example.pantrypal.data.entity.MealEntity
 import com.example.pantrypal.data.entity.MealWeekEntity
 import com.example.pantrypal.data.entity.ShoppingHistoryEntity
 import com.example.pantrypal.data.entity.ShoppingSectionEntity
+import com.example.pantrypal.data.database.KitchenDatabase
 import com.example.pantrypal.data.api.OpenFoodFactsApi
 import com.example.pantrypal.util.normalizeShoppingName
 import kotlinx.coroutines.CancellationException
@@ -39,7 +41,8 @@ class KitchenRepository(
     private val mealDao: MealDao,
     private val mealWeekDao: MealWeekDao,
     private val shoppingSectionDao: ShoppingSectionDao,
-    private val shoppingHistoryDao: ShoppingHistoryDao
+    private val shoppingHistoryDao: ShoppingHistoryDao,
+    private val database: KitchenDatabase? = null
 ) {
     private val api: OpenFoodFactsApi by lazy {
         Retrofit.Builder()
@@ -219,7 +222,19 @@ class KitchenRepository(
                 storageLocation = storageLocation?.trim()?.takeIf(String::isNotBlank)
             )
         }
-        shoppingDao.archiveAndClearCheckedItems(archivedItems, weekId)
+        archiveAndClearCheckedItems(archivedItems, weekId)
+    }
+
+    private suspend fun archiveAndClearCheckedItems(
+        archivedItems: List<ShoppingArchiveEntity>,
+        weekId: String
+    ) {
+        suspend fun write() {
+            if (archivedItems.isNotEmpty()) shoppingDao.insertShoppingArchive(archivedItems)
+            shoppingDao.deleteCheckedWeekItems(weekId)
+            shoppingDao.resetCheckedRecurringItems()
+        }
+        if (database == null) write() else database.withTransaction { write() }
     }
 
     suspend fun archiveAndClearCheckedShoppingItems(weekId: String) {
