@@ -10,6 +10,7 @@ import com.example.pantrypal.data.entity.MealWeekEntity
 import com.example.pantrypal.data.entity.PriceHistoryEntity
 import com.example.pantrypal.data.entity.RecipeEntity
 import com.example.pantrypal.data.entity.RecipeIngredientEntity
+import com.example.pantrypal.data.entity.ShoppingArchiveEntity
 import com.example.pantrypal.data.entity.ShoppingHistoryEntity
 import com.example.pantrypal.data.entity.ShoppingItemEntity
 import com.example.pantrypal.data.entity.ShoppingSectionEntity
@@ -112,6 +113,32 @@ fun BackupShoppingItem.toEntity(): ShoppingItemEntity = ShoppingItemEntity(
     sectionId = sectionId,
     weekId = weekId
 )
+
+fun ShoppingArchiveEntity.toBackupShoppingArchive(): BackupShoppingArchive =
+    BackupShoppingArchive(
+        archiveId = archiveId,
+        tripId = tripId,
+        weekId = weekId,
+        name = name,
+        quantity = quantity,
+        unit = unit,
+        sectionName = sectionName,
+        completedAt = completedAt,
+        storageLocation = storageLocation
+    )
+
+fun BackupShoppingArchive.toEntity(): ShoppingArchiveEntity =
+    ShoppingArchiveEntity(
+        archiveId = archiveId,
+        tripId = tripId,
+        weekId = weekId,
+        name = name,
+        quantity = quantity,
+        unit = unit,
+        sectionName = sectionName,
+        completedAt = completedAt,
+        storageLocation = storageLocation
+    )
 
 fun ShoppingHistoryEntity.toBackupShoppingHistory(): BackupShoppingHistory =
     BackupShoppingHistory(normalizedName, displayName, lastUsedAt)
@@ -262,6 +289,7 @@ data class BackupEntitySnapshot(
     val consumption: List<ConsumptionEntity> = emptyList(),
     val shoppingSections: List<ShoppingSectionEntity> = emptyList(),
     val shoppingItems: List<ShoppingItemEntity> = emptyList(),
+    val shoppingArchive: List<ShoppingArchiveEntity> = emptyList(),
     val shoppingHistory: List<ShoppingHistoryEntity> = emptyList(),
     val mealWeeks: List<MealWeekEntity> = emptyList(),
     val meals: List<MealEntity> = emptyList(),
@@ -278,6 +306,7 @@ data class BackupEntitySnapshot(
         consumption = consumption.map(ConsumptionEntity::toBackupConsumption),
         shoppingSections = shoppingSections.map(ShoppingSectionEntity::toBackupShoppingSection),
         shoppingItems = shoppingItems.map(ShoppingItemEntity::toBackupShoppingItem),
+        shoppingArchive = shoppingArchive.map(ShoppingArchiveEntity::toBackupShoppingArchive),
         shoppingHistory = shoppingHistory.map(ShoppingHistoryEntity::toBackupShoppingHistory),
         mealWeeks = mealWeeks.map(MealWeekEntity::toBackupMealWeek),
         meals = meals.map(MealEntity::toBackupMeal),
