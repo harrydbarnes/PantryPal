@@ -228,6 +228,11 @@ fun MealPlanScreen(
                             MaterialTheme.colorScheme.primaryContainer
                         } else {
                             MaterialTheme.colorScheme.surfaceContainerHigh
+                        },
+                        contentColor = if (displayedWeek == currentWeek) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
                         }
                     )
                 ) {
@@ -254,7 +259,11 @@ fun MealPlanScreen(
                                         "Preview or prepare this rotation week."
                                     },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (displayedWeek == currentWeek) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
                                 )
                             }
                             if (displayedWeek != currentWeek) {

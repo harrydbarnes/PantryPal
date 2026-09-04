@@ -61,8 +61,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.pantrypal.data.entity.ItemEntity
-import com.example.pantrypal.data.entity.MealEntity
-import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.ui.screens.ScanOutScreen
 import com.example.pantrypal.ui.screens.SettingsScreen
 import com.example.pantrypal.ui.screens.PastItemsScreen
@@ -582,25 +580,10 @@ fun KitchenApp(
                 viewModel.setShoppingRemindersEnabled(remindersEnabled)
             },
             onSaveRegulars = { regulars ->
-                regulars.forEach { regular ->
-                    viewModel.addShoppingItem(
-                        name = regular,
-                        quantity = 1.0,
-                        unit = "pcs",
-                        sectionId = ShoppingSectionEntity.ID_EVERY_WEEK
-                    )
-                }
+                viewModel.addOnboardingRegulars(regulars)
             },
             onSaveMeals = { meals ->
-                meals.forEach { meal ->
-                    viewModel.addMeal(
-                        name = meal.name,
-                        week = MealEntity.WEEK_A,
-                        dayOfWeek = meal.dayOfWeek,
-                        mealSlot = MealEntity.SLOT_DINNER,
-                        ingredients = emptyList()
-                    )
-                }
+                viewModel.addOnboardingMeals(meals.map { it.name to it.dayOfWeek })
             },
             onSaveShoppingSpot = { name ->
                 viewModel.setNearbyShoppingRemindersEnabled(true)

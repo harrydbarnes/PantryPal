@@ -23,6 +23,7 @@ import com.example.pantrypal.data.entity.ShoppingSectionEntity
 import com.example.pantrypal.data.database.KitchenDatabase
 import com.example.pantrypal.data.api.OpenFoodFactsApi
 import com.example.pantrypal.util.normalizeShoppingName
+import com.example.pantrypal.util.onboardingNamesMissingFrom
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -173,6 +174,29 @@ class KitchenRepository(
                 } else {
                     shoppingDao.insertShoppingItem(item)
                 }
+            }
+        }
+    }
+
+    /**
+     * Onboarding can be replayed from Settings, so starter regulars must be safe to import
+     * more than once. Unlike normal additions, matching names are left untouched rather than
+     * having their quantity incremented.
+     */
+    suspend fun addOnboardingRegulars(names: List<String>) {
+        shoppingMutationMutex.withLock {
+            val currentRegulars = shoppingDao.getAllShoppingItemsSnapshot()
+                .filter { it.sectionId == ShoppingSectionEntity.ID_EVERY_WEEK }
+                .map { it.name }
+            onboardingNamesMissingFrom(currentRegulars, names).forEach { name ->
+                val item = ShoppingItemEntity(
+                    name = name,
+                    quantity = 1.0,
+                    unit = "pcs",
+                    sectionId = ShoppingSectionEntity.ID_EVERY_WEEK
+                )
+                requireValidShoppingItem(item)
+                shoppingDao.insertShoppingItem(item)
             }
         }
     }
@@ -335,6 +359,19 @@ class KitchenRepository(
     suspend fun insertMeal(meal: MealEntity) {
         requireValidMeal(meal)
         mealDao.insertMeal(meal)
+    }
+
+    /** Adds starter dinners once, even if onboarding is run again later. */
+    suspend fun addOnboardingMeals(meals: List<MealEntity>) {
+        val existingWeekAMeals = mealDao.getAllMealsSnapshot()
+            .filter { it.week == MealEntity.WEEK_A }
+            .map { it.name }
+        onboardingNamesMissingFrom(existingWeekAMeals, meals.map { it.name }).forEach { name ->
+            val source = meals.first { it.name.trim().equals(name, ignoreCase = true) }
+            val meal = source.copy(name = name)
+            requireValidMeal(meal)
+            mealDao.insertMeal(meal)
+        }
     }
 
     suspend fun updateMeal(meal: MealEntity) {

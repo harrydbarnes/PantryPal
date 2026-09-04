@@ -326,6 +326,26 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
+    fun addOnboardingRegulars(regulars: List<String>) {
+        viewModelScope.launch { repository.addOnboardingRegulars(regulars) }
+    }
+
+    fun addOnboardingMeals(meals: List<Pair<String, Int>>) {
+        viewModelScope.launch {
+            repository.addOnboardingMeals(
+                meals.map { (name, dayOfWeek) ->
+                    MealEntity(
+                        name = name.trim(),
+                        week = MealEntity.WEEK_A,
+                        ingredients = emptyList(),
+                        dayOfWeek = dayOfWeek.coerceIn(1, 7),
+                        mealSlot = MealEntity.SLOT_DINNER
+                    )
+                }
+            )
+        }
+    }
+
     fun updateMeal(meal: MealEntity, name: String, dayOfWeek: Int, mealSlot: String, ingredients: List<String>) {
         viewModelScope.launch {
             repository.updateMeal(

@@ -24,4 +24,7 @@ interface MealDao {
 
     @Query("SELECT * FROM meals")
     fun getAllMeals(): Flow<List<MealEntity>>
+
+    @Query("SELECT * FROM meals")
+    suspend fun getAllMealsSnapshot(): List<MealEntity>
 }
