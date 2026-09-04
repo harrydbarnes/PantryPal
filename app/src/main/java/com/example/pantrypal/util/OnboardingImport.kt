@@ -1,8 +1,9 @@
 package com.example.pantrypal.util
 
-import java.util.Locale
-
-/** Returns only new names, treating case and repeated whitespace as equivalent. */
+/**
+ * Returns only new names. Names use the same normalisation as shopping ingredients, so
+ * capitals, punctuation, spacing and common singular/plural variants do not create copies.
+ */
 fun onboardingNamesMissingFrom(existingNames: Collection<String>, incomingNames: Collection<String>): List<String> {
     val knownNames = existingNames.mapTo(mutableSetOf(), ::normalizeOnboardingName)
     return incomingNames.map(String::trim).filter { name ->
@@ -10,5 +11,4 @@ fun onboardingNamesMissingFrom(existingNames: Collection<String>, incomingNames:
     }
 }
 
-fun normalizeOnboardingName(name: String): String =
-    name.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT)
+fun normalizeOnboardingName(name: String): String = normalizeShoppingName(name)

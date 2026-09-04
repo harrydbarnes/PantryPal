@@ -11,7 +11,7 @@ class OnboardingImportTest {
             listOf("Coffee"),
             onboardingNamesMissingFrom(
                 existingNames = listOf("Milk", "Jacket potatoes"),
-                incomingNames = listOf(" milk ", "Coffee", "coffee", "Jacket   potatoes")
+                incomingNames = listOf(" milk ", "Coffee", "coffee", "Jacket potato")
             )
         )
     }

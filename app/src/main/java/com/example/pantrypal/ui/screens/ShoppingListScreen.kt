@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -32,6 +33,8 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material3.AlertDialog
@@ -154,6 +157,17 @@ fun ShoppingListScreen(
                     value = quickAddName,
                     onValueChange = { quickAddName = it },
                     onSubmit = ::submitQuickAdd,
+                    onAddSuggestion = { name ->
+                        defaultQuickAddSection?.let { section ->
+                            viewModel.addShoppingItem(
+                                name = name,
+                                quantity = 1.0,
+                                unit = "pcs",
+                                sectionId = section.sectionId,
+                                weekId = if (section.recursEveryWeek) null else selectedWeek
+                            )
+                        }
+                    },
                     suggestions = history.map { it.displayName }
                 )
             }
@@ -475,19 +489,22 @@ internal fun shoppingItemsForSection(
 ): List<ShoppingItemEntity> =
     items.filter { it.sectionId == sectionId }.sortedBy { it.isChecked }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QuickAddShoppingItem(
     value: String,
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    onAddSuggestion: (String) -> Unit,
     suggestions: List<String>
 ) {
+    var showPreviousItems by rememberSaveable { mutableStateOf(false) }
     val matchingSuggestions = remember(suggestions, value) {
         suggestions.filter { value.isBlank() || it.contains(value, ignoreCase = true) }
             .filterNot { it.equals(value, ignoreCase = true) }
-            .take(5)
+            .distinctBy { it.lowercase() }
     }
+    val visibleSuggestions = matchingSuggestions.take(8)
+    val previousSuggestions = matchingSuggestions.drop(8)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = value,
@@ -499,10 +516,44 @@ private fun QuickAddShoppingItem(
             keyboardActions = KeyboardActions(onDone = { onSubmit() }),
             modifier = Modifier.fillMaxWidth()
         )
-        if (matchingSuggestions.isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                matchingSuggestions.forEach { suggestion ->
-                    AssistChip(onClick = { onValueChange(suggestion) }, label = { Text(suggestion) })
+        if (visibleSuggestions.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(end = 4.dp)
+                ) {
+                    items(visibleSuggestions, key = { it.lowercase() }) { suggestion ->
+                        AssistChip(
+                            onClick = { onAddSuggestion(suggestion) },
+                            label = { Text(suggestion) },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
+                        )
+                    }
+                }
+                if (previousSuggestions.isNotEmpty()) {
+                    IconButton(
+                        onClick = { showPreviousItems = !showPreviousItems }
+                    ) {
+                        Icon(
+                            if (showPreviousItems) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (showPreviousItems) "Hide previous items" else "Show previous items"
+                        )
+                    }
+                }
+            }
+        }
+        if (showPreviousItems && previousSuggestions.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Previous items", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    previousSuggestions.forEach { suggestion ->
+                        AssistChip(
+                            onClick = { onAddSuggestion(suggestion) },
+                            label = { Text(suggestion) },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
+                        )
+                    }
                 }
             }
         }
