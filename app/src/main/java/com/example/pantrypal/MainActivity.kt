@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.History
@@ -641,19 +640,6 @@ fun KitchenApp(
                             onClick = { currentScreen = parentScreenFor(currentScreen) }
                         ) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Go back")
-                        }
-                    } else {
-                        Surface(
-                            modifier = Modifier.padding(start = 8.dp).size(40.dp),
-                            shape = MaterialTheme.shapes.medium,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ) {
-                            Icon(
-                                Icons.Default.Eco,
-                                contentDescription = "PantryPal",
-                                modifier = Modifier.padding(9.dp)
-                            )
                         }
                     }
                 },
