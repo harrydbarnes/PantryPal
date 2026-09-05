@@ -949,7 +949,7 @@ fun KitchenApp(
                                         arrayOf("application/json", "text/plain")
                                     )
                                 },
-                                onGoogleSignIn = { featuresViewModel.signInToHousehold(this@MainActivity) },
+                                onGoogleSignIn = { featuresViewModel.signInToHousehold(context as ComponentActivity) },
                                 onCreateLiveHousehold = featuresViewModel::createLiveHousehold,
                                 onJoinLiveHousehold = featuresViewModel::joinLiveHousehold
                             )

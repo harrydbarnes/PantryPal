@@ -75,6 +75,7 @@ class FirebaseHouseholdSync(
         )
         val googleCredential = GoogleIdTokenCredential.createFrom(result.credential.data)
         auth.signInWithCredential(GoogleAuthProvider.getCredential(googleCredential.idToken, null)).await()
+        Unit
     }.onFailure { error ->
         _state.value = currentState().copy(status = if (error is GetCredentialException) "Google sign-in was cancelled." else "Google sign-in failed.")
     }
