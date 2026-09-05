@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 import java.io.ByteArrayOutputStream
@@ -197,6 +198,15 @@ dependencies {
 
     // Battery-efficient OS geofencing for optional nearby shopping nudges
     implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    // Household accounts and real-time sync.
+    implementation(platform("com.google.firebase:firebase-bom:34.18.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
 
     // Gson for backup
     implementation("com.google.code.gson:gson:2.14.0")

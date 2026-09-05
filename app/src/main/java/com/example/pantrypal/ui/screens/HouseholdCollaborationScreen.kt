@@ -36,7 +36,12 @@ data class HouseholdSyncUiState(
     val lastSharedAtEpochMs: Long? = null,
     val lastImportedAtEpochMs: Long? = null,
     val isWorking: Boolean = false,
-    val message: String? = null
+    val message: String? = null,
+    val signedIn: Boolean = false,
+    val accountName: String? = null,
+    val liveHouseholdId: String? = null,
+    val liveInvite: String? = null,
+    val liveSyncing: Boolean = false
 )
 
 private enum class HouseholdShareStep { OVERVIEW, CHOOSE, SHARE, JOIN }
@@ -48,6 +53,8 @@ fun HouseholdCollaborationScreen(
     state: HouseholdSyncUiState,
     onShareSnapshot: () -> Unit,
     onImportSnapshot: () -> Unit,
+    onGoogleSignIn: () -> Unit = {},
+    onCreateLiveHousehold: () -> Unit = {},
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     showTopBar: Boolean = false
@@ -71,7 +78,7 @@ fun HouseholdCollaborationScreen(
         }
     ) { contentPadding ->
         when (step) {
-            HouseholdShareStep.OVERVIEW -> HouseholdOverview(state, { step = HouseholdShareStep.CHOOSE }, Modifier.padding(contentPadding))
+            HouseholdShareStep.OVERVIEW -> HouseholdOverview(state, { step = HouseholdShareStep.CHOOSE }, onGoogleSignIn, onCreateLiveHousehold, Modifier.padding(contentPadding))
             HouseholdShareStep.CHOOSE -> SetupChoice({ step = HouseholdShareStep.SHARE }, { step = HouseholdShareStep.JOIN }, Modifier.padding(contentPadding))
             HouseholdShareStep.SHARE -> ShareSetupCode(pairingCode, state.isWorking, onShareSnapshot, Modifier.padding(contentPadding))
             HouseholdShareStep.JOIN -> JoinSetupCode(onImportSnapshot, Modifier.padding(contentPadding))
@@ -80,7 +87,13 @@ fun HouseholdCollaborationScreen(
 }
 
 @Composable
-private fun HouseholdOverview(state: HouseholdSyncUiState, onSetUp: () -> Unit, modifier: Modifier = Modifier) {
+private fun HouseholdOverview(
+    state: HouseholdSyncUiState,
+    onSetUp: () -> Unit,
+    onGoogleSignIn: () -> Unit,
+    onCreateLiveHousehold: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(PantryPalSpacing.md),
@@ -92,7 +105,15 @@ private fun HouseholdOverview(state: HouseholdSyncUiState, onSetUp: () -> Unit, 
                     Icon(Icons.Outlined.Group, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     Column(Modifier.weight(1f)) {
                         Text(state.householdName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        Text("This device only", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text(
+                            when {
+                                state.liveHouseholdId != null -> "Live sync is on${if (state.liveSyncing) "…" else ""}"
+                                state.signedIn -> "Signed in as ${state.accountName ?: "Google account"}"
+                                else -> "This device only"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 }
             }
@@ -101,6 +122,19 @@ private fun HouseholdOverview(state: HouseholdSyncUiState, onSetUp: () -> Unit, 
             Text("Keep the kitchen in step", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.size(6.dp))
             Text("Send a setup copy to another phone or tablet. You can review it before anything on that device changes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (!state.signedIn) {
+            item {
+                Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
+                    Text("Sign in with Google for live sync")
+                }
+            }
+        } else if (state.liveHouseholdId == null) {
+            item {
+                Button(onClick = onCreateLiveHousehold, modifier = Modifier.fillMaxWidth()) {
+                    Text("Create live household")
+                }
+            }
         }
         item {
             Button(onClick = onSetUp, modifier = Modifier.fillMaxWidth()) {

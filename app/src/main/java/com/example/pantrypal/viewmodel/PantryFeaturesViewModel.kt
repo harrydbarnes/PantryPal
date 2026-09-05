@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.pantrypal.data.backup.BackupDecodeResult
 import com.example.pantrypal.data.mapper.toPriceObservation
 import com.example.pantrypal.data.repository.PantryFeaturesRepository
+import com.example.pantrypal.data.household.FirebaseHouseholdSync
+import android.app.Activity
 import com.example.pantrypal.domain.budget.BudgetCalculator
 import com.example.pantrypal.domain.budget.BudgetTarget
 import com.example.pantrypal.domain.price.PriceCalculator
@@ -34,7 +36,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class PantryFeaturesViewModel(
-    private val repository: PantryFeaturesRepository
+    private val repository: PantryFeaturesRepository,
+    private val firebaseHouseholdSync: FirebaseHouseholdSync
 ) : ViewModel() {
     private val _recipeState = MutableStateFlow(RecipeScreenState())
     val recipeState: StateFlow<RecipeScreenState> = _recipeState.asStateFlow()
@@ -93,6 +96,20 @@ class PantryFeaturesViewModel(
 
     init {
         viewModelScope.launch {
+            firebaseHouseholdSync.state.collect { live ->
+                _householdState.update {
+                    it.copy(
+                        signedIn = live.signedIn,
+                        accountName = live.accountName,
+                        liveHouseholdId = live.householdId,
+                        liveInvite = live.invite,
+                        liveSyncing = live.syncing,
+                        message = live.status ?: it.message
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
             repository.recipes.collect { recipes ->
                 refreshRecipeState(recipes = recipes)
             }
@@ -108,6 +125,12 @@ class PantryFeaturesViewModel(
                 .onFailure { showRecipeError(it) }
         }
     }
+
+    fun signInToHousehold(activity: Activity) {
+        viewModelScope.launch { firebaseHouseholdSync.signIn(activity) }
+    }
+
+    fun createLiveHousehold() = firebaseHouseholdSync.createHousehold()
 
     fun setRecipeQuery(query: String) {
         _recipeState.update {
@@ -475,12 +498,13 @@ class PantryFeaturesViewModel(
 }
 
 class PantryFeaturesViewModelFactory(
-    private val repository: PantryFeaturesRepository
+    private val repository: PantryFeaturesRepository,
+    private val firebaseHouseholdSync: FirebaseHouseholdSync
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(PantryFeaturesViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return PantryFeaturesViewModel(repository) as T
+            return PantryFeaturesViewModel(repository, firebaseHouseholdSync) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

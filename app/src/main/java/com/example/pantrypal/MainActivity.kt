@@ -141,7 +141,7 @@ class MainActivity : ComponentActivity() {
         val app = application as PantryPalApplication
         val repository = app.repository
         val viewModelFactory = MainViewModelFactory(repository, app)
-        val featuresViewModelFactory = PantryFeaturesViewModelFactory(app.featuresRepository)
+        val featuresViewModelFactory = PantryFeaturesViewModelFactory(app.featuresRepository, app.householdSync)
 
         setContent {
             val viewModel: MainViewModel = viewModel(factory = viewModelFactory)
@@ -948,7 +948,9 @@ fun KitchenApp(
                                     householdOpenLauncher.launch(
                                         arrayOf("application/json", "text/plain")
                                     )
-                                }
+                                },
+                                onGoogleSignIn = { featuresViewModel.signInToHousehold(this@MainActivity) },
+                                onCreateLiveHousehold = featuresViewModel::createLiveHousehold
                             )
                         }
                         AppScreen.PastItems -> PastItemsScreen(viewModel)

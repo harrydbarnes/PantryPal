@@ -3,6 +3,7 @@ package com.example.pantrypal
 import android.app.Application
 import androidx.work.Configuration
 import com.example.pantrypal.data.database.KitchenDatabase
+import com.example.pantrypal.data.household.FirebaseHouseholdSync
 import com.example.pantrypal.data.repository.KitchenRepository
 import com.example.pantrypal.data.repository.PantryFeaturesRepository
 import com.example.pantrypal.util.KitchenWorkerFactory
@@ -32,14 +33,29 @@ class PantryPalApplication : Application(), Configuration.Provider {
         PantryFeaturesRepository(this, database, repository)
     }
 
+    val householdSync: FirebaseHouseholdSync by lazy {
+        FirebaseHouseholdSync(this, featuresRepository)
+    }
+
     override fun onCreate() {
         super.onCreate()
         database.invalidationTracker.addObserver(object : androidx.room.InvalidationTracker.Observer(
             "shopping_list",
-            "inventory"
+            "inventory",
+            "items",
+            "consumption_history",
+            "meals",
+            "meal_weeks",
+            "shopping_sections",
+            "shopping_history",
+            "price_history",
+            "weekly_budgets",
+            "recipes",
+            "recipe_ingredients"
         ) {
             override fun onInvalidated(tables: Set<String>) {
                 PantryPalWidgetProvider.updateWidgets(this@PantryPalApplication)
+                householdSync.onLocalDataChanged()
             }
         })
     }
