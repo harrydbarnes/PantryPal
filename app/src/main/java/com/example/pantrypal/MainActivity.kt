@@ -3,6 +3,7 @@ package com.example.pantrypal
 import android.os.Bundle
 import android.Manifest
 import android.content.Context
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -47,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pantrypal.ui.theme.PantryPalTheme
 import com.example.pantrypal.viewmodel.MainViewModel
@@ -105,6 +107,7 @@ import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.File
 
 import androidx.annotation.StringRes
 
@@ -472,26 +475,6 @@ fun KitchenApp(
             }
         }
     }
-    val householdCreateLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                featuresViewModel.createHouseholdJson().onSuccess { json ->
-                    runCatching {
-                        withContext(Dispatchers.IO) {
-                            context.contentResolver.openOutputStream(uri)?.bufferedWriter().use {
-                                requireNotNull(it) { "The selected file could not be opened." }
-                                    .write(json)
-                            }
-                        }
-                    }.onFailure {
-                        snackbarHostState.showSnackbar("Household file could not be written.")
-                    }
-                }
-            }
-        }
-    }
     val householdOpenLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -768,7 +751,8 @@ fun KitchenApp(
                             onScanReceipt = { currentScreen = AppScreen.Receipt },
                             onOpenShoppingTools = {
                                 currentScreen = AppScreen.ShoppingTools
-                            }
+                            },
+                            onOpenHousehold = { currentScreen = AppScreen.Household }
                         )
                         AppScreen.MealPlan -> MealPlanScreen(
                             viewModel = viewModel,
@@ -948,9 +932,17 @@ fun KitchenApp(
                             HouseholdCollaborationScreen(
                                 state = state,
                                 onShareSnapshot = {
-                                    householdCreateLauncher.launch(
-                                        "PantryPal-household-${java.time.LocalDate.now()}.json"
-                                    )
+                                    scope.launch {
+                                        featuresViewModel.createHouseholdJson().onSuccess { json ->
+                                            runCatching {
+                                                val snapshotUri = withContext(Dispatchers.IO) {
+                                                    writeHouseholdSnapshot(context, json)
+                                                }
+                                                shareHouseholdSnapshot(context, snapshotUri)
+                                            }
+                                                .onFailure { snackbarHostState.showSnackbar("Household copy could not be shared.") }
+                                        }
+                                    }
                                 },
                                 onImportSnapshot = {
                                     householdOpenLauncher.launch(
@@ -1053,6 +1045,24 @@ fun KitchenApp(
             }
         )
     }
+}
+
+private fun writeHouseholdSnapshot(context: Context, json: String): Uri {
+    val shareDirectory = File(context.cacheDir, "household-shares").apply { mkdirs() }
+    val snapshotFile = File(shareDirectory, "PantryPal-household-${java.time.LocalDate.now()}.json")
+    snapshotFile.writeText(json)
+    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", snapshotFile)
+}
+
+private fun shareHouseholdSnapshot(context: Context, snapshotUri: Uri) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/json"
+        putExtra(Intent.EXTRA_STREAM, snapshotUri)
+        putExtra(Intent.EXTRA_TITLE, "PantryPal setup copy")
+        clipData = ClipData.newRawUri("PantryPal setup copy", snapshotUri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, "Send PantryPal setup copy"))
 }
 
 private fun prepareReceiptTextRecognition(

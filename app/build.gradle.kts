@@ -181,6 +181,7 @@ dependencies {
 
     // MLKit
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("com.google.zxing:core:3.5.3")
     // Keep the OCR model out of the base APK. Google Play services downloads it when needed.
     implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
 

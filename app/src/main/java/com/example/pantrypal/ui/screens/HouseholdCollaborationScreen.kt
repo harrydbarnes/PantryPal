@@ -1,36 +1,34 @@
 package com.example.pantrypal.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.outlined.UploadFile
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.example.pantrypal.ui.BarcodeScanner
 import com.example.pantrypal.ui.components.PantryPalSpacing
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import java.text.DateFormat
 import java.util.Date
-import androidx.compose.ui.unit.dp
 
 data class HouseholdSyncUiState(
     val householdName: String = "My household",
@@ -41,10 +39,9 @@ data class HouseholdSyncUiState(
     val message: String? = null
 )
 
-/**
- * Callback-driven collaboration settings. Sharing and document picking are owned by the activity;
- * this surface never requests broad storage or network permission.
- */
+private enum class HouseholdShareStep { OVERVIEW, CHOOSE, SHARE, JOIN }
+
+/** A friendly local-first hand-off. The actual data travels through Android's share sheet. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HouseholdCollaborationScreen(
@@ -55,142 +52,199 @@ fun HouseholdCollaborationScreen(
     onBack: (() -> Unit)? = null,
     showTopBar: Boolean = false
 ) {
+    var step by remember { mutableStateOf(HouseholdShareStep.OVERVIEW) }
+    val pairingCode = remember { householdPairingCode(state.householdName) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             if (showTopBar) {
                 TopAppBar(
-                    title = { Text("Household sharing") },
+                    title = { Text(if (step == HouseholdShareStep.OVERVIEW) "Household" else "Set up household") },
                     navigationIcon = {
-                        if (onBack != null) {
-                            TextButton(onClick = onBack) { Text("Back") }
-                        }
+                        TextButton(onClick = {
+                            if (step == HouseholdShareStep.OVERVIEW) onBack?.invoke()
+                            else step = HouseholdShareStep.OVERVIEW
+                        }) { Text("Back") }
                     }
                 )
             }
         }
     ) { contentPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = PantryPalSpacing.sm,
-                end = PantryPalSpacing.sm,
-                top = PantryPalSpacing.xs,
-                bottom = PantryPalSpacing.xl
-            ),
-            verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
-        ) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(PantryPalSpacing.md),
-                        horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Outlined.Group,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                state.householdName,
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                "Local-first sharing from ${state.deviceName}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(PantryPalSpacing.md),
-                        verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm)
-                    ) {
-                        Text("Portable snapshot", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Share the complete pantry, lists, planner, recipes, prices, budget, and settings through Android. The checksum detects damaged or edited files, but the file is not encrypted.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            "Sharing is a manual hand-off between devices; live household sync is not connected yet.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Button(
-                            onClick = onShareSnapshot,
-                            enabled = !state.isWorking,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Outlined.Share, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Share snapshot")
-                        }
-                        OutlinedButton(
-                            onClick = onImportSnapshot,
-                            enabled = !state.isWorking,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Outlined.FileOpen, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Import and review snapshot")
-                        }
-                        SnapshotTime("Last shared", state.lastSharedAtEpochMs)
-                        SnapshotTime("Last imported", state.lastImportedAtEpochMs)
-                    }
-                }
-            }
-
-            state.message?.let { message ->
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                        )
-                    ) {
-                        Text(
-                            message,
-                            modifier = Modifier.padding(PantryPalSpacing.md),
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                    }
-                }
-            }
+        when (step) {
+            HouseholdShareStep.OVERVIEW -> HouseholdOverview(state, { step = HouseholdShareStep.CHOOSE }, Modifier.padding(contentPadding))
+            HouseholdShareStep.CHOOSE -> SetupChoice({ step = HouseholdShareStep.SHARE }, { step = HouseholdShareStep.JOIN }, Modifier.padding(contentPadding))
+            HouseholdShareStep.SHARE -> ShareSetupCode(pairingCode, state.isWorking, onShareSnapshot, Modifier.padding(contentPadding))
+            HouseholdShareStep.JOIN -> JoinSetupCode(onImportSnapshot, Modifier.padding(contentPadding))
         }
     }
 }
 
 @Composable
+private fun HouseholdOverview(state: HouseholdSyncUiState, onSetUp: () -> Unit, modifier: Modifier = Modifier) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(PantryPalSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
+    ) {
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Row(Modifier.padding(PantryPalSpacing.md), horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Group, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Column(Modifier.weight(1f)) {
+                        Text(state.householdName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("This device only", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
+            }
+        }
+        item {
+            Text("Keep the kitchen in step", style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.size(6.dp))
+            Text("Send a setup copy to another phone or tablet. You can review it before anything on that device changes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        item {
+            Button(onClick = onSetUp, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.Group, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Set up household")
+            }
+        }
+        item {
+            Text("One-off copy", style = MaterialTheme.typography.titleMedium)
+            Text("Changes will not sync automatically. Live household sync can be added later without changing this hand-off.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        item { SnapshotTime("Last shared", state.lastSharedAtEpochMs) }
+        item { SnapshotTime("Last imported", state.lastImportedAtEpochMs) }
+        state.message?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.primary) } }
+    }
+}
+
+@Composable
+private fun SetupChoice(onShare: () -> Unit, onJoin: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxSize().padding(PantryPalSpacing.md), verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)) {
+        Text("Share PantryPal with another device", style = MaterialTheme.typography.headlineSmall)
+        Text("Choose what you are doing on this device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Card(modifier = Modifier.fillMaxWidth(), onClick = onShare) {
+            Row(Modifier.padding(PantryPalSpacing.md), horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Share, contentDescription = null)
+                Column {
+                    Text("Share a setup code", fontWeight = FontWeight.SemiBold)
+                    Text("Show a QR code and send a setup copy.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        Card(modifier = Modifier.fillMaxWidth(), onClick = onJoin) {
+            Row(Modifier.padding(PantryPalSpacing.md), horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.QrCode2, contentDescription = null)
+                Column {
+                    Text("Join with a code", fontWeight = FontWeight.SemiBold)
+                    Text("Scan the QR code, then choose the shared copy.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        Text("One-off copy. Changes will not sync automatically.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ShareSetupCode(code: String, isWorking: Boolean, onShareCopy: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(PantryPalSpacing.md),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
+    ) {
+        Text("Share a setup code", style = MaterialTheme.typography.headlineSmall)
+        Text("On the other device, scan this code or enter the words.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        PairingQrCode(code)
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+            Text(code.removePrefix("PANTRYPAL-"), modifier = Modifier.padding(PantryPalSpacing.md), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
+        Button(onClick = onShareCopy, enabled = !isWorking, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.UploadFile, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Send setup copy")
+        }
+        Text("The setup copy contains your pantry, shopping list, meal plan, recipes and preferences.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Send it only through an app or service you trust.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun JoinSetupCode(onImportSnapshot: () -> Unit, modifier: Modifier = Modifier) {
+    var scannedCode by remember { mutableStateOf<String?>(null) }
+    var manualCode by remember { mutableStateOf("") }
+    var showScanner by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> showScanner = granted }
+    if (showScanner) {
+        Box(modifier.fillMaxSize()) {
+            BarcodeScanner(viewfinderAspectRatio = 1f, onBarcodeDetected = { value ->
+                if (value.startsWith("PANTRYPAL-")) {
+                    scannedCode = value
+                    showScanner = false
+                }
+            })
+            TextButton(onClick = { showScanner = false }, modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)) { Text("Cancel") }
+        }
+        return
+    }
+    Column(
+        modifier = modifier.fillMaxSize().padding(PantryPalSpacing.md),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
+    ) {
+        Text("Join with a code", style = MaterialTheme.typography.headlineSmall)
+        Text("Scan the code on the sharing device, then select its setup copy.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedButton(onClick = {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) showScanner = true
+            else cameraPermission.launch(Manifest.permission.CAMERA)
+        }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.QrCode2, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Scan QR code")
+        }
+        OutlinedTextField(
+            value = manualCode,
+            onValueChange = { manualCode = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Or enter the six words") },
+            singleLine = true
+        )
+        TextButton(onClick = { if (manualCode.trim().isNotBlank()) scannedCode = manualCode.trim() }) {
+            Text("Use entered code")
+        }
+        scannedCode?.let { Text("Setup code recognised", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
+        HorizontalDivider()
+        Button(onClick = onImportSnapshot, enabled = scannedCode != null, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.FileOpen, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Choose shared copy")
+        }
+        Text("You will review the copy before it replaces anything on this device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun PairingQrCode(code: String) {
+    val bitmap = remember(code) {
+        val matrix = QRCodeWriter().encode(code, BarcodeFormat.QR_CODE, 480, 480)
+        Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888).also { bitmap ->
+            for (x in 0 until matrix.width) for (y in 0 until matrix.height) bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+        }
+    }
+    Image(bitmap.asImageBitmap(), contentDescription = "Household setup QR code", modifier = Modifier.size(240.dp))
+}
+
+private fun householdPairingCode(householdName: String): String {
+    val words = listOf("maple", "river", "lemon", "brick", "frost", "note", "orbit", "meadow", "pepper", "harbour", "copper", "willow")
+    val seed = (householdName.hashCode().toLong() xor System.currentTimeMillis() / 86_400_000L).toInt()
+    return "PANTRYPAL-" + (0 until 6).joinToString("-") { words[kotlin.math.abs(seed + it * 17) % words.size] }
+}
+
+@Composable
 private fun SnapshotTime(label: String, epochMs: Long?) {
     Row(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            epochMs?.let { DateFormat.getDateTimeInstance().format(Date(it)) } ?: "Not yet",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(epochMs?.let { DateFormat.getDateTimeInstance().format(Date(it)) } ?: "Not yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

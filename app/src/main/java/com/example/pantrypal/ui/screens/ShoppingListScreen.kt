@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -92,7 +93,8 @@ import java.util.Date
 fun ShoppingListScreen(
     viewModel: MainViewModel,
     onScanReceipt: () -> Unit = {},
-    onOpenShoppingTools: () -> Unit = {}
+    onOpenShoppingTools: () -> Unit = {},
+    onOpenHousehold: () -> Unit = {}
 ) {
     val shoppingList by viewModel.shoppingListState.collectAsState()
     val sections by viewModel.shoppingSectionsState.collectAsState()
@@ -187,6 +189,26 @@ fun ShoppingListScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenHousehold),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Outlined.Group, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Column(Modifier.weight(1f)) {
+                            Text("My household", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text("This device only", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        Text("Set up", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
                 }
             }
 

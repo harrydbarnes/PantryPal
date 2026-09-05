@@ -52,6 +52,7 @@ private data class ScannerConfig(
 @Composable
 fun BarcodeScanner(
     modifier: Modifier = Modifier,
+    viewfinderAspectRatio: Float = VIEWFINDER_ASPECT_RATIO,
     onBarcodeDetected: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -118,7 +119,7 @@ fun BarcodeScanner(
             // Use min of width/height to ensure it fits on screen (e.g. tablet landscape)
             val minDim = kotlin.math.min(width, height)
             val rectWidth = minDim - (padding * 2)
-            val rectHeight = rectWidth * VIEWFINDER_ASPECT_RATIO // Aspect ratio example
+            val rectHeight = rectWidth * viewfinderAspectRatio
             val left = (width - rectWidth) / 2
             val top = (height * VIEWFINDER_CENTER_Y_PERCENT) - (rectHeight / 2)
             val rect = Rect(left, top, left + rectWidth, top + rectHeight)
