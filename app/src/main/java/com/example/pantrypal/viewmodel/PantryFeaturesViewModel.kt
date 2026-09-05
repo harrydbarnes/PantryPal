@@ -132,6 +132,8 @@ class PantryFeaturesViewModel(
 
     fun createLiveHousehold() = firebaseHouseholdSync.createHousehold()
 
+    fun joinLiveHousehold(invite: String) = firebaseHouseholdSync.joinHousehold(invite)
+
     fun setRecipeQuery(query: String) {
         _recipeState.update {
             it.copy(searchQuery = query, errorMessage = null, message = null)

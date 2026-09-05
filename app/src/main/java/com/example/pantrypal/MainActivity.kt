@@ -950,7 +950,8 @@ fun KitchenApp(
                                     )
                                 },
                                 onGoogleSignIn = { featuresViewModel.signInToHousehold(this@MainActivity) },
-                                onCreateLiveHousehold = featuresViewModel::createLiveHousehold
+                                onCreateLiveHousehold = featuresViewModel::createLiveHousehold,
+                                onJoinLiveHousehold = featuresViewModel::joinLiveHousehold
                             )
                         }
                         AppScreen.PastItems -> PastItemsScreen(viewModel)

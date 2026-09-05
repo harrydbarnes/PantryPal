@@ -55,12 +55,15 @@ fun HouseholdCollaborationScreen(
     onImportSnapshot: () -> Unit,
     onGoogleSignIn: () -> Unit = {},
     onCreateLiveHousehold: () -> Unit = {},
+    onJoinLiveHousehold: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     showTopBar: Boolean = false
 ) {
     var step by remember { mutableStateOf(HouseholdShareStep.OVERVIEW) }
-    val pairingCode = remember { householdPairingCode(state.householdName) }
+    val pairingCode = remember(state.liveInvite, state.householdName) {
+        state.liveInvite?.let { "PANTRYPAL-LIVE|$it" } ?: householdPairingCode(state.householdName)
+    }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -81,7 +84,7 @@ fun HouseholdCollaborationScreen(
             HouseholdShareStep.OVERVIEW -> HouseholdOverview(state, { step = HouseholdShareStep.CHOOSE }, onGoogleSignIn, onCreateLiveHousehold, Modifier.padding(contentPadding))
             HouseholdShareStep.CHOOSE -> SetupChoice({ step = HouseholdShareStep.SHARE }, { step = HouseholdShareStep.JOIN }, Modifier.padding(contentPadding))
             HouseholdShareStep.SHARE -> ShareSetupCode(pairingCode, state.isWorking, onShareSnapshot, Modifier.padding(contentPadding))
-            HouseholdShareStep.JOIN -> JoinSetupCode(onImportSnapshot, Modifier.padding(contentPadding))
+            HouseholdShareStep.JOIN -> JoinSetupCode(onImportSnapshot, onJoinLiveHousehold, Modifier.padding(contentPadding))
         }
     }
 }
@@ -204,7 +207,11 @@ private fun ShareSetupCode(code: String, isWorking: Boolean, onShareCopy: () -> 
 }
 
 @Composable
-private fun JoinSetupCode(onImportSnapshot: () -> Unit, modifier: Modifier = Modifier) {
+private fun JoinSetupCode(
+    onImportSnapshot: () -> Unit,
+    onJoinLiveHousehold: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     var scannedCode by remember { mutableStateOf<String?>(null) }
     var manualCode by remember { mutableStateOf("") }
     var showScanner by remember { mutableStateOf(false) }
@@ -228,7 +235,7 @@ private fun JoinSetupCode(onImportSnapshot: () -> Unit, modifier: Modifier = Mod
         verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
     ) {
         Text("Join with a code", style = MaterialTheme.typography.headlineSmall)
-        Text("Scan the code on the sharing device, then select its setup copy.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Scan the code on the sharing device to join live sync, or use a one-off copy below.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedButton(onClick = {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) showScanner = true
             else cameraPermission.launch(Manifest.permission.CAMERA)
@@ -247,9 +254,19 @@ private fun JoinSetupCode(onImportSnapshot: () -> Unit, modifier: Modifier = Mod
         TextButton(onClick = { if (manualCode.trim().isNotBlank()) scannedCode = manualCode.trim() }) {
             Text("Use entered code")
         }
-        scannedCode?.let { Text("Setup code recognised", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
+        scannedCode?.let { code ->
+            if (code.startsWith("PANTRYPAL-LIVE|")) {
+                Text("Live household recognised", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                Button(
+                    onClick = { onJoinLiveHousehold(code.removePrefix("PANTRYPAL-LIVE|")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Join live household") }
+            } else {
+                Text("Setup code recognised", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            }
+        }
         HorizontalDivider()
-        Button(onClick = onImportSnapshot, enabled = scannedCode != null, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onImportSnapshot, enabled = scannedCode != null && !scannedCode!!.startsWith("PANTRYPAL-LIVE|"), modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Outlined.FileOpen, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Choose shared copy")
