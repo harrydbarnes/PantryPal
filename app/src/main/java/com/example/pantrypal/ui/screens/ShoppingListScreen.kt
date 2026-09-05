@@ -190,6 +190,15 @@ fun ShoppingListScreen(
                 }
             }
 
+            item {
+                OutlinedButton(
+                    onClick = { showPlanningControls = !showPlanningControls },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (showPlanningControls) "Hide planning & preparation" else "Plan & prepare")
+                }
+            }
+
             if (showPlanningControls) {
             item {
                 ExpressiveHero(
@@ -374,12 +383,6 @@ fun ShoppingListScreen(
                             }
                         }
                     }
-                }
-            }
-
-            item {
-                OutlinedButton(onClick = { showPlanningControls = !showPlanningControls }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (showPlanningControls) "Hide planning & preparation" else "Plan & prepare")
                 }
             }
 

@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -202,12 +204,11 @@ fun MealPlanScreen(
             }
 
             item {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
+                LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(end = 8.dp)
                 ) {
-                    weeks.forEach { week ->
+                    items(weeks, key = { it.weekId }) { week ->
                         FilterChip(
                             selected = displayedWeek == week.weekId,
                             onClick = { displayedWeek = week.weekId },
