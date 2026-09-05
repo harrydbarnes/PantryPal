@@ -97,7 +97,12 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.android.gms.common.moduleinstall.InstallStatusListener
+import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
+import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -407,11 +412,22 @@ fun KitchenApp(
             featuresViewModel.setReceiptProcessing(true)
             runCatching { InputImage.fromFilePath(context, uri) }
                 .onSuccess { image ->
-                    textRecognizer.process(image)
-                        .addOnSuccessListener { result ->
-                            featuresViewModel.parseReceiptText(result.text)
+                    prepareReceiptTextRecognition(
+                        context = context,
+                        recognizer = textRecognizer,
+                        onReady = {
+                            textRecognizer.process(image)
+                                .addOnSuccessListener { result ->
+                                    featuresViewModel.parseReceiptText(result.text)
+                                }
+                                .addOnFailureListener(featuresViewModel::setReceiptError)
+                        },
+                        onFailure = {
+                            featuresViewModel.setReceiptError(
+                                "Receipt scanning needs Google Play services to finish downloading its text reader. Connect to the internet, then try again."
+                            )
                         }
-                        .addOnFailureListener(featuresViewModel::setReceiptError)
+                    )
                 }
                 .onFailure(featuresViewModel::setReceiptError)
         }
@@ -1037,6 +1053,47 @@ fun KitchenApp(
             }
         )
     }
+}
+
+private fun prepareReceiptTextRecognition(
+    context: Context,
+    recognizer: TextRecognizer,
+    onReady: () -> Unit,
+    onFailure: (Throwable) -> Unit
+) {
+    val installClient = ModuleInstall.getClient(context)
+    installClient.areModulesAvailable(recognizer)
+        .addOnSuccessListener { availability ->
+            if (availability.areModulesAvailable()) {
+                onReady()
+                return@addOnSuccessListener
+            }
+
+            lateinit var listener: InstallStatusListener
+            listener = InstallStatusListener { update ->
+                when (update.installState) {
+                    ModuleInstallStatusUpdate.InstallState.STATE_COMPLETED -> {
+                        installClient.unregisterListener(listener)
+                        onReady()
+                    }
+                    ModuleInstallStatusUpdate.InstallState.STATE_CANCELED,
+                    ModuleInstallStatusUpdate.InstallState.STATE_FAILED -> {
+                        installClient.unregisterListener(listener)
+                        onFailure(IllegalStateException("Receipt text reader download did not complete."))
+                    }
+                }
+            }
+            val request = ModuleInstallRequest.newBuilder()
+                .addApi(recognizer)
+                .setListener(listener)
+                .build()
+            installClient.installModules(request)
+                .addOnFailureListener { error ->
+                    installClient.unregisterListener(listener)
+                    onFailure(error)
+                }
+        }
+        .addOnFailureListener(onFailure)
 }
 
 internal data class PantryNavigationDestination(

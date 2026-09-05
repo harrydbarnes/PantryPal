@@ -351,6 +351,12 @@ class PantryFeaturesViewModel(
         _receiptError.value = error.userMessage("Receipt could not be read")
     }
 
+    fun setReceiptError(message: String) {
+        _receiptProcessing.value = false
+        _receiptResult.value = null
+        _receiptError.value = message
+    }
+
     fun setWeeklyBudget(amountMinor: Long) {
         viewModelScope.launch {
             runCatching { repository.setWeeklyBudget(amountMinor) }
