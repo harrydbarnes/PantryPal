@@ -35,7 +35,7 @@ data class FirebaseHouseholdState(
     val failed: Boolean = false
 )
 
-/** Shopping-only protocol v3. Room and its trigger journal survive offline/process death. */
+/** Shopping-only protocol v4. Room, its trigger journal and the cloud revision cursor survive process death. */
 class FirebaseHouseholdSync(
     private val context: Context,
     private val repository: PantryFeaturesRepository,
@@ -56,6 +56,28 @@ class FirebaseHouseholdSync(
     private val _state = MutableStateFlow(currentState())
     val state = _state.asStateFlow()
     private var listener: ListenerRegistration? = null
+    private fun cursorKey(id: String) = "shopping_revision_$id"
+    private fun compactionKey(id: String) = "shopping_compaction_$id"
+    private fun protocolKey(id: String) = "shopping_protocol_$id"
+    private fun cursor(id: String): Long? =
+        cursorKey(id).let { key -> if (prefs.contains(key)) prefs.getLong(key, 0) else null }
+    private fun saveCursor(id: String, revision: Long) {
+        check(prefs.edit().putLong(cursorKey(id), revision).commit())
+    }
+    private suspend fun ensureCloudReady(id: String, uid: String) {
+        if (prefs.getInt(protocolKey(id), 0) < SHOPPING_PROTOCOL) {
+            cloud.ensureReady(id, uid, ::decode)
+            check(prefs.edit().putInt(protocolKey(id), SHOPPING_PROTOCOL).commit())
+        }
+    }
+    private suspend fun compactIfDue(id: String, uid: String) {
+        val now = System.currentTimeMillis()
+        val last = prefs.getLong(compactionKey(id), 0)
+        if (last <= 0 || last > now || now - last >= COMPACTION_INTERVAL_MS) {
+            cloud.compact(id, uid)
+            check(prefs.edit().putLong(compactionKey(id), now).commit())
+        }
+    }
 
     init {
         scope.launch {
@@ -139,23 +161,35 @@ class FirebaseHouseholdSync(
         firestore.collection("households").document(id).update(FieldPath.of("memberIds"), FieldValue.arrayUnion(uid), FieldPath.of("joinProofs", uid), code).await()
         val document = firestore.collection("households").document(id).collection("state").document("current").get(Source.SERVER).await()
         require(document.exists()) { "The owner needs to open PantryPal and finish its first sync, then retry joining." }
-        cloud.ensureReady(id, uid, ::decode)
-        val remote = cloud.exchange(id, uid, deviceId, null, emptyMap())
-        store.replaceShopping(remote)
-        check(prefs.edit().putString("household_id", id).putString("account_uid", uid).remove("invite").commit())
+        ensureCloudReady(id, uid)
+        val remote = cloud.exchange(id, uid, deviceId, null, emptyMap(), sinceRevision = null)
+        store.replaceShopping(remote.state)
+        check(prefs.edit()
+            .putString("household_id", id)
+            .putString("account_uid", uid)
+            .putInt(protocolKey(id), SHOPPING_PROTOCOL)
+            .putLong(cursorKey(id), remote.revision)
+            .remove("invite")
+            .commit())
         attachListener()
     }
 
     fun leaveHousehold() = operation("Disconnecting this device…") {
         listener?.remove(); listener = null
-        prefs.edit().remove("household_id").remove("invite").remove("account_uid").commit()
+        val id = householdId()
+        val editor = prefs.edit().remove("household_id").remove("invite").remove("account_uid")
+        if (id != null) editor.remove(cursorKey(id)).remove(compactionKey(id)).remove(protocolKey(id))
+        check(editor.commit())
         store.resetQueue()
         _state.value = currentState().copy(status = "This device is disconnected. Your local lists are kept.")
     }
 
     fun signOut() = operation("Signing out…") {
         listener?.remove(); listener = null
-        prefs.edit().remove("household_id").remove("invite").remove("account_uid").commit()
+        val id = householdId()
+        val editor = prefs.edit().remove("household_id").remove("invite").remove("account_uid")
+        if (id != null) editor.remove(cursorKey(id)).remove(compactionKey(id)).remove(protocolKey(id))
+        check(editor.commit())
         store.resetQueue()
         auth.signOut()
         _state.value = currentState().copy(status = "Signed out. Local data is kept.")
@@ -194,10 +228,12 @@ class FirebaseHouseholdSync(
         _state.update { it.copy(syncing = true, failed = false) }
         val batch = store.batch(id)
         val changes = batch?.let(store::changes).orEmpty()
-        cloud.ensureReady(id, uid, ::decode)
-        cloud.compact(id, uid)
-        val remote = cloud.exchange(id, uid, deviceId, batch?.batchId, changes)
-        store.accept(remote, batch, authoritative = true)
+        ensureCloudReady(id, uid)
+        compactIfDue(id, uid)
+        val remote = cloud.exchange(id, uid, deviceId, batch?.batchId, changes, cursor(id))
+        store.accept(remote.state, batch, authoritative = remote.authoritative)
+        // Persist after Room accepts the response. A crash before this line safely replays the delta.
+        saveCursor(id, remote.revision)
         _state.value = currentState().copy(lastSyncedAt = System.currentTimeMillis(), status = "Shopping list synced.")
         if (store.batch(id) != null) requests.trySend(Unit)
     }
@@ -207,6 +243,8 @@ class FirebaseHouseholdSync(
         householdId = householdId(), invite = if (householdId() != null) prefs.getString("invite", null) else null
     )
     private companion object {
+        const val SHOPPING_PROTOCOL = 4
+        const val COMPACTION_INTERVAL_MS = 24L * 60 * 60 * 1000
         val WORDS = listOf("apple", "basil", "copper", "dinner", "ember", "forest", "ginger", "harbour", "indigo", "juniper", "kettle", "lemon", "mango", "noodle", "olive", "pepper", "quartz", "rosemary", "saffron", "thyme", "umber", "violet", "willow", "yarrow")
     }
 }

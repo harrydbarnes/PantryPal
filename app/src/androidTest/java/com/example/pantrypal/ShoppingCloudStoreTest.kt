@@ -13,6 +13,8 @@ import org.junit.*
 import org.junit.Assert.*
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
+import java.time.Instant
 import java.util.UUID
 
 /** Runs the production Kotlin transport against local Auth + Firestore and the real rules. */
@@ -62,6 +64,22 @@ class ShoppingCloudStoreTest {
         connection.disconnect()
     }
     private fun decode(doc: DocumentSnapshot): ShoppingWireState = doc.getString("shoppingV2")?.let { Gson().fromJson(it, ShoppingWireState::class.java) } ?: ShoppingWireState()
+    private fun ageTombstone(key: String) {
+        val recordId = MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val url = "http://10.0.2.2:8080/v1/projects/demo-pantrypal/databases/(default)/documents/" +
+            "households/$home/shoppingRecords/$recordId?updateMask.fieldPaths=updatedAt"
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.requestMethod = "PATCH"
+        connection.setRequestProperty("Authorization", "Bearer owner")
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.doOutput = true
+        val timestamp = Instant.now().minusSeconds(31L * 24 * 60 * 60).toString()
+        val body = Gson().toJson(mapOf("fields" to mapOf("updatedAt" to mapOf("timestampValue" to timestamp))))
+        connection.outputStream.use { it.write(body.toByteArray()) }
+        check(connection.responseCode in 200..299) { connection.errorStream.bufferedReader().readText() }
+        connection.disconnect()
+    }
 
     @Test fun legacyMigrationAndLostAcknowledgementDoNotReplayOldEdits() = runBlocking {
         val seed = ShoppingWireState(records = (1..240).associate { "item:$it" to ShoppingRecord("seed", "item $it") }, receipts = mapOf("phone" to "already-accepted"))
@@ -71,22 +89,58 @@ class ShoppingCloudStoreTest {
             .update(mapOf("protocol" to 3, "phase" to "migrating", "revision" to 0, "updatedBy" to uid, "updatedAt" to FieldValue.serverTimestamp())).await()
         cloud.ensureReady(home, uid, ::decode)
         cloud.ensureReady(home, uid, ::decode)
-        val initial = cloud.exchange(home, uid, "phone", "already-accepted", mapOf("item:1" to ShoppingRecord("old", "stale")))
-        assertEquals(240, initial.records.size)
-        assertEquals("item 1", initial.records["item:1"]!!.data)
-        cloud.exchange(home, uid, "phone", "new", mapOf("item:1" to ShoppingRecord("new", "first edit")))
-        cloud.exchange(home, uid, "partner", "other", mapOf("item:1" to ShoppingRecord("partner", "later edit")))
-        val retry = cloud.exchange(home, uid, "phone", "new", mapOf("item:1" to ShoppingRecord("new", "first edit")))
-        assertEquals("later edit", retry.records["item:1"]!!.data)
+        val initial = cloud.exchange(home, uid, "phone", "already-accepted",
+            mapOf("item:1" to ShoppingRecord("old", "stale")), sinceRevision = null)
+        assertTrue(initial.authoritative)
+        assertEquals(240, initial.recordsRead)
+        assertEquals(240, initial.state.records.size)
+        assertEquals("item 1", initial.state.records["item:1"]!!.data)
+
+        val idle = cloud.exchange(home, uid, "phone", null, emptyMap(), initial.revision)
+        assertFalse(idle.authoritative)
+        assertEquals(0, idle.recordsRead)
+        assertTrue(idle.state.records.isEmpty())
+
+        val first = cloud.exchange(home, uid, "phone", "new",
+            mapOf("item:1" to ShoppingRecord("new", "first edit")), idle.revision)
+        val partner = cloud.exchange(home, uid, "partner", "other",
+            mapOf("item:1" to ShoppingRecord("partner", "later edit")), first.revision)
+        val retry = cloud.exchange(home, uid, "phone", "new",
+            mapOf("item:1" to ShoppingRecord("new", "first edit")), first.revision)
+        assertEquals(partner.revision, retry.revision)
+        assertEquals(1, retry.recordsRead)
+        assertEquals("later edit", retry.state.records["item:1"]!!.data)
     }
 
     @Test fun largeLegacyBatchAndIndependentEditsSurviveRetry() = runBlocking {
         cloud.ensureReady(home, uid, ::decode)
         val changes = (1..205).associate { "item:$it" to ShoppingRecord("$it", "value $it") }
-        assertEquals(205, cloud.exchange(home, uid, "phone", "bulk", changes).records.size)
-        cloud.exchange(home, uid, "partner", "edit", mapOf("item:1" to ShoppingRecord("partner", "changed")))
-        val retried = cloud.exchange(home, uid, "phone", "bulk", changes)
-        assertEquals("changed", retried.records["item:1"]!!.data)
-        assertEquals("value 205", retried.records["item:205"]!!.data)
+        val bulk = cloud.exchange(home, uid, "phone", "bulk", changes, sinceRevision = null)
+        assertEquals(205, bulk.state.records.size)
+        val partner = cloud.exchange(home, uid, "partner", "edit",
+            mapOf("item:1" to ShoppingRecord("partner", "changed")), bulk.revision)
+        val retried = cloud.exchange(home, uid, "phone", "bulk", changes, bulk.revision)
+        assertEquals(partner.revision, retried.revision)
+        assertEquals(1, retried.recordsRead)
+        assertEquals("changed", retried.state.records["item:1"]!!.data)
+        assertFalse(retried.state.records.containsKey("item:205"))
+    }
+
+    @Test fun compactedHistoryForcesOnlyUnsafeCursorsToReload() = runBlocking {
+        cloud.ensureReady(home, uid, ::decode)
+        val deleted = cloud.exchange(home, uid, "phone", "delete",
+            mapOf("item:gone" to ShoppingRecord("deleted", null)), sinceRevision = 0)
+        assertEquals(1, deleted.revision)
+        ageTombstone("item:gone")
+        cloud.compact(home, uid)
+
+        val stale = cloud.exchange(home, uid, "stale", null, emptyMap(), sinceRevision = 0)
+        assertTrue(stale.authoritative)
+        assertEquals(2, stale.revision)
+        assertTrue(stale.state.records.isEmpty())
+
+        val current = cloud.exchange(home, uid, "current", null, emptyMap(), sinceRevision = 1)
+        assertFalse(current.authoritative)
+        assertEquals(0, current.recordsRead)
     }
 }
