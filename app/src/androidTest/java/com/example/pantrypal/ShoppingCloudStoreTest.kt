@@ -32,6 +32,7 @@ class ShoppingCloudStoreTest {
         db.useEmulator("10.0.2.2", 8080)
         cloud = ShoppingCloudStore(db)
         db.collection("households").document(home).set(mapOf("memberIds" to listOf(uid), "inviteCode" to "apple-basil-copper-dinner-ember-forest", "createdAt" to 1L)).await()
+        Unit
     }
     @After fun close() = runBlocking { db.terminate().await(); app.delete() }
 

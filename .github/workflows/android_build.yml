@@ -103,9 +103,7 @@ jobs:
           api-level: 35
           arch: x86_64
           disable-animations: true
-          script: |
-            ./firebase/node_modules/.bin/firebase emulators:exec --only auth,firestore --project demo-pantrypal --config firebase.json "./gradlew :app:connectedDebugAndroidTest --stacktrace"
-            adb pull /sdcard/Android/data/com.example.pantrypal/files/review-profile app/build/review-profile
+          script: bash .github/scripts/run-device-tests.sh
       - name: Upload device test results
         if: always()
         uses: actions/upload-artifact@v7

@@ -431,8 +431,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
-    fun copyMealToWeek(meal: MealEntity, targetWeek: String) {
-        action {
+    fun copyMealToWeek(meal: MealEntity, targetWeek: String, onSaved: () -> Unit = {}) {
+        action(onSaved) {
             if (targetWeek == meal.week) return@action
             val alreadyExists = repository.allMeals.first().any {
                 it.week == targetWeek &&
@@ -446,8 +446,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
-    fun copyWeek(sourceWeek: String, targetWeek: String) {
-        action {
+    fun copyWeek(sourceWeek: String, targetWeek: String, onSaved: () -> Unit = {}) {
+        action(onSaved) {
+          repository.transaction {
             val meals = repository.allMeals.first()
             val targetKeys = meals.filter { it.week == targetWeek }
                 .map { Triple(it.name.lowercase(), it.dayOfWeek, it.mealSlot) }
@@ -460,6 +461,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     repository.insertMeal(meal.copy(mealId = 0, week = targetWeek))
                 }
             }
+          }
         }
     }
 

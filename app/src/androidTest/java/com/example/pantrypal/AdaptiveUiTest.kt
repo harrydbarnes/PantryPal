@@ -59,4 +59,18 @@ class AdaptiveUiTest {
         screenshot("tablet-recipe-scroll")
         File(output, "environment.txt").writeText("API 35 CI emulator, debug APK, 1920x1200 at 160 dpi, 200 recipes, 12 upward swipes of 250ms, one run. Absolute timings are not phone measurements.\n" + shell("getprop ro.build.fingerprint"))
     }
+    @Test fun landscapeLargeFontUsesReachableRecipeDialog() {
+        shell("wm size 1200x800"); shell("wm density 160"); shell("settings put system font_scale 1.5")
+        val recipe = Recipe(id = 1, title = "Large text recipe", ingredients = emptyList(), instructions = (1..30).map { "Step $it: prepare the ingredients and cook." })
+        compose.setContent { MaterialTheme {
+            RecipeScreen(state = RecipeScreenState(savedRecipes = listOf(recipe), selectedRecipe = recipe),
+                onSearchQueryChange = {}, onExternalSearch = { _, _ -> }, onImportUrl = {},
+                onRecipeSelected = { _, _ -> }, onRecipeDismissed = {},
+                onImportPreviewDismissed = {}, onSaveRecipe = {}, onToggleFavourite = { _, _ -> },
+                onRateRecipe = { _, _ -> }, onMarkCooked = {}, onOpenSource = {}, onAddToPlan = {}, onAddMissingToShopping = { _, _ -> })
+        } }
+        compose.onNodeWithTag("recipe-detail-pane").assertDoesNotExist()
+        compose.onNodeWithText("Done").assertIsDisplayed()
+        screenshot("landscape-recipes-font-150")
+    }
 }

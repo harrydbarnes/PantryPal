@@ -381,18 +381,19 @@ fun MealPlanScreen(
 
     if (showCopyWeekDialog) {
         CopyWeekDialog(
+            saving = saving, error = error,
             targetWeek = displayedWeek,
             weeks = weeks,
             onDismiss = { showCopyWeekDialog = false },
             onCopy = { sourceWeek ->
-                viewModel.copyWeek(sourceWeek, displayedWeek)
-                showCopyWeekDialog = false
+                viewModel.copyWeek(sourceWeek, displayedWeek) { showCopyWeekDialog = false }
             }
         )
     }
 
     editingWeek?.let { week ->
         WeekEditorDialog(
+            saving = saving, error = error,
             week = week,
             onDismiss = { editingWeek = null },
             onSave = { name, emoji ->
@@ -403,14 +404,16 @@ fun MealPlanScreen(
 
     copyingMeal?.let { meal ->
         CopyMealDialog(
+            saving = saving, error = error,
             meal = meal,
             weeks = weeks,
             onDismiss = { copyingMeal = null },
             onCopy = { targetWeek ->
-                viewModel.copyMealToWeek(meal, targetWeek)
+                viewModel.copyMealToWeek(meal, targetWeek) {
                 val target = weeks.firstOrNull { it.weekId == targetWeek }
                 scope.launch { snackbarHostState.showSnackbar("Copied to ${target?.displayName ?: "Week $targetWeek"}") }
                 copyingMeal = null
+                }
             }
         )
     }
@@ -418,6 +421,7 @@ fun MealPlanScreen(
 
 @Composable
 private fun WeekEditorDialog(
+    saving: Boolean, error: String?,
     week: MealWeekEntity,
     onDismiss: () -> Unit,
     onSave: (String, String) -> Unit
@@ -426,7 +430,7 @@ private fun WeekEditorDialog(
     var emoji by remember(week) { mutableStateOf(week.emoji) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         title = { Text("Name this rotation week") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -454,15 +458,19 @@ private fun WeekEditorDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(name, emoji) }, enabled = name.isNotBlank()) { Text("Save") }
+            Column {
+            if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+            Button(onClick = { onSave(name, emoji) }, enabled = !saving && name.isNotBlank()) { Text("Save") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CopyWeekDialog(
+    saving: Boolean, error: String?,
     targetWeek: String,
     weeks: List<MealWeekEntity>,
     onDismiss: () -> Unit,
@@ -471,7 +479,7 @@ private fun CopyWeekDialog(
     val choices = weeks.filterNot { it.weekId == targetWeek }
     var selected by remember(targetWeek, choices) { mutableStateOf(choices.firstOrNull()?.weekId) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         icon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
         title = { Text("Reuse another week") },
         text = {
@@ -489,15 +497,19 @@ private fun CopyWeekDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { selected?.let(onCopy) }, enabled = selected != null) { Text("Add meals") }
+            Column {
+            if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+            Button(onClick = { selected?.let(onCopy) }, enabled = !saving && selected != null) { Text("Add meals") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CopyMealDialog(
+    saving: Boolean, error: String?,
     meal: MealEntity,
     weeks: List<MealWeekEntity>,
     onDismiss: () -> Unit,
@@ -506,7 +518,7 @@ private fun CopyMealDialog(
     val choices = weeks.filterNot { it.weekId == meal.week }
     var selected by remember(meal, choices) { mutableStateOf(choices.firstOrNull()?.weekId) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         icon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
         title = { Text("Copy ${meal.name}") },
         text = {
@@ -524,9 +536,12 @@ private fun CopyMealDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { selected?.let(onCopy) }, enabled = selected != null) { Text("Copy meal") }
+            Column {
+            if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+            Button(onClick = { selected?.let(onCopy) }, enabled = !saving && selected != null) { Text("Copy meal") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
