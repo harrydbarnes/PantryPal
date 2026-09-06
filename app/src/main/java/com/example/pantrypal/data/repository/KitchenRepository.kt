@@ -74,6 +74,9 @@ class KitchenRepository(
 
     private val shoppingMutationMutex = Mutex()
 
+    private suspend fun <T> shoppingTransaction(block: suspend () -> T): T =
+        if (database != null) database.withTransaction { block() } else shoppingMutationMutex.withLock { block() }
+
     companion object {
         private const val OPEN_FOOD_FACTS_API_BASE_URL = "https://world.openfoodfacts.org/"
     }
@@ -168,7 +171,7 @@ class KitchenRepository(
 
     suspend fun addShoppingItem(item: ShoppingItemEntity) {
         requireValidShoppingItem(item)
-        shoppingMutationMutex.withLock {
+        shoppingTransaction {
             val recurringSectionIds = shoppingSectionDao.getAllSections()
                 .first()
                 .filter { it.recursEveryWeek }
@@ -203,7 +206,7 @@ class KitchenRepository(
      * having their quantity incremented.
      */
     suspend fun addOnboardingRegulars(names: List<String>) {
-        shoppingMutationMutex.withLock {
+        shoppingTransaction {
             val currentRegulars = shoppingDao.getAllShoppingItemsSnapshot()
                 .filter { it.sectionId == ShoppingSectionEntity.ID_EVERY_WEEK }
                 .map { it.name }

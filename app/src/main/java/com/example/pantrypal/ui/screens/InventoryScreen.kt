@@ -36,8 +36,9 @@ fun InventoryScreen(
     onConsume: (InventoryUiModel, ConsumptionType) -> Unit,
     onAdjustQuantity: (Long, Double) -> Unit,
     onToggleOpened: (InventoryUiModel) -> Unit,
-    onUpdateStockSettings: (Long, Boolean, Double?) -> Unit,
-    onUpdateLocation: (InventoryUiModel, String) -> Unit
+    onSaveDetails: (InventoryUiModel, Boolean, Double?, String, () -> Unit) -> Unit,
+    saving: Boolean = false,
+    error: String? = null
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
@@ -212,7 +213,7 @@ fun InventoryScreen(
         var thresholdText by remember(item) { mutableStateOf(item.lowStockThreshold?.toString() ?: "1") }
         var selectedLocation by remember(item) { mutableStateOf(item.storageLocation) }
         AlertDialog(
-            onDismissRequest = { editingStockItem = null },
+            onDismissRequest = { if (!saving) editingStockItem = null },
             title = { Text("Restock settings") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -229,6 +230,7 @@ fun InventoryScreen(
                             singleLine = true
                         )
                     }
+                    if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
                     Text("Storage location", style = MaterialTheme.typography.labelLarge)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -246,16 +248,12 @@ fun InventoryScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    onUpdateStockSettings(
-                        item.itemId,
-                        alwaysStocked,
-                        if (alwaysStocked) thresholdText.toDoubleOrNull() else null
-                    )
-                    onUpdateLocation(item, selectedLocation)
-                    editingStockItem = null
-                }) { Text("Save") }
+                    onSaveDetails(item, alwaysStocked,
+                        if (alwaysStocked) thresholdText.toDoubleOrNull() else null,
+                        selectedLocation) { editingStockItem = null }
+                }, enabled = !saving && (!alwaysStocked || thresholdText.toDoubleOrNull()?.let { it.isFinite() && it >= 0 } == true)) { Text(if (saving) "Saving…" else "Save") }
             },
-            dismissButton = { TextButton(onClick = { editingStockItem = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(enabled = !saving, onClick = { editingStockItem = null }) { Text("Cancel") } }
         )
     }
 }

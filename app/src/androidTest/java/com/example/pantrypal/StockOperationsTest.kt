@@ -49,4 +49,16 @@ class StockOperationsTest {
         assertEquals(2.0, db.inventoryDao().getById(batch)!!.quantity, 0.0)
         assertTrue(db.consumptionDao().getAllHistory().isEmpty())
     }
+    @Test fun archiveFailureRollsBackPuttingAwayPurchases() = runBlocking {
+        val repo = com.example.pantrypal.data.repository.KitchenRepository(db.itemDao(), db.inventoryDao(),
+            db.consumptionDao(), db.shoppingDao(), db.mealDao(), db.mealWeekDao(), db.shoppingSectionDao(), db.shoppingHistoryDao(), db)
+        db.shoppingSectionDao().insertSection(ShoppingSectionEntity(3, "The rest", 0, false, "THE_REST"))
+        db.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = "Purchased milk", isChecked = true, sectionId = 3, weekId = "A"))
+        db.openHelper.writableDatabase.execSQL("CREATE TRIGGER fail_archive BEFORE INSERT ON shopping_archive BEGIN SELECT RAISE(ABORT, 'injected archive failure'); END")
+        try { repo.finishShopping("A", "Pantry"); fail("Expected archive failure") }
+        catch (_: android.database.sqlite.SQLiteException) { }
+        assertTrue(db.inventoryDao().getAllInventorySnapshot().isEmpty())
+        assertTrue(db.itemDao().getAllItemsSnapshot().isEmpty())
+        assertTrue(db.shoppingDao().getAllShoppingItemsSnapshot().single().isChecked)
+    }
 }

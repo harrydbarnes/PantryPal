@@ -750,8 +750,9 @@ fun KitchenApp(
                                 },
                                 onAdjustQuantity = viewModel::adjustInventoryQuantity,
                                 onToggleOpened = viewModel::toggleInventoryOpened,
-                                onUpdateStockSettings = viewModel::updateStockSettings,
-                                onUpdateLocation = viewModel::updateInventoryLocation
+                                onSaveDetails = viewModel::updateInventoryDetails,
+                                saving = viewModel.saving.collectAsState().value,
+                                error = viewModel.actionError.collectAsState().value
                             )
                         }
                         AppScreen.ShoppingList -> ShoppingListScreen(
@@ -1542,4 +1543,3 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         }
     }
 }
-

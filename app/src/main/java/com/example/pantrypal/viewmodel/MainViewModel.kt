@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -251,25 +253,28 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     fun dismissActionError() { actionError.value = null }
 
     private fun <T> observe(source: kotlinx.coroutines.flow.Flow<T>, key: String) = reload.flatMapLatest {
-        loading.value = loading.value + key
+        loading.update { it + key }
         source.onEach {
-            loading.value = loading.value - key
-            loadErrors.value = loadErrors.value - key
+            loading.update { it - key }
+            loadErrors.update { it - key }
         }.catch {
-            loading.value = loading.value - key
-            loadErrors.value = loadErrors.value + (key to "Could not load $key. Try again.")
+            loading.update { it - key }
+            loadErrors.update { it + (key to "Could not load $key. Try again.") }
         }
     }
 
+    private val actionMutex = kotlinx.coroutines.sync.Mutex()
+    private var pendingActions = 0
+
     private fun action(onSuccess: () -> Unit = {}, block: suspend () -> Unit) {
-        if (saving.value) return
+        pendingActions += 1
         saving.value = true
         actionError.value = null
         viewModelScope.launch {
-            try { block(); onSuccess() }
+            try { actionMutex.withLock { block() }; onSuccess() }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (error: Exception) { actionError.value = error.message ?: "Could not save. Your changes are still here; try again." }
-            finally { saving.value = false }
+            finally { pendingActions -= 1; saving.value = pendingActions > 0 }
         }
     }
 
@@ -498,7 +503,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     private suspend fun commitShoppingPreview(
         preview: ShoppingBuildPreview,
         includeCheckStock: Boolean = true
-    ) {
+    ) = repository.transaction {
             val week = preview.weekId
             val existing = repository.shoppingList.first()
             val sections = repository.shoppingSections.first()
@@ -646,6 +651,13 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun updateInventoryLocation(item: InventoryUiModel, storageLocation: String) = action {
         repository.stockOperations.edit(item.inventoryId) { it.copy(storageLocation = storageLocation.trim().ifBlank { InventoryEntity.LOCATION_PANTRY }) }
+    }
+
+    fun updateInventoryDetails(item: InventoryUiModel, usual: Boolean, threshold: Double?, location: String, onSaved: () -> Unit) = action(onSaved) {
+        repository.transaction {
+            repository.updateStockSettings(item.itemId, usual, threshold)
+            repository.stockOperations.edit(item.inventoryId) { it.copy(storageLocation = location) }
+        }
     }
 
     fun updateStockSettings(itemId: Long, isUsual: Boolean, lowStockThreshold: Double?) {
