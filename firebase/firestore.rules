@@ -35,39 +35,69 @@ service cloud.firestore {
         return get(/databases/$(database)/documents/households/$(id)/state/current).data;
       }
       function recordWrite() {
-        return isMember(id) && control().protocol == 3
-          && (control().phase == 'migrating' ||
-            getAfter(/databases/$(database)/documents/households/$(id)/state/current).data.revision == control().revision + 1);
+        return isMember(id)
+          && ((control().protocol == 3 && control().phase == 'migrating')
+            || (control().protocol == 4
+              && (control().phase == 'migrating'
+                || (control().phase == 'ready'
+                  && getAfter(/databases/$(database)/documents/households/$(id)/state/current).data.revision
+                    == control().revision + 1))));
       }
       match /state/{stateId} {
         allow read: if stateId == 'current' && isMember(id);
-        // Once v3 begins, old clients cannot downgrade or overwrite its state.
+        // Once a migration begins, old clients cannot downgrade or overwrite its state.
         allow create: if stateId == 'current' && isMember(id) && validAuthor()
           && request.resource.data.keys().hasOnly(['protocol', 'phase', 'revision', 'updatedBy', 'updatedAt'])
           && request.resource.data.protocol == 3 && request.resource.data.phase == 'migrating'
           && request.resource.data.revision == 0;
         allow update: if stateId == 'current' && isMember(id) && validAuthor()
-          && request.resource.data.protocol == 3
-          && ((resource.data.get('protocol', 1) != 3
+          && ((resource.data.get('protocol', 1) != 3 && request.resource.data.protocol == 3
               && request.resource.data.phase == 'migrating' && request.resource.data.revision == 0
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['protocol', 'phase', 'revision', 'updatedBy', 'updatedAt']))
-            || (resource.data.protocol == 3 && resource.data.phase == 'migrating'
+            || (resource.data.protocol == 3 && request.resource.data.protocol == 3 && resource.data.phase == 'migrating'
               && request.resource.data.phase == 'ready' && request.resource.data.revision == 0
               && request.resource.data.keys().hasOnly(['protocol', 'phase', 'revision', 'updatedBy', 'updatedAt']))
-            || (resource.data.protocol == 3 && resource.data.phase == 'ready'
+            || (resource.data.protocol == 3 && request.resource.data.protocol == 3 && resource.data.phase == 'ready'
               && request.resource.data.phase == 'ready' && request.resource.data.revision == resource.data.revision + 1
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revision', 'updatedBy', 'updatedAt'])));
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revision', 'updatedBy', 'updatedAt']))
+            || (resource.data.protocol == 3 && resource.data.phase == 'ready'
+              && request.resource.data.protocol == 4 && request.resource.data.phase == 'migrating'
+              && request.resource.data.revision == resource.data.revision
+              && request.resource.data.historyFloor == resource.data.revision
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['protocol', 'phase', 'historyFloor', 'updatedBy', 'updatedAt']))
+            || (resource.data.protocol == 4 && resource.data.phase == 'migrating'
+              && request.resource.data.protocol == 4 && request.resource.data.phase == 'ready'
+              && request.resource.data.revision == resource.data.revision
+              && request.resource.data.historyFloor == resource.data.historyFloor
+              && request.resource.data.keys().hasOnly(['protocol', 'phase', 'revision', 'historyFloor', 'updatedBy', 'updatedAt']))
+            || (resource.data.protocol == 4 && resource.data.phase == 'ready'
+              && request.resource.data.protocol == 4 && request.resource.data.phase == 'ready'
+              && request.resource.data.revision == resource.data.revision + 1
+              && request.resource.data.historyFloor >= resource.data.historyFloor
+              && request.resource.data.historyFloor <= resource.data.revision
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revision', 'historyFloor', 'updatedBy', 'updatedAt'])));
         allow delete: if false;
       }
       match /shoppingRecords/{record} {
         allow read: if isMember(id);
-        allow create, update: if recordWrite() && validAuthor()
-          && request.resource.data.keys().hasOnly(['key', 'token', 'data', 'deleted', 'updatedBy', 'updatedAt'])
+        allow create, update: if recordWrite()
+          && ((control().protocol == 4 && control().phase == 'migrating'
+              && request.resource.data.revision == control().revision
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revision']))
+            || (validAuthor()
+              && ((control().protocol == 3
+                && request.resource.data.keys().hasOnly(['key', 'token', 'data', 'deleted', 'updatedBy', 'updatedAt']))
+              || (control().protocol == 4 && control().phase == 'ready'
+                && request.resource.data.keys().hasOnly(['key', 'token', 'data', 'deleted', 'revision', 'updatedBy', 'updatedAt'])
+                && request.resource.data.revision is int
+                && request.resource.data.revision == control().revision + 1))))
           && request.resource.data.key is string && request.resource.data.token is string
           && request.resource.data.deleted is bool
           && ((request.resource.data.deleted && request.resource.data.data == null)
             || (!request.resource.data.deleted && request.resource.data.data is string && request.resource.data.data.size() < 100000));
-        allow delete: if recordWrite() && resource.data.deleted
+        allow delete: if recordWrite() && control().protocol == 4 && control().phase == 'ready'
+          && resource.data.deleted
+          && getAfter(/databases/$(database)/documents/households/$(id)/state/current).data.historyFloor >= resource.data.revision
           && resource.data.updatedAt < request.time - duration.value(30, 'd');
       }
       match /shoppingDevices/{device} {
