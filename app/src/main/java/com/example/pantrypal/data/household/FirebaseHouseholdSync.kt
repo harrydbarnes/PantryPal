@@ -130,12 +130,12 @@ class FirebaseHouseholdSync(
         check(householdId() == null) { "Leave the current household before joining another." }
         val parts = invite.trim().removePrefix("PANTRYPAL-LIVE|").split('|')
         require(parts.size == 3 && parts.all { it.isNotBlank() }) { "Paste the complete invite or scan its QR code." }
-        val (id, owner, code) = parts
+        val (id, _, code) = parts
         repository.exportBackupJson().let { json ->
             java.io.File(context.filesDir, "before-household-join.json").writeText(json)
         }
         // Rules must validate the unchanged invite and preserve existing members.
-        firestore.collection("households").document(id).update(mapOf("memberIds" to FieldValue.arrayUnion(uid), "inviteCode" to code)).await()
+        firestore.collection("households").document(id).update(mapOf("memberIds" to FieldValue.arrayUnion(uid), "joinProof" to mapOf("code" to code, "uid" to uid))).await()
         val document = firestore.collection("households").document(id).collection("state").document("current").get(Source.SERVER).await()
         require(document.exists()) { "The owner needs to open PantryPal and finish its first sync, then retry joining." }
         val remote = decode(document)
