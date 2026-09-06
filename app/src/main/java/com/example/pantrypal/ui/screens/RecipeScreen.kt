@@ -991,7 +991,8 @@ private fun RecipeDetailSurface(inline: Boolean, modifier: Modifier, onDismissRe
     if (inline) {
         Surface(modifier.testTag("recipe-detail-pane"), tonalElevation = 2.dp) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                title(); text(); confirmButton()
+                androidx.compose.material3.ProvideTextStyle(MaterialTheme.typography.headlineSmall) { title() }
+                text(); confirmButton()
             }
         }
     } else AlertDialog(onDismissRequest = onDismissRequest, title = title,

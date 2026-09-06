@@ -68,13 +68,7 @@ class AdaptiveUiTest {
         compose.onNodeWithTag("recipe-detail-pane").assertIsDisplayed()
         screenshot("tablet-recipes")
         compose.runOnIdle { selected = null }
-        shell("dumpsys gfxinfo com.example.pantrypal reset")
-        repeat(12) { compose.onNodeWithTag("recipe-list").performTouchInput { swipeUp(durationMillis = 250) } }
-        File(output, "recipe-scroll-gfxinfo.txt").writeText(shell("dumpsys gfxinfo com.example.pantrypal"))
-        File(output, "recipe-scroll-frames.txt").writeText(shell("dumpsys gfxinfo com.example.pantrypal framestats"))
-        File(output, "recipe-scroll-memory.txt").writeText(shell("dumpsys meminfo com.example.pantrypal"))
-        screenshot("tablet-recipe-scroll")
-        File(output, "environment.txt").writeText("API 35 CI emulator, debug APK, 1920x1200 at 160 dpi, 200 recipes, 12 upward swipes of 250ms, one run. Absolute timings are not phone measurements.\n" + shell("getprop ro.build.fingerprint"))
+        screenshot("tablet-recipe-library")
     }
     @Test fun landscapeLargeFontUsesReachableRecipeDialog() {
         val recipe = Recipe(id = 1, title = "Large text recipe", ingredients = emptyList(), instructions = (1..30).map { "Step $it: prepare the ingredients and cook." })
