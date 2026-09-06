@@ -98,13 +98,17 @@ jobs:
           api-level: 35
           arch: x86_64
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
+          script: |
+            ./gradlew :app:connectedDebugAndroidTest --stacktrace
+            adb pull /sdcard/Android/data/com.example.pantrypal/files/review-profile app/build/review-profile
       - name: Upload device test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: shopping-sync-device-tests
-          path: app/build/reports/androidTests/
+          path: |
+            app/build/reports/androidTests/
+            app/build/review-profile/
 
   firestore-rules:
     runs-on: ubuntu-latest

@@ -70,6 +70,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -131,7 +132,7 @@ fun RecipeScreen(
     Row(Modifier.fillMaxSize()) {
     Scaffold(modifier = Modifier.weight(1f)) { padding ->
         LazyColumn(
-            modifier = Modifier
+            modifier = Modifier.testTag("recipe-list")
                 .fillMaxSize()
                 .padding(padding),
             contentPadding = PaddingValues(
@@ -987,7 +988,7 @@ private fun RecipeDetailDialog(
 private fun RecipeDetailSurface(inline: Boolean, modifier: Modifier, onDismissRequest: () -> Unit,
     title: @Composable () -> Unit, text: @Composable () -> Unit, confirmButton: @Composable () -> Unit) {
     if (inline) {
-        Surface(modifier, tonalElevation = 2.dp) {
+        Surface(modifier.testTag("recipe-detail-pane"), tonalElevation = 2.dp) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 title(); text(); confirmButton()
             }

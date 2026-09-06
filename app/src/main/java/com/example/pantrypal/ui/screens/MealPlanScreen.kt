@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -90,10 +91,12 @@ fun MealPlanScreen(
     val weeks by viewModel.mealWeeksState.collectAsState()
     val inventory by viewModel.inventoryState.collectAsState()
     val hasSeenMealPlanIntro by viewModel.hasSeenMealPlanIntro.collectAsState()
-    var displayedWeek by remember(currentWeek) { mutableStateOf(currentWeek) }
+    var displayedWeek by rememberSaveable(currentWeek) { mutableStateOf(currentWeek) }
     var showMealPlanIntro by rememberSaveable { mutableStateOf(!hasSeenMealPlanIntro) }
-    var editingMeal by remember { mutableStateOf<MealEntity?>(null) }
-    var showEditor by remember { mutableStateOf(false) }
+    var editingMeal by rememberSaveable(stateSaver = androidx.compose.runtime.saveable.Saver<MealEntity?, String>(
+        save = { com.google.gson.Gson().toJson(it) }, restore = { com.google.gson.Gson().fromJson(it, MealEntity::class.java) }
+    )) { mutableStateOf<MealEntity?>(null) }
+    var showEditor by rememberSaveable { mutableStateOf(false) }
     var showCopyWeekDialog by remember { mutableStateOf(false) }
     var editingWeek by remember { mutableStateOf<MealWeekEntity?>(null) }
     var copyingMeal by remember { mutableStateOf<MealEntity?>(null) }
@@ -655,12 +658,12 @@ private fun MealEditorDialog(
     error: String?,
     onSave: (String, Int, String, List<String>) -> Unit
 ) {
-    var name by remember(meal) { mutableStateOf(meal?.name.orEmpty()) }
-    var ingredients by remember(meal) { mutableStateOf(meal?.ingredients?.toList().orEmpty()) }
-    var day by remember(meal) { mutableIntStateOf(meal?.dayOfWeek ?: 1) }
-    var slot by remember(meal) { mutableStateOf(meal?.mealSlot ?: MealEntity.SLOT_DINNER) }
-    var addIngredientDialogVisible by remember(meal) { mutableStateOf(false) }
-    var additionalIngredient by remember(meal) { mutableStateOf("") }
+    var name by rememberSaveable(meal?.mealId) { mutableStateOf(meal?.name.orEmpty()) }
+    var ingredients by rememberSaveable(meal?.mealId) { mutableStateOf(meal?.ingredients?.toList().orEmpty()) }
+    var day by rememberSaveable(meal?.mealId) { mutableIntStateOf(meal?.dayOfWeek ?: 1) }
+    var slot by rememberSaveable(meal?.mealId) { mutableStateOf(meal?.mealSlot ?: MealEntity.SLOT_DINNER) }
+    var addIngredientDialogVisible by rememberSaveable(meal?.mealId) { mutableStateOf(false) }
+    var additionalIngredient by rememberSaveable(meal?.mealId) { mutableStateOf("") }
 
     val ingredientChoices = remember(ingredientSuggestions, ingredients) {
         MealIngredientSelection.choices(ingredients, ingredientSuggestions)
