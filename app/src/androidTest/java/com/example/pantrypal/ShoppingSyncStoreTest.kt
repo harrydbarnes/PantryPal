@@ -70,4 +70,15 @@ class ShoppingSyncStoreTest {
         assertEquals("Unrelated pantry item", db.itemDao().getItemById(pantryId)!!.name)
         assertTrue(db.shoppingSyncDao().pending().isEmpty())
     }
+    @Test fun concurrentSectionDeletionKeepsNewLocalItemVisible() = runBlocking {
+        val section = ShoppingSectionEntity(name = "Custom", sortOrder = 2, recursEveryWeek = false)
+        val sectionId = db.shoppingSectionDao().insertSection(section)
+        store.resetQueue()
+        val item = ShoppingItemEntity(name = "Milk", sectionId = sectionId)
+        db.shoppingDao().insertShoppingItem(item)
+        store.accept(ShoppingWireState(records = mapOf("section:" + section.syncId to ShoppingRecord("deleted", null))), null)
+        assertEquals(3L, db.shoppingSyncDao().item(item.syncId)!!.sectionId)
+        assertTrue(db.shoppingSyncDao().pending().any { it.recordKey == "item:" + item.syncId })
+    }
+
 }

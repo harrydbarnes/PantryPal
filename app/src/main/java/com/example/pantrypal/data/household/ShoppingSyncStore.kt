@@ -51,6 +51,16 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
             // Suppress only this remote write, in this transaction. Never drop user edits.
             dao.pending().firstOrNull { it.recordKey == key }?.let { dao.acknowledge(key, it.token) }
         }
+        // A partner may delete a section while this device adds an item to it.
+        // Keep the surviving item visible and journal the fallback assignment.
+        val sections = dao.sections()
+        val sectionIds = sections.map { it.sectionId }.toSet()
+        val fallback = sections.firstOrNull { it.systemKey == ShoppingSectionEntity.KEY_THE_REST }
+        if (fallback != null) {
+            db.shoppingDao().getAllShoppingItemsSnapshot().filter { it.sectionId !in sectionIds }.forEach {
+                db.shoppingDao().updateShoppingItem(it.copy(sectionId = fallback.sectionId))
+            }
+        }
     }
 
     suspend fun replaceShopping(remote: ShoppingWireState) = db.withTransaction {
