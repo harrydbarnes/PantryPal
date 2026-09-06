@@ -58,6 +58,10 @@ class ShoppingUiTest {
                     instrumentation.uiAutomation.takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
                 }
             }
-        } finally { shell("wm size reset"); shell("wm density reset") }
+        } finally {
+            shell("mkdir -p /sdcard/Download/pantrypal-profile")
+            shell("cp -r ${java.io.File(context.getExternalFilesDir(null), "review-profile").absolutePath}/. /sdcard/Download/pantrypal-profile/")
+            shell("wm size reset"); shell("wm density reset")
+        }
     }
 }

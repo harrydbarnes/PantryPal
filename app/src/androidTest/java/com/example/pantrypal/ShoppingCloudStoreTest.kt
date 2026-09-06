@@ -23,18 +23,32 @@ class ShoppingCloudStoreTest {
     private lateinit var uid: String
     private val home = UUID.randomUUID().toString()
     @Before fun setup() = runBlocking {
-        app = FirebaseApp.initializeApp(ApplicationProvider.getApplicationContext(), FirebaseOptions.Builder()
-            .setProjectId("demo-pantrypal").setApplicationId("1:123:android:test").setApiKey("test-key").build(), home)
-        val auth = FirebaseAuth.getInstance(app); auth.useEmulator("10.0.2.2", 9099)
-        uid = auth.signInAnonymously().await().user!!.uid
-        db = FirebaseFirestore.getInstance(app)
-        db.firestoreSettings = FirebaseFirestoreSettings.Builder().setPersistenceEnabled(false).build()
-        db.useEmulator("10.0.2.2", 8080)
+        val existing = sharedApp
+        if (existing == null) {
+            app = FirebaseApp.initializeApp(ApplicationProvider.getApplicationContext(), FirebaseOptions.Builder()
+                .setProjectId("demo-pantrypal").setApplicationId("1:123:android:test").setApiKey("test-key").build(), "cloud-tests")
+            val auth = FirebaseAuth.getInstance(app); auth.useEmulator("10.0.2.2", 9099)
+            db = FirebaseFirestore.getInstance(app)
+            db.firestoreSettings = FirebaseFirestoreSettings.Builder().setPersistenceEnabled(false).build()
+            db.useEmulator("10.0.2.2", 8080)
+            uid = auth.signInAnonymously().await().user!!.uid
+            sharedApp = app
+        } else {
+            app = existing
+            db = FirebaseFirestore.getInstance(app)
+            uid = FirebaseAuth.getInstance(app).currentUser!!.uid
+        }
         cloud = ShoppingCloudStore(db)
         db.collection("households").document(home).set(mapOf("memberIds" to listOf(uid), "inviteCode" to "apple-basil-copper-dinner-ember-forest", "createdAt" to 1L)).await()
         Unit
     }
-    @After fun close() = runBlocking { db.terminate().await(); app.delete() }
+    companion object {
+        private var sharedApp: FirebaseApp? = null
+        @JvmStatic @AfterClass fun close() { runBlocking {
+            sharedApp?.let { FirebaseFirestore.getInstance(it).terminate().await(); it.delete() }
+            sharedApp = null
+        } }
+    }
 
     private fun legacySeed(seed: ShoppingWireState) {
         val connection = URL("http://10.0.2.2:8080/v1/projects/demo-pantrypal/databases/(default)/documents/households/$home/state/current").openConnection() as HttpURLConnection

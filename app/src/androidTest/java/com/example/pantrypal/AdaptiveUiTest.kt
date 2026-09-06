@@ -22,7 +22,10 @@ class AdaptiveUiTest {
         compose.waitForIdle()
         File(output, "$name.png").outputStream().use { instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
-    @After fun reset() { shell("wm size reset"); shell("wm density reset"); shell("settings put system font_scale 1.0") }
+    @After fun reset() {
+        shell("mkdir -p /sdcard/Download/pantrypal-profile")
+        shell("cp -r ${output.absolutePath}/. /sdcard/Download/pantrypal-profile/")
+        shell("wm size reset"); shell("wm density reset"); shell("settings put system font_scale 1.0") }
 
     @Test fun failedAddRetainsInputAndDoesNotDismiss() {
         var error by mutableStateOf<String?>(null)
