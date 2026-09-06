@@ -35,7 +35,7 @@ data class FirebaseHouseholdState(
     val failed: Boolean = false
 )
 
-/** Shopping-only protocol v2. Room and its trigger journal survive offline/process death. */
+/** Shopping-only protocol v3. Room and its trigger journal survive offline/process death. */
 class FirebaseHouseholdSync(
     private val context: Context,
     private val repository: PantryFeaturesRepository,
@@ -45,6 +45,7 @@ class FirebaseHouseholdSync(
     private val firestore = FirebaseFirestore.getInstance()
     private val prefs = context.getSharedPreferences("firebase_household", Context.MODE_PRIVATE)
     private val store = ShoppingSyncStore(database)
+    private val cloud = ShoppingCloudStore(firestore)
     private val gson = Gson()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -138,7 +139,8 @@ class FirebaseHouseholdSync(
         firestore.collection("households").document(id).update(FieldPath.of("memberIds"), FieldValue.arrayUnion(uid), FieldPath.of("joinProofs", uid), code).await()
         val document = firestore.collection("households").document(id).collection("state").document("current").get(Source.SERVER).await()
         require(document.exists()) { "The owner needs to open PantryPal and finish its first sync, then retry joining." }
-        val remote = decode(document)
+        cloud.ensureReady(id, uid, ::decode)
+        val remote = cloud.exchange(id, uid, deviceId, null, emptyMap())
         store.replaceShopping(remote)
         check(prefs.edit().putString("household_id", id).putString("account_uid", uid).remove("invite").commit())
         attachListener()
@@ -192,21 +194,10 @@ class FirebaseHouseholdSync(
         _state.update { it.copy(syncing = true, failed = false) }
         val batch = store.batch(id)
         val changes = batch?.let(store::changes).orEmpty()
-        val ref = firestore.collection("households").document(id).collection("state").document("current")
-        val remote = firestore.runTransaction { transaction ->
-            val doc = transaction.get(ref)
-            val current = decode(doc)
-            val next = if (batch == null) current else ShoppingRecordProtocol.commit(current, deviceId, batch.batchId, changes)
-            if (next != current || doc.getString("shoppingV2") == null) {
-                val json = gson.toJson(next)
-                require(json.toByteArray(Charsets.UTF_8).size < 850_000) { "Household history is too large; export a backup and contact support before syncing further." }
-                // Replace only the cloud state document, never the local kitchen. Removing
-                // snapshot makes older clients stop importing v2 as destructive backups.
-                transaction.set(ref, mapOf("shoppingV2" to json, "protocol" to 2, "updatedBy" to uid, "updatedAt" to FieldValue.serverTimestamp()))
-            }
-            next
-        }.await()
-        store.accept(remote, batch)
+        cloud.ensureReady(id, uid, ::decode)
+        cloud.compact(id, uid)
+        val remote = cloud.exchange(id, uid, deviceId, batch?.batchId, changes)
+        store.accept(remote, batch, authoritative = true)
         _state.value = currentState().copy(lastSyncedAt = System.currentTimeMillis(), status = "Shopping list synced.")
         if (store.batch(id) != null) requests.trySend(Unit)
     }

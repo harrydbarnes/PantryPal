@@ -45,7 +45,7 @@ class AddItemState(defaults: AddItemDefaults = AddItemDefaults()) {
     var lowStockThresholdText by mutableStateOf("1")
 
     val isValid: Boolean
-        get() = name.isNotBlank() && (qtyText.toDoubleOrNull() ?: 0.0) > 0.0
+        get() = name.isNotBlank() && qtyText.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true
 
     fun prepareNextItem() {
         name = ""
@@ -105,8 +105,10 @@ fun rememberAddItemState(defaults: AddItemDefaults): AddItemState =
 fun AddScreen(
     defaults: AddItemDefaults = AddItemDefaults(),
     barcode: String? = null,
-    onAdd: (String, Double, String, String, Boolean, Boolean, Long?, Boolean, Double?, String, Boolean) -> Unit,
+    onAdd: (String, Double, String, String, Boolean, Boolean, Long?, Boolean, Double?, String, Boolean, () -> Unit) -> Unit,
     onCancel: (() -> Unit)? = null,
+    saving: Boolean = false,
+    error: String? = null,
     preFillItem: ItemEntity? = null
 ) {
     val state = rememberAddItemState(defaults)
@@ -130,13 +132,13 @@ fun AddScreen(
         }
     }
 
-    fun save() {
+    fun save(onSaved: () -> Unit) {
         onAdd(
             state.name.trim(), state.qtyText.toDoubleOrNull() ?: 1.0, state.unit.trim().ifBlank { "pcs" },
             state.category.trim().ifBlank { "General" }, state.isVegetarian, state.isGlutenFree,
             state.expirationDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(), state.isUsual,
             if (state.isUsual) state.lowStockThresholdText.toDoubleOrNull() else null,
-            state.storageLocation.trim().ifBlank { InventoryEntity.LOCATION_PANTRY }, state.isOpened
+            state.storageLocation.trim().ifBlank { InventoryEntity.LOCATION_PANTRY }, state.isOpened, onSaved
         )
     }
 
@@ -157,13 +159,14 @@ fun AddScreen(
         bottomBar = {
             Surface(tonalElevation = 3.dp) {
                 Column(Modifier.navigationBarsPadding().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { save(); onCancel?.invoke() }, enabled = state.isValid, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                        Text("Add item")
+                    Button(onClick = { save { onCancel?.invoke() } }, enabled = state.isValid && !saving, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                        Text(if (saving) "Saving…" else "Add item")
                     }
-                    TextButton(onClick = { save(); state.prepareNextItem() }, enabled = state.isValid, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { save { state.prepareNextItem() } }, enabled = state.isValid && !saving, modifier = Modifier.fillMaxWidth()) {
                         Text("Save and add another")
                     }
-                    if (onCancel != null) TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
+                    if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+                    if (onCancel != null) TextButton(enabled = !saving, onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
                 }
             }
         }

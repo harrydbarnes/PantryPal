@@ -702,16 +702,17 @@ fun KitchenApp(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 contentAlignment = Alignment.TopCenter
             ) {
-                Box(
-                    modifier = if (
-                        currentScreen == AppScreen.ScanIn ||
-                            currentScreen == AppScreen.ScanOut
-                    ) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        Modifier.fillMaxHeight().widthIn(max = 1040.dp).fillMaxWidth()
+                Column(modifier = Modifier.fillMaxHeight().widthIn(max = 1200.dp).fillMaxWidth()) {
+                    val loading by viewModel.loading.collectAsState()
+                    val loadErrors by viewModel.loadErrors.collectAsState()
+                    val actionError by viewModel.actionError.collectAsState()
+                    val dataKey = when (currentScreen) {
+                        AppScreen.Inventory, AppScreen.Dashboard -> "inventory"
+                        AppScreen.MealPlan -> "meals"
+                        else -> "history"
                     }
-                ) {
+                    com.example.pantrypal.ui.components.DataStatus(dataKey in loading,
+                        loadErrors[dataKey], viewModel::retryLoads, actionError, viewModel::dismissActionError)
                     when (currentScreen) {
                         AppScreen.ScanIn -> {
                             ScanInScreen(
@@ -767,7 +768,9 @@ fun KitchenApp(
                             val addItemDefaults by viewModel.addItemDefaults.collectAsState()
                             AddScreen(
                                 defaults = addItemDefaults,
-                                onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened ->
+                                saving = viewModel.saving.collectAsState().value,
+                                error = viewModel.actionError.collectAsState().value,
+                                onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened, saved ->
                                     viewModel.addItem(
                                         name,
                                         qty,
@@ -779,9 +782,9 @@ fun KitchenApp(
                                         isUsual = usual,
                                         lowStockThreshold = threshold,
                                         storageLocation = location,
-                                        isOpened = opened
+                                        isOpened = opened,
+                                        onSaved = saved
                                     )
-                                    currentScreen = AppScreen.Inventory
                                 },
                                 onCancel = { currentScreen = AppScreen.Inventory }
                             )
@@ -1414,8 +1417,10 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
         // Navigate to add screen pre-filled
         AddScreen(
             defaults = addItemDefaults,
+                                saving = viewModel.saving.collectAsState().value,
+                                error = viewModel.actionError.collectAsState().value,
             barcode = detectedBarcode,
-            onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened ->
+            onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened, saved ->
                 viewModel.addItem(
                     name,
                     qty,
@@ -1428,9 +1433,9 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
                     isUsual = usual,
                     lowStockThreshold = threshold,
                     storageLocation = location,
-                    isOpened = opened
+                    isOpened = opened,
+                                        onSaved = saved
                 )
-                onDismiss()
             },
             onCancel = {
                  // Reset state to go back to the scanner view
@@ -1446,8 +1451,10 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
              // Redirect to AddScreen with pre-filled data
              AddScreen(
                 defaults = addItemDefaults,
+                                saving = viewModel.saving.collectAsState().value,
+                                error = viewModel.actionError.collectAsState().value,
                 barcode = detectedBarcode,
-                onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened ->
+                onAdd = { name, qty, unit, cat, veg, gf, exp, usual, threshold, location, opened, saved ->
                     viewModel.addItem(
                         name,
                         qty,
@@ -1461,9 +1468,9 @@ fun ScanInScreen(onDismiss: () -> Unit, viewModel: MainViewModel) {
                         isUsual = usual,
                         lowStockThreshold = threshold,
                         storageLocation = location,
-                        isOpened = opened
+                        isOpened = opened,
+                                        onSaved = saved
                     )
-                    onDismiss()
                 },
                 onCancel = {
                      showAddSheet = false

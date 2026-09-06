@@ -2,6 +2,10 @@
 
 package com.example.pantrypal.ui.screens
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -122,7 +126,10 @@ fun RecipeScreen(
         derivedStateOf { RecipeSearch.local(state.savedRecipes, state.searchQuery) }
     }
 
-    Scaffold(modifier = modifier) { padding ->
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    val expanded = maxWidth >= 840.dp * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)
+    Row(Modifier.fillMaxSize()) {
+    Scaffold(modifier = Modifier.weight(1f)) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -320,6 +327,8 @@ fun RecipeScreen(
 
     state.selectedRecipe?.let { recipe ->
         RecipeDetailDialog(
+            inline = expanded,
+            modifier = if (expanded) Modifier.weight(1f).fillMaxHeight() else Modifier,
             recipe = recipe,
             missingIngredients = state.selectedMissingIngredients,
             onDismiss = onRecipeDismissed,
@@ -337,6 +346,8 @@ fun RecipeScreen(
         )
     }
 }
+    }
+    }
 
 private fun RecipeIdeaShelves.isEmpty(): Boolean =
     cookNow.isEmpty() &&
@@ -860,6 +871,8 @@ private fun RecipeImportReviewDialog(
 
 @Composable
 private fun RecipeDetailDialog(
+    inline: Boolean = false,
+    modifier: Modifier = Modifier,
     recipe: Recipe,
     missingIngredients: List<RecipeIngredient>,
     onDismiss: () -> Unit,
@@ -871,7 +884,7 @@ private fun RecipeDetailDialog(
     onAddMissingToShopping: () -> Unit,
     onSave: () -> Unit
 ) {
-    AlertDialog(
+    RecipeDetailSurface(inline = inline, modifier = modifier,
         onDismissRequest = onDismiss,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -968,6 +981,19 @@ private fun RecipeDetailDialog(
             TextButton(onClick = onDismiss) { Text("Done") }
         }
     )
+}
+
+@Composable
+private fun RecipeDetailSurface(inline: Boolean, modifier: Modifier, onDismissRequest: () -> Unit,
+    title: @Composable () -> Unit, text: @Composable () -> Unit, confirmButton: @Composable () -> Unit) {
+    if (inline) {
+        Surface(modifier, tonalElevation = 2.dp) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                title(); text(); confirmButton()
+            }
+        }
+    } else AlertDialog(onDismissRequest = onDismissRequest, title = title,
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { text() } }, confirmButton = confirmButton)
 }
 
 @Composable

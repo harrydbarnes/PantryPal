@@ -1,7 +1,7 @@
 import { before, after, beforeEach, test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, setDoc, getDoc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, arrayUnion, serverTimestamp, writeBatch, deleteDoc, Timestamp } from 'firebase/firestore';
 let env;
 const invite = 'apple-basil-copper-dinner-ember-forest';
 const user = uid => env.authenticatedContext(uid).firestore();
@@ -32,9 +32,51 @@ test('forged invite and owner replacement fail', async () => {
   await assertFails(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner'), 'joinProofs.partner': 'wrong' }));
   await assertFails(updateDoc(home(user('partner')), { memberIds: ['partner', 'intruder'], 'joinProofs.partner': invite }));
 });
-test('members can publish v2; old snapshots and spoofed authors cannot', async () => {
-  await assertSucceeds(setDoc(state(user('owner')), { protocol: 2, shoppingV2: '{}', updatedBy: 'owner', updatedAt: serverTimestamp() }));
-  await assertFails(setDoc(state(user('owner')), { snapshot: 'legacy', updatedBy: 'owner', updatedAt: 1 }));
-  await assertFails(setDoc(state(user('owner')), { protocol: 2, shoppingV2: '{}', updatedBy: 'other', updatedAt: serverTimestamp() }));
-  await assertFails(setDoc(state(user('outsider')), { protocol: 2, shoppingV2: '{}', updatedBy: 'outsider', updatedAt: serverTimestamp() }));
+const author = () => ({updatedBy: 'owner', updatedAt: serverTimestamp()});
+const record = db => doc(db, 'households/home/shoppingRecords/milk');
+async function ready(db) {
+  await setDoc(state(db), {protocol: 3, phase: 'migrating', revision: 0, ...author()});
+  await setDoc(state(db), {protocol: 3, phase: 'ready', revision: 0, ...author()});
+}
+test('v2 migration preserves its seed; interrupted seed chunks are retryable; downgrade fails', async () => {
+  const db = user('owner');
+  await env.withSecurityRulesDisabled(async ctx => setDoc(state(ctx.firestore()), {protocol: 2, shoppingV2: '{"records":{}}'}));
+  await assertSucceeds(updateDoc(state(db), {protocol: 3, phase: 'migrating', revision: 0, ...author()}));
+  const seed = {key: 'item:milk', token: 'seed', data: '{}', deleted: false, ...author()};
+  await assertSucceeds(setDoc(record(db), seed));
+  await assertSucceeds(setDoc(record(db), seed));
+  await assertSucceeds(setDoc(state(db), {protocol: 3, phase: 'ready', revision: 0, ...author()}));
+  await assertFails(setDoc(record(db), seed));
+  await assertFails(setDoc(state(db), {protocol: 2, shoppingV2: '{}', ...author()}));
+  await assertFails(updateDoc(state(db), {phase: 'migrating', ...author()}));
+});
+test('record writes require membership, author and an atomic revision increment', async () => {
+  const db = user('owner'); await ready(db);
+  const data = {key: 'item:milk', token: 'edit', data: '{}', deleted: false, ...author()};
+  await assertFails(setDoc(record(db), data));
+  const batch = writeBatch(db);
+  batch.set(record(db), data);
+  batch.set(doc(db, 'households/home/shoppingDevices/phone'), {batch: 'one', ...author()});
+  batch.update(state(db), {revision: 1, ...author()});
+  await assertSucceeds(batch.commit());
+  await assertFails(getDoc(record(user('outsider'))));
+  const spoof = writeBatch(db);
+  spoof.set(record(db), {...data, updatedBy: 'partner'});
+  spoof.update(state(db), {revision: 2, ...author()});
+  await assertFails(spoof.commit());
+});
+test('only tombstones older than 30 days can be compacted', async () => {
+  const db = user('owner'); await ready(db);
+  await env.withSecurityRulesDisabled(async ctx => setDoc(record(ctx.firestore()), {
+    key: 'item:milk', token: 'delete', data: null, deleted: true,
+    updatedBy: 'owner', updatedAt: Timestamp.fromMillis(Date.now() - 31 * 86400000)
+  }));
+  const prune = writeBatch(db); prune.delete(record(db)); prune.update(state(db), {revision: 1, ...author()});
+  await assertSucceeds(prune.commit());
+  const create = writeBatch(db);
+  create.set(record(db), {key: 'item:milk', token: 'new', data: '{}', deleted: false, ...author()});
+  create.update(state(db), {revision: 2, ...author()}); await create.commit();
+  const bad = writeBatch(db); bad.delete(record(db)); bad.update(state(db), {revision: 3, ...author()});
+  await assertFails(bad.commit());
+  await assertFails(deleteDoc(record(db)));
 });

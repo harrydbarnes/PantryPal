@@ -58,6 +58,20 @@ class KitchenRepository(
         requireNotNull(database).shoppingSyncDao().putLayout(com.example.pantrypal.data.entity.ShoppingLayoutEntity(key, value))
     }
 
+    val stockOperations by lazy { StockOperations(requireNotNull(database)) }
+
+    suspend fun <T> transaction(block: suspend () -> T): T = requireNotNull(database).withTransaction { block() }
+
+    suspend fun finishShopping(weekId: String, storageLocation: String) = transaction {
+        val sections = shoppingSections.first()
+        val recurringIds = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
+        val checked = shoppingDao.getAllShoppingItemsSnapshot().filter {
+            it.isChecked && (it.sectionId in recurringIds || it.weekId == null || it.weekId == weekId)
+        }
+        putAwayShoppingItems(checked, storageLocation)
+        completeShoppingTrip(checked, sections, weekId, storageLocation)
+    }
+
     private val shoppingMutationMutex = Mutex()
 
     companion object {

@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -81,6 +83,8 @@ fun MealPlanScreen(
     viewModel: MainViewModel,
     onOpenRecipes: () -> Unit = {}
 ) {
+    val saving by viewModel.saving.collectAsState()
+    val error by viewModel.actionError.collectAsState()
     val currentWeek by viewModel.currentWeek.collectAsState()
     val meals by viewModel.mealsState.collectAsState()
     val weeks by viewModel.mealWeeksState.collectAsState()
@@ -134,13 +138,15 @@ fun MealPlanScreen(
             )
         }
     ) { padding ->
-        LazyColumn(
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(320.dp * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (showMealPlanIntro) {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     ExpressiveHero(
                         eyebrow = "Four-week rhythm",
                         title = "Dinner plans, minus the daily scramble",
@@ -166,7 +172,7 @@ fun MealPlanScreen(
                 }
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 FilledTonalButton(
                     onClick = onOpenRecipes,
                     modifier = Modifier.fillMaxWidth()
@@ -177,7 +183,7 @@ fun MealPlanScreen(
                 }
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -203,7 +209,7 @@ fun MealPlanScreen(
                 }
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(end = 8.dp)
@@ -221,7 +227,7 @@ fun MealPlanScreen(
                 }
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 Card(
                     shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(
@@ -304,7 +310,7 @@ fun MealPlanScreen(
             }
 
             if (weekMeals.isEmpty()) {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     EmptyMealPlan(
                         week = displayedWeekDetails?.displayName ?: "Week $displayedWeek",
                         onAdd = {
@@ -315,7 +321,7 @@ fun MealPlanScreen(
                     )
                 }
             } else {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     SectionHeading(
                         title = "The week at a glance",
                         supportingText = "Tap a day’s plus button to fill any gaps."
@@ -356,15 +362,16 @@ fun MealPlanScreen(
             week = displayedWeek,
             meal = editingMeal,
             ingredientSuggestions = ingredientSuggestions,
+            saving = saving,
+            error = error,
             onDismiss = { showEditor = false },
             onSave = { name, day, slot, ingredients ->
                 val existing = editingMeal?.takeIf { it.mealId != 0L }
                 if (existing == null) {
-                    viewModel.addMeal(name, displayedWeek, day, slot, ingredients)
+                    viewModel.addMeal(name, displayedWeek, day, slot, ingredients) { showEditor = false }
                 } else {
-                    viewModel.updateMeal(existing, name, day, slot, ingredients)
+                    viewModel.updateMeal(existing, name, day, slot, ingredients) { showEditor = false }
                 }
-                showEditor = false
             }
         )
     }
@@ -386,8 +393,7 @@ fun MealPlanScreen(
             week = week,
             onDismiss = { editingWeek = null },
             onSave = { name, emoji ->
-                viewModel.updateMealWeek(week, name, emoji)
-                editingWeek = null
+                viewModel.updateMealWeek(week, name, emoji) { editingWeek = null }
             }
         )
     }
@@ -645,6 +651,8 @@ private fun MealEditorDialog(
     meal: MealEntity?,
     ingredientSuggestions: List<String>,
     onDismiss: () -> Unit,
+    saving: Boolean,
+    error: String?,
     onSave: (String, Int, String, List<String>) -> Unit
 ) {
     var name by remember(meal) { mutableStateOf(meal?.name.orEmpty()) }
@@ -670,7 +678,7 @@ private fun MealEditorDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         title = { Text(if (meal?.mealId == 0L || meal == null) "Add to Week $week" else "Edit meal") },
         text = {
             LazyColumn(
@@ -760,14 +768,17 @@ private fun MealEditorDialog(
             }
         },
         confirmButton = {
+            Column {
+            if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
             Button(
                 onClick = {
                     onSave(name, day, slot, ingredients)
                 },
-                enabled = name.isNotBlank()
-            ) { Text("Save") }
+                enabled = name.isNotBlank() && !saving
+            ) { Text(if (saving) "Saving…" else "Save") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
     )
 
     if (addIngredientDialogVisible) {
