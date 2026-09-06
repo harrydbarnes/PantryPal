@@ -256,7 +256,9 @@ fun KitchenApp(
     val hasCompletedOnboarding by viewModel.hasCompletedOnboarding.collectAsState()
     val hasSeenSettingsIntro by viewModel.hasSeenSettingsIntro.collectAsState()
 
-    var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Dashboard) }
+    var currentScreen by rememberSaveable(stateSaver = androidx.compose.runtime.saveable.Saver<AppScreen, Int>(
+        save = { it.titleResId }, restore = { id -> listOf(AppScreen.Dashboard, AppScreen.Inventory, AppScreen.ShoppingList, AppScreen.AddManual, AppScreen.ScanIn, AppScreen.ScanOut, AppScreen.Settings, AppScreen.PastItems, AppScreen.MealPlan, AppScreen.Recipes, AppScreen.Receipt, AppScreen.ShoppingTools, AppScreen.DataManagement, AppScreen.Household).firstOrNull { it.titleResId == id } ?: AppScreen.Dashboard }
+    )) { mutableStateOf<AppScreen>(AppScreen.Dashboard) }
     var showOnboarding by rememberSaveable {
         mutableStateOf(!hasCompletedOnboarding)
     }
@@ -413,7 +415,8 @@ fun KitchenApp(
     ) { uri ->
         if (uri != null) {
             featuresViewModel.setReceiptProcessing(true)
-            runCatching { InputImage.fromFilePath(context, uri) }
+            scope.launch {
+            runCatching { withContext(Dispatchers.IO) { InputImage.fromFilePath(context, uri) } }
                 .onSuccess { image ->
                     prepareReceiptTextRecognition(
                         context = context,
@@ -433,6 +436,7 @@ fun KitchenApp(
                     )
                 }
                 .onFailure(featuresViewModel::setReceiptError)
+            }
         }
     }
     val backupCreateLauncher = rememberLauncherForActivityResult(
@@ -752,7 +756,8 @@ fun KitchenApp(
                             onOpenShoppingTools = {
                                 currentScreen = AppScreen.ShoppingTools
                             },
-                            onOpenHousehold = { currentScreen = AppScreen.Household }
+                            onOpenHousehold = { currentScreen = AppScreen.Household },
+                            household = featuresViewModel.householdState.collectAsState().value
                         )
                         AppScreen.MealPlan -> MealPlanScreen(
                             viewModel = viewModel,
@@ -951,7 +956,22 @@ fun KitchenApp(
                                 },
                                 onGoogleSignIn = { featuresViewModel.signInToHousehold(context as ComponentActivity) },
                                 onCreateLiveHousehold = featuresViewModel::createLiveHousehold,
-                                onJoinLiveHousehold = featuresViewModel::joinLiveHousehold
+                                onJoinLiveHousehold = featuresViewModel::joinLiveHousehold,
+                                onRetry = featuresViewModel::retryHousehold,
+                                onDisconnect = featuresViewModel::disconnectHousehold,
+                                onSignOut = featuresViewModel::signOutHousehold,
+                                onExportSafetyBackup = {
+                                    scope.launch {
+                                        val json = withContext(Dispatchers.IO) {
+                                            java.io.File(context.filesDir, "before-household-join.json").takeIf { it.exists() }?.readText()
+                                        }
+                                        if (json == null) snackbarHostState.showSnackbar("No pre-join backup is saved on this device.")
+                                        else {
+                                            val uri = withContext(Dispatchers.IO) { writeHouseholdSnapshot(context, json) }
+                                            shareHouseholdSnapshot(context, uri)
+                                        }
+                                    }
+                                }
                             )
                         }
                         AppScreen.PastItems -> PastItemsScreen(viewModel)

@@ -1,0 +1,7 @@
+{
+  "name": "pantrypal-rules-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "firebase emulators:exec --only firestore --project demo-pantrypal --config ../firebase.json 'node --test rules.test.mjs'" },
+  "devDependencies": { "@firebase/rules-unit-testing": "5.0.2", "firebase": "12.18.0", "firebase-tools": "15.29.0" }
+}

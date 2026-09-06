@@ -34,12 +34,14 @@ class PantryPalApplication : Application(), Configuration.Provider {
     }
 
     val householdSync: FirebaseHouseholdSync by lazy {
-        FirebaseHouseholdSync(this, featuresRepository)
+        FirebaseHouseholdSync(this, featuresRepository, database)
     }
 
     override fun onCreate() {
         super.onCreate()
+        householdSync
         database.invalidationTracker.addObserver(object : androidx.room.InvalidationTracker.Observer(
+            "shopping_layout",
             "shopping_list",
             "inventory",
             "items",
@@ -55,7 +57,7 @@ class PantryPalApplication : Application(), Configuration.Provider {
         ) {
             override fun onInvalidated(tables: Set<String>) {
                 PantryPalWidgetProvider.updateWidgets(this@PantryPalApplication)
-                householdSync.onLocalDataChanged()
+                if (tables.any { it in setOf("shopping_list", "shopping_sections", "shopping_layout", "meal_weeks") }) householdSync.onLocalDataChanged()
             }
         })
     }

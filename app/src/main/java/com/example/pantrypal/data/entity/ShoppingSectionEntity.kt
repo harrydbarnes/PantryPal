@@ -9,7 +9,8 @@ data class ShoppingSectionEntity(
     val name: String,
     val sortOrder: Int,
     val recursEveryWeek: Boolean,
-    val systemKey: String? = null
+    val systemKey: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "''") val syncId: String = systemKey ?: java.util.UUID.randomUUID().toString()
 ) {
     companion object {
         const val ID_EVERY_WEEK = 1L

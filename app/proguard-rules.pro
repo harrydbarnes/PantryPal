@@ -54,3 +54,9 @@
 -keepclassmembers,allowoptimization class * {
     @com.google.gson.annotations.SerializedName <fields>;
 }
+
+# Shopping protocol v2 JSON must survive release optimisation.
+-keepclassmembers,allowoptimization class com.example.pantrypal.data.household.ShoppingRecord { <fields>; }
+-keepclassmembers,allowoptimization class com.example.pantrypal.data.household.ShoppingWireState { <fields>; }
+-keepclassmembers,allowoptimization class com.example.pantrypal.data.entity.ShoppingItemEntity { <fields>; }
+-keepclassmembers,allowoptimization class com.example.pantrypal.data.entity.ShoppingSectionEntity { <fields>; }

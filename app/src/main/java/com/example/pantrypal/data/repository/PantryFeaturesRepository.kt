@@ -264,7 +264,7 @@ class PantryFeaturesRepository(
         backupCodec.encode(
             BackupDocument(
                 appVersion = BuildConfig.VERSION_NAME,
-                payload = snapshot().toPayload()
+                payload = snapshot().toPayload().copy(shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value })
             ),
             pretty = true
         )
@@ -283,7 +283,7 @@ class PantryFeaturesRepository(
     suspend fun exportHouseholdSnapshot(): String = withContext(Dispatchers.Default) {
         val backup = BackupDocument(
             appVersion = BuildConfig.VERSION_NAME,
-            payload = snapshot().toPayload()
+            payload = snapshot().toPayload().copy(shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value })
         )
         val now = System.currentTimeMillis()
         val householdId = householdId()
@@ -409,6 +409,8 @@ class PantryFeaturesRepository(
     private suspend fun restore(payload: BackupPayload) {
         database.withTransaction {
             val restoredItemIds = payload.items.mapTo(mutableSetOf()) { it.itemId }
+            database.shoppingSyncDao().layout().forEach { database.shoppingSyncDao().deleteLayout(it.layoutKey) }
+            payload.shoppingLayout.orEmpty().forEach { (key, value) -> database.shoppingSyncDao().putLayout(com.example.pantrypal.data.entity.ShoppingLayoutEntity(key, value)) }
             backupDao.clearRecipeIngredients()
             backupDao.clearInventory()
             backupDao.clearConsumption()

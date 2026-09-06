@@ -27,6 +27,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -219,12 +223,31 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         ShoppingLocationStore.write(getApplication(), updated)
     }
 
+    val shoppingLayoutState = repository.shoppingLayout.map { rows -> rows.associate { it.layoutKey to it.value } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    fun saveAisleOrder(names: List<String>) {
+        shoppingAction { repository.saveShoppingLayout(com.example.pantrypal.util.ShoppingAisles.ORDER_KEY,
+            com.google.gson.Gson().toJson(com.example.pantrypal.util.ShoppingAisles.cleanOrder(names))) }
+    }
+
+    fun assignAisle(name: String, aisle: String) {
+        shoppingAction { repository.saveShoppingLayout(com.example.pantrypal.util.ShoppingAisles.assignmentKey(name), aisle) }
+    }
+
+    fun moveShoppingItem(item: ShoppingItemEntity, section: ShoppingSectionEntity) {
+        shoppingAction {
+            repository.updateShoppingItem(item.copy(sectionId = section.sectionId, weekId = if (section.recursEveryWeek) null else _shoppingWeek.value))
+            markShoppingChanged()
+        }
+    }
+
     // UI State for Inventory
     val inventoryState: StateFlow<List<InventoryUiModel>> = repository.currentInventory
         .map { list ->
             val totals = list.groupBy { it.itemId }.mapValues { (_, batches) -> batches.sumOf { it.quantity } }
             list.map { it.toUiModel(totalQuantity = totals[it.itemId] ?: it.quantity) }
-        }
+        }.flowOn(Dispatchers.Default)
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -261,6 +284,17 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             initialValue = emptyList()
         )
 
+    val shoppingLoading = MutableStateFlow(true)
+    val shoppingError = MutableStateFlow<String?>(null)
+
+    private fun shoppingAction(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try { block(); shoppingError.value = null }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { shoppingError.value = error.message ?: "Shopping change could not be saved. Try again." }
+        }
+    }
+
     // UI State for Shopping List
     val shoppingListState: StateFlow<List<ShoppingItemEntity>> = repository.shoppingList
         .stateIn(
@@ -270,6 +304,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         )
 
     val shoppingSectionsState: StateFlow<List<ShoppingSectionEntity>> = repository.shoppingSections
+        .onEach { shoppingLoading.value = false }
+        .catch { shoppingLoading.value = false; shoppingError.value = "Shopping sections could not be loaded. Reopen the app to retry." }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -683,7 +719,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         sectionId: Long = ShoppingSectionEntity.ID_THE_REST,
         weekId: String? = _currentWeek.value
     ) {
-        viewModelScope.launch {
+        shoppingAction {
              val trimmedName = name.trim()
              val item = ShoppingItemEntity(
                  name = trimmedName,
@@ -699,7 +735,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     }
 
     fun updateShoppingItem(item: ShoppingItemEntity, name: String, quantity: Double, unit: String) {
-        viewModelScope.launch {
+        shoppingAction {
             val trimmedName = name.trim()
             repository.updateShoppingItem(
                 item.copy(name = trimmedName, quantity = quantity, unit = unit.trim().ifEmpty { "pcs" })
@@ -710,7 +746,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     }
 
     fun addShoppingSection(name: String, recursEveryWeek: Boolean) {
-        viewModelScope.launch {
+        shoppingAction {
             val nextOrder = (repository.shoppingSections.first().maxOfOrNull { it.sortOrder } ?: 0) + 1
             repository.insertShoppingSection(
                 ShoppingSectionEntity(
@@ -724,7 +760,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     }
 
     fun updateShoppingSection(section: ShoppingSectionEntity, name: String, recursEveryWeek: Boolean) {
-        viewModelScope.launch {
+        shoppingAction {
             repository.updateShoppingSection(
                 section.copy(name = name.trim(), recursEveryWeek = recursEveryWeek)
             )
@@ -734,7 +770,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun deleteShoppingSection(section: ShoppingSectionEntity) {
         if (section.systemKey != null) return
-        viewModelScope.launch {
+        shoppingAction {
             repository.deleteShoppingItemsInSection(section.sectionId)
             repository.deleteShoppingSection(section)
             markShoppingChanged()
@@ -742,21 +778,21 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     }
 
     fun toggleShoppingItem(item: ShoppingItemEntity) {
-        viewModelScope.launch {
+        shoppingAction {
             repository.updateShoppingItem(item.copy(isChecked = !item.isChecked))
             markShoppingChanged()
         }
     }
 
     fun deleteShoppingItem(item: ShoppingItemEntity) {
-        viewModelScope.launch {
+        shoppingAction {
             repository.deleteShoppingItem(item)
             markShoppingChanged()
         }
     }
 
     fun restoreShoppingItem(item: ShoppingItemEntity) {
-        viewModelScope.launch {
+        shoppingAction {
             repository.addShoppingItem(item)
             markShoppingChanged()
         }

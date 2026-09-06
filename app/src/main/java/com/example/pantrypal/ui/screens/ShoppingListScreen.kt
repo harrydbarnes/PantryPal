@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.items
+import androidx.compose.animation.animateContentSize
+import com.example.pantrypal.util.ShoppingAisles
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
@@ -94,8 +96,17 @@ fun ShoppingListScreen(
     viewModel: MainViewModel,
     onScanReceipt: () -> Unit = {},
     onOpenShoppingTools: () -> Unit = {},
-    onOpenHousehold: () -> Unit = {}
+    onOpenHousehold: () -> Unit = {},
+    household: HouseholdSyncUiState = HouseholdSyncUiState()
 ) {
+    val layout by viewModel.shoppingLayoutState.collectAsState()
+    var aisleMode by rememberSaveable { mutableStateOf(false) }
+    var editAisles by rememberSaveable { mutableStateOf(false) }
+    var movingItem by remember { mutableStateOf<ShoppingItemEntity?>(null) }
+    val aisles = remember(layout) {
+        runCatching { com.google.gson.Gson().fromJson(layout[ShoppingAisles.ORDER_KEY], Array<String>::class.java)?.toList() }
+            .getOrNull()?.let(ShoppingAisles::cleanOrder) ?: ShoppingAisles.exampleOrder
+    }
     val shoppingList by viewModel.shoppingListState.collectAsState()
     val sections by viewModel.shoppingSectionsState.collectAsState()
     val history by viewModel.shoppingHistoryState.collectAsState()
@@ -105,6 +116,8 @@ fun ShoppingListScreen(
     val lastShoppingChangeAt by viewModel.shoppingLastChangedAt.collectAsState()
     val shoppingArchive by viewModel.shoppingArchiveState.collectAsState()
 
+    val loading by viewModel.shoppingLoading.collectAsState()
+    val shoppingError by viewModel.shoppingError.collectAsState()
     var itemEditorSection by remember { mutableStateOf<ShoppingSectionEntity?>(null) }
     var editingItem by remember { mutableStateOf<ShoppingItemEntity?>(null) }
     var editingSection by remember { mutableStateOf<ShoppingSectionEntity?>(null) }
@@ -154,6 +167,8 @@ fun ShoppingListScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (loading) item { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            shoppingError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
             item {
                 QuickAddShoppingItem(
                     value = quickAddName,
@@ -177,15 +192,15 @@ fun ShoppingListScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     StatusPill(
-                        label = "Local only",
+                        label = household.syncLabel,
                         icon = Icons.Outlined.CloudOff,
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        lastShoppingChangeAt?.let {
-                            "Last updated by This device · ${DateFormat.getDateTimeInstance().format(Date(it))}"
-                        } ?: "Changes stay on this device until household sharing is set up.",
+                        household.lastSyncedAt?.let {
+                            "Last synced · ${DateFormat.getDateTimeInstance().format(Date(it))}"
+                        } ?: if (household.liveHouseholdId == null) "Set up a household to share this list." else "Changes are saved here while sync connects.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -205,9 +220,9 @@ fun ShoppingListScreen(
                         Icon(Icons.Outlined.Group, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                         Column(Modifier.weight(1f)) {
                             Text("My household", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Text("This device only", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text(household.syncLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                         }
-                        Text("Set up", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text(if (household.liveHouseholdId == null) "Set up" else "Manage", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
             }
@@ -322,36 +337,45 @@ fun ShoppingListScreen(
 
             }
 
-            sections.forEach { section ->
-                val sectionItems = shoppingItemsForSection(visibleItems, section.sectionId)
-                if (sectionItems.isEmpty()) return@forEach
-                item(key = "section-${section.sectionId}") {
-                    ShoppingSectionCard(
-                        section = section,
-                        items = sectionItems,
-                        onAdd = if (section.systemKey == ShoppingSectionEntity.KEY_MEAL_PLAN) null else {
-                            {
-                                editingItem = null
-                                itemEditorSection = section
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Shop by Aldi aisle", modifier = Modifier.weight(1f))
+                    Switch(checked = aisleMode, onCheckedChange = { aisleMode = it })
+                }
+                if (aisleMode) TextButton(onClick = { editAisles = true }) { Text("Edit My Aldi aisle order") }
+            }
+            if (aisleMode) {
+                val groups = visibleItems.groupBy { ShoppingAisles.aisleFor(it.name, aisles, layout) }
+                (aisles + ShoppingAisles.UNASSIGNED).forEach { aisle ->
+                    val rows = groups[aisle].orEmpty().sortedBy { it.isChecked }
+                    if (rows.isNotEmpty()) {
+                        item(key = "aisle-$aisle") { Text(aisle, style = MaterialTheme.typography.titleLarge) }
+                        items(rows, key = { "item-${it.syncId}" }) { row ->
+                            Card(Modifier.fillMaxWidth().animateItem()) {
+                                ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) })
+                                TextButton(onClick = { movingItem = row }) { Text("Aisle / section") }
                             }
-                        },
-                        onEditSection = if (section.systemKey == null) {
-                            {
-                                editingSection = section
-                                showSectionEditor = true
-                            }
-                        } else null,
-                        onEditItem = { item ->
-                            editingItem = item
-                            itemEditorSection = section
-                        },
-                        onToggleItem = viewModel::toggleShoppingItem,
-                        onDeleteItem = ::deleteWithUndo
-                    )
+                        }
+                    }
+                }
+            } else {
+                sections.forEach { section ->
+                    val sectionItems = shoppingItemsForSection(visibleItems, section.sectionId)
+                    item(key = "section-${section.syncId}") {
+                        ShoppingSectionHeader(section, sectionItems.isEmpty(),
+                            onAdd = { editingItem = null; itemEditorSection = section },
+                            onEditSection = if (section.systemKey == null) { { editingSection = section; showSectionEditor = true } } else null)
+                    }
+                    items(sectionItems, key = { "item-${it.syncId}" }) { row ->
+                        Card(Modifier.fillMaxWidth().animateItem()) {
+                            ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = section }, { deleteWithUndo(row) })
+                            TextButton(onClick = { movingItem = row }) { Text("Move section / assign aisle") }
+                        }
+                    }
                 }
             }
 
-            if (visibleItems.none { !it.isChecked }) {
+            if (!loading && visibleItems.none { !it.isChecked }) {
                 item {
                     Text(
                         if (visibleItems.isEmpty()) "No items yet. Add something above or prepare your next list." else "Everything is ticked off. Add something above or prepare your next list.",
@@ -450,6 +474,23 @@ fun ShoppingListScreen(
                 editingItem = null
             }
         )
+    }
+
+    if (editAisles) AisleOrderDialog(aisles, { editAisles = false }) { order -> viewModel.saveAisleOrder(order); editAisles = false }
+    movingItem?.let { row ->
+        AlertDialog(onDismissRequest = { movingItem = null }, title = { Text("Place ${row.name}") },
+            text = {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { Text("My Aldi aisle", style = MaterialTheme.typography.titleMedium) }
+                    items(aisles + ShoppingAisles.UNASSIGNED) { aisle ->
+                        TextButton(onClick = { viewModel.assignAisle(row.name, aisle); movingItem = null }) { Text(aisle) }
+                    }
+                    item { Text("Planning section", style = MaterialTheme.typography.titleMedium) }
+                    items(sections) { section ->
+                        TextButton(onClick = { viewModel.moveShoppingItem(row, section); movingItem = null }) { Text(section.name) }
+                    }
+                }
+            }, confirmButton = { TextButton(onClick = { movingItem = null }) { Text("Close") } })
     }
 
     if (showSectionEditor) {
@@ -657,81 +698,15 @@ private fun PutAwayDialog(
 }
 
 @Composable
-private fun ShoppingSectionCard(
-    section: ShoppingSectionEntity,
-    items: List<ShoppingItemEntity>,
-    onAdd: (() -> Unit)?,
-    onEditSection: (() -> Unit)?,
-    onEditItem: (ShoppingItemEntity) -> Unit,
-    onToggleItem: (ShoppingItemEntity) -> Unit,
-    onDeleteItem: (ShoppingItemEntity) -> Unit
-) {
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = sectionContainerColor(section),
-                    contentColor = sectionContentColor(section)
-                ) {
-                    Icon(
-                        sectionIcon(section),
-                        contentDescription = null,
-                        modifier = Modifier.padding(10.dp).size(22.dp)
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(section.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        when {
-                            section.recursEveryWeek -> "Appears every week"
-                            section.systemKey == ShoppingSectionEntity.KEY_MEAL_PLAN -> "Generated from this week's meals"
-                            else -> "Extra items for this week"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                onEditSection?.let { action ->
-                    IconButton(onClick = action) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit ${section.name}")
-                    }
-                }
-                onAdd?.let { action ->
-                    IconButton(onClick = action) {
-                        Icon(Icons.Default.Add, contentDescription = "Add to ${section.name}")
-                    }
-                }
+private fun ShoppingSectionHeader(section: ShoppingSectionEntity, empty: Boolean, onAdd: () -> Unit, onEditSection: (() -> Unit)?) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = sectionContainerColor(section))) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(section.name, style = MaterialTheme.typography.titleMedium)
+                if (empty) Text("No items yet. Add the first item here.", style = MaterialTheme.typography.bodySmall)
             }
-            if (items.isEmpty()) {
-                Text(
-                    if (section.systemKey == ShoppingSectionEntity.KEY_MEAL_PLAN) {
-                        "Build a list from the meal planner to fill this section."
-                    } else {
-                        "Nothing here yet."
-                    },
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                items.forEachIndexed { index, item ->
-                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    ShoppingListItemRow(
-                        item = item,
-                        onToggle = { onToggleItem(item) },
-                        onEdit = { onEditItem(item) },
-                        onDelete = { onDeleteItem(item) }
-                    )
-                }
-            }
+            onEditSection?.let { action -> IconButton(onClick = action) { Icon(Icons.Default.Edit, "Edit ${section.name}") } }
+            IconButton(onClick = onAdd) { Icon(Icons.Default.Add, "Add to ${section.name}") }
         }
     }
 }
@@ -820,7 +795,7 @@ private fun ShoppingItemEditorDialog(
         confirmButton = {
             Button(
                 onClick = { onSave(name, quantity.toDoubleOrNull() ?: 1.0, unit) },
-                enabled = name.isNotBlank()
+                enabled = name.isNotBlank() && quantity.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true && unit.isNotBlank()
             ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
@@ -936,3 +911,31 @@ fun ShoppingListItemRow(
 
 private fun formatQuantity(quantity: Double): String =
     if (quantity % 1.0 == 0.0) quantity.toLong().toString() else quantity.toString()
+
+@Composable
+private fun AisleOrderDialog(initial: List<String>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
+    var order by rememberSaveable { mutableStateOf(initial) }
+    var newName by rememberSaveable { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("My Aldi aisle order") },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { Text("This is an editable example. Put aisles in the order you walk through your Aldi. Removed aisles move their items to Unassigned.") }
+                items(order, key = { it }) { aisle ->
+                    val index = order.indexOf(aisle)
+                    Column {
+                        Text(aisle, style = MaterialTheme.typography.titleMedium)
+                        Row {
+                            TextButton(enabled = index > 0, onClick = { order = order.toMutableList().apply { add(index - 1, removeAt(index)) } }) { Text("Up") }
+                            TextButton(enabled = index < order.lastIndex, onClick = { order = order.toMutableList().apply { add(index + 1, removeAt(index)) } }) { Text("Down") }
+                            TextButton(onClick = { order = order - aisle }) { Text("Remove") }
+                        }
+                    }
+                }
+                item {
+                    OutlinedTextField(newName, { newName = it }, label = { Text("New aisle") }, modifier = Modifier.fillMaxWidth())
+                    TextButton(enabled = newName.trim().isNotEmpty() && newName.trim() !in order && newName.trim() != ShoppingAisles.UNASSIGNED,
+                        onClick = { order = order + newName.trim(); newName = "" }) { Text("Add aisle") }
+                }
+            }
+        }, confirmButton = { TextButton(onClick = { onSave(order) }) { Text("Save") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+}

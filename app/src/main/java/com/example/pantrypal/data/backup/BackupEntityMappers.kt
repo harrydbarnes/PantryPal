@@ -85,10 +85,10 @@ fun BackupConsumption.toEntity(): ConsumptionEntity = ConsumptionEntity(
 )
 
 fun ShoppingSectionEntity.toBackupShoppingSection(): BackupShoppingSection =
-    BackupShoppingSection(sectionId, name, sortOrder, recursEveryWeek, systemKey)
+    BackupShoppingSection(sectionId, name, sortOrder, recursEveryWeek, systemKey, syncId)
 
 fun BackupShoppingSection.toEntity(): ShoppingSectionEntity =
-    ShoppingSectionEntity(sectionId, name, sortOrder, recursEveryWeek, systemKey)
+    ShoppingSectionEntity(sectionId, name, sortOrder, recursEveryWeek, systemKey, syncId ?: systemKey ?: "legacy-section-$sectionId")
 
 fun ShoppingItemEntity.toBackupShoppingItem(): BackupShoppingItem = BackupShoppingItem(
     shoppingId = shoppingId,
@@ -99,7 +99,8 @@ fun ShoppingItemEntity.toBackupShoppingItem(): BackupShoppingItem = BackupShoppi
     addedAt = addedAt,
     frequency = frequency,
     sectionId = sectionId,
-    weekId = weekId
+    weekId = weekId,
+    syncId = syncId
 )
 
 fun BackupShoppingItem.toEntity(): ShoppingItemEntity = ShoppingItemEntity(
@@ -111,7 +112,8 @@ fun BackupShoppingItem.toEntity(): ShoppingItemEntity = ShoppingItemEntity(
     addedAt = addedAt,
     frequency = frequency,
     sectionId = sectionId,
-    weekId = weekId
+    weekId = weekId,
+    syncId = syncId ?: "legacy-item-$shoppingId"
 )
 
 fun ShoppingArchiveEntity.toBackupShoppingArchive(): BackupShoppingArchive =
