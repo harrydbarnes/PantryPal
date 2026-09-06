@@ -959,7 +959,19 @@ fun KitchenApp(
                                 onJoinLiveHousehold = featuresViewModel::joinLiveHousehold,
                                 onRetry = featuresViewModel::retryHousehold,
                                 onDisconnect = featuresViewModel::disconnectHousehold,
-                                onSignOut = featuresViewModel::signOutHousehold
+                                onSignOut = featuresViewModel::signOutHousehold,
+                                onExportSafetyBackup = {
+                                    scope.launch {
+                                        val json = withContext(Dispatchers.IO) {
+                                            java.io.File(context.filesDir, "before-household-join.json").takeIf { it.exists() }?.readText()
+                                        }
+                                        if (json == null) snackbarHostState.showSnackbar("No pre-join backup is saved on this device.")
+                                        else {
+                                            val uri = withContext(Dispatchers.IO) { writeHouseholdSnapshot(context, json) }
+                                            shareHouseholdSnapshot(context, uri)
+                                        }
+                                    }
+                                }
                             )
                         }
                         AppScreen.PastItems -> PastItemsScreen(viewModel)

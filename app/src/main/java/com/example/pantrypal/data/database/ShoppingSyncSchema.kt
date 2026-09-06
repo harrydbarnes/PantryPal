@@ -19,7 +19,8 @@ object ShoppingSyncSchema {
         for ((table, prefix, key) in listOf(
             Triple("shopping_list", "item:", "syncId"),
             Triple("shopping_sections", "section:", "syncId"),
-            Triple("shopping_layout", "layout:", "layoutKey")
+            Triple("shopping_layout", "layout:", "layoutKey"),
+            Triple("meal_weeks", "week:", "weekId")
         )) {
             for (operation in listOf("INSERT", "UPDATE", "DELETE")) {
                 val row = if (operation == "DELETE") "OLD" else "NEW"

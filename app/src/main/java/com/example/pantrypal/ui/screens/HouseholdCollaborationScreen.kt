@@ -57,6 +57,7 @@ fun HouseholdCollaborationScreen(
     onRetry: () -> Unit = {},
     onDisconnect: () -> Unit = {},
     onSignOut: () -> Unit = {},
+    onExportSafetyBackup: () -> Unit = {},
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     showTopBar: Boolean = false
@@ -91,7 +92,7 @@ fun HouseholdCollaborationScreen(
             item {
                 Text("My shopping household", style = MaterialTheme.typography.headlineSmall)
                 Text(state.syncLabel, style = MaterialTheme.typography.titleMedium)
-                Text("Live sync shares shopping items, sections and My Aldi aisle settings. Pantry, recipes, meal plans and device settings remain on each device.")
+                Text("Live sync shares shopping items, sections, week names and My Aldi aisle settings. Pantry, recipes, meal plans and device settings remain on each device.")
             }
             item {
                 if (state.liveWorking || state.isWorking || state.liveSyncing) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -129,6 +130,8 @@ fun HouseholdCollaborationScreen(
             item {
                 HorizontalDivider()
                 Text("One-off kitchen copy", style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = onExportSafetyBackup) { Text("Export backup saved before joining") }
+                Text("Restore that safety file through Settings → Data management → Import backup.", style = MaterialTheme.typography.bodySmall)
                 Text("Export or import the full kitchen separately. Import is reviewed before replacing data. It is not live sync.")
                 OutlinedButton(onClick = onShareSnapshot, enabled = !state.isWorking) { Text("Export kitchen copy") }
                 OutlinedButton(onClick = onImportSnapshot, enabled = !state.isWorking && state.liveHouseholdId == null) { Text("Import kitchen copy") }

@@ -116,6 +116,8 @@ fun ShoppingListScreen(
     val lastShoppingChangeAt by viewModel.shoppingLastChangedAt.collectAsState()
     val shoppingArchive by viewModel.shoppingArchiveState.collectAsState()
 
+    val loading by viewModel.shoppingLoading.collectAsState()
+    val shoppingError by viewModel.shoppingError.collectAsState()
     var itemEditorSection by remember { mutableStateOf<ShoppingSectionEntity?>(null) }
     var editingItem by remember { mutableStateOf<ShoppingItemEntity?>(null) }
     var editingSection by remember { mutableStateOf<ShoppingSectionEntity?>(null) }
@@ -165,6 +167,8 @@ fun ShoppingListScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (loading) item { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            shoppingError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
             item {
                 QuickAddShoppingItem(
                     value = quickAddName,
@@ -371,7 +375,7 @@ fun ShoppingListScreen(
                 }
             }
 
-            if (visibleItems.none { !it.isChecked }) {
+            if (!loading && visibleItems.none { !it.isChecked }) {
                 item {
                     Text(
                         if (visibleItems.isEmpty()) "No items yet. Add something above or prepare your next list." else "Everything is ticked off. Add something above or prepare your next list.",

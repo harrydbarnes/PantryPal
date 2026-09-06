@@ -72,6 +72,7 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
             result["item:" + it.syncId] = json.toString()
         }
         dao.layout().forEach { result["layout:" + it.layoutKey] = it.value }
+        db.backupDao().mealWeeks().forEach { result["week:" + it.weekId] = gson.toJson(it) }
         return result
     }
 
@@ -96,6 +97,11 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
                 val value = row.copy(shoppingId = existing?.shoppingId ?: 0, sectionId = section.sectionId, syncId = id)
                 if (existing == null) db.shoppingDao().insertShoppingItem(value) else db.shoppingDao().updateShoppingItem(value)
             }
+            key.startsWith("week:") -> if (data != null) {
+                val week = gson.fromJson(data, MealWeekEntity::class.java)
+                require(week.name.isNotBlank() && week.sortOrder >= 0)
+                db.backupDao().insertMealWeeks(listOf(week.copy(weekId = id)))
+            }
             key.startsWith("layout:") -> if (data == null) dao.deleteLayout(id) else dao.putLayout(ShoppingLayoutEntity(id, data))
             else -> error("Unsupported shopping record.")
         }
@@ -118,6 +124,7 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
             json.addProperty("sectionSyncId", ids[it.sectionId] ?: ShoppingSectionEntity.KEY_THE_REST)
             records["item:$id"] = ShoppingRecord("legacy", json.toString())
         }
+        payload.mealWeeks.forEach { records["week:" + it.weekId] = ShoppingRecord("legacy", gson.toJson(MealWeekEntity(it.weekId, it.name, it.emoji, it.sortOrder))) }
         return ShoppingWireState(records = records)
     }
 }

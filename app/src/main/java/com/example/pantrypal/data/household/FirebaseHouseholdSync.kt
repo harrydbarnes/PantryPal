@@ -165,7 +165,7 @@ class FirebaseHouseholdSync(
             requests.trySend(Unit)
         }
     }
-    fun retry() { requests.trySend(Unit) }
+    fun retry() { scope.launch { mutex.withLock { attachListener() } } }
 
     private fun attachListener() {
         listener?.remove(); listener = null

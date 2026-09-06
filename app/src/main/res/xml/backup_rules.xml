@@ -3,6 +3,7 @@
     <include domain="file" path="."/>
     <include domain="database" path="."/>
     <include domain="sharedpref" path="."/>
+        <exclude domain="sharedpref" path="firebase_household.xml"/>
     <include domain="external" path="."/>
     <include domain="root" path="."/>
 </full-backup-content>

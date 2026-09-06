@@ -54,7 +54,7 @@ class ShoppingSyncStoreTest {
     }
 
     @Test fun remoteRecordUsesLocalSectionIdAndLeavesPantryAlone() = runBlocking {
-        val pantry = ItemEntity(name = "Unrelated pantry item")
+        val pantry = ItemEntity(name = "Unrelated pantry item", defaultUnit = "pcs", category = "General")
         val pantryId = db.itemDao().insertItem(pantry)
         val remoteSection = ShoppingSectionEntity(900, "Bakery", 2, true, syncId = "shared-section")
         val gson = com.google.gson.Gson()

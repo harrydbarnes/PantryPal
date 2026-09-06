@@ -33,6 +33,11 @@ object BackupValidator {
         checkUniqueIds("consumption event", payload.consumption.map(BackupConsumption::eventId), errors)
         checkUniqueIds("shopping section", payload.shoppingSections.map(BackupShoppingSection::sectionId), errors)
         checkUniqueIds("shopping item", payload.shoppingItems.map(BackupShoppingItem::shoppingId), errors)
+        checkUniqueStrings("shopping sync ID", payload.shoppingItems.mapNotNull { it.syncId }, errors)
+        checkUniqueStrings("section sync ID", payload.shoppingSections.mapNotNull { it.syncId }, errors)
+        if (payload.shoppingLayout.orEmpty().any { (key, value) -> key.length > 300 || value.length > 10000 }) {
+            errors += "Shopping layout contains an oversized key or value."
+        }
         checkUniqueIds(
             "shopping archive",
             payload.shoppingArchive.map(BackupShoppingArchive::archiveId),

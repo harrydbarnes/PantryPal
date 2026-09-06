@@ -57,7 +57,7 @@ class PantryPalApplication : Application(), Configuration.Provider {
         ) {
             override fun onInvalidated(tables: Set<String>) {
                 PantryPalWidgetProvider.updateWidgets(this@PantryPalApplication)
-                if (tables.any { it in setOf("shopping_list", "shopping_sections", "shopping_layout") }) householdSync.onLocalDataChanged()
+                if (tables.any { it in setOf("shopping_list", "shopping_sections", "shopping_layout", "meal_weeks") }) householdSync.onLocalDataChanged()
             }
         })
     }
