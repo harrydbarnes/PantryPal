@@ -19,17 +19,18 @@ test('outsiders cannot read household or list', async () => {
   await assertFails(getDoc(home(env.unauthenticatedContext().firestore())));
 });
 test('valid invite adds only yourself; retry is idempotent', async () => {
-  await assertSucceeds(updateDoc(home(user('owner')), { memberIds: arrayUnion('owner'), joinProof: { code: invite, uid: 'owner' } }));
+  await assertSucceeds(updateDoc(home(user('owner')), { memberIds: arrayUnion('owner'), 'joinProofs.owner': invite }));
   await assertFails(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner') }));
-  await assertSucceeds(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner'), joinProof: { code: invite, uid: 'partner' } }));
-  await assertSucceeds(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner'), joinProof: { code: invite, uid: 'partner' } }));
+  await assertFails(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner'), 'joinProofs.partner.uid': 'partner' }));
+  await assertSucceeds(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner'), 'joinProofs.partner': invite }));
+  await assertSucceeds(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner'), 'joinProofs.partner': invite }));
   await assertSucceeds(getDoc(home(user('partner'))));
-  await assertFails(updateDoc(home(user('third')), { memberIds: arrayUnion('third'), joinProof: { code: invite, uid: 'third' } }));
+  await assertFails(updateDoc(home(user('third')), { memberIds: arrayUnion('third'), 'joinProofs.third': invite }));
 });
 test('forged invite and owner replacement fail', async () => {
   await assertFails(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner') }));
-  await assertFails(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner'), joinProof: { code: 'wrong', uid: 'partner' } }));
-  await assertFails(updateDoc(home(user('partner')), { memberIds: ['partner', 'intruder'], joinProof: { code: invite, uid: 'partner' } }));
+  await assertFails(updateDoc(home(user('partner')), { memberIds: arrayUnion('partner'), 'joinProofs.partner': 'wrong' }));
+  await assertFails(updateDoc(home(user('partner')), { memberIds: ['partner', 'intruder'], 'joinProofs.partner': invite }));
 });
 test('members can publish v2; old snapshots and spoofed authors cannot', async () => {
   await assertSucceeds(setDoc(state(user('owner')), { protocol: 2, shoppingV2: '{}', updatedBy: 'owner', updatedAt: serverTimestamp() }));
