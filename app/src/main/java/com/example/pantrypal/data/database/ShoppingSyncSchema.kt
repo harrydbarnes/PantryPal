@@ -24,10 +24,12 @@ object ShoppingSyncSchema {
         )) {
             for (operation in listOf("INSERT", "UPDATE", "DELETE")) {
                 val row = if (operation == "DELETE") "OLD" else "NEW"
+                db.execSQL("DROP TRIGGER IF EXISTS sync_${table}_$operation")
                 db.execSQL("""
                     CREATE TRIGGER IF NOT EXISTS sync_${table}_$operation AFTER $operation ON $table
                     BEGIN
-                      INSERT OR REPLACE INTO shopping_sync_queue(recordKey, token)
+                      DELETE FROM shopping_sync_queue WHERE recordKey = '$prefix' || $row.$key;
+                      INSERT INTO shopping_sync_queue(recordKey, token)
                       VALUES ('$prefix' || $row.$key, lower(hex(randomblob(16))));
                     END
                 """.trimIndent())
