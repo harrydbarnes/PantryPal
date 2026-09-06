@@ -14,7 +14,22 @@ import org.junit.*
 
 /** Reproducible layout evidence and a focused, single-run emulator frame snapshot. */
 class AdaptiveUiTest {
-    @get:Rule val compose = createComposeRule()
+    private val compose = createComposeRule()
+    // Apply device configuration before the host Activity launches. Changing it after
+    // setContent races Activity recreation and loses the test's composition.
+    @get:Rule val rules: org.junit.rules.TestRule = org.junit.rules.RuleChain.outerRule(object : org.junit.rules.TestRule {
+        override fun apply(base: org.junit.runners.model.Statement, description: org.junit.runner.Description) = object : org.junit.runners.model.Statement() {
+            override fun evaluate() {
+                if (description.methodName == "tabletRecipePanesAndScrollCapture") {
+                    shell("wm size 1920x1200"); shell("wm density 160")
+                } else if (description.methodName == "landscapeLargeFontUsesReachableRecipeDialog") {
+                    shell("wm size 1200x800"); shell("wm density 160"); shell("settings put system font_scale 1.5")
+                }
+                try { base.evaluate() }
+                finally { shell("wm size reset"); shell("wm density reset"); shell("settings put system font_scale 1.0") }
+            }
+        }
+    }).around(compose)
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val output get() = File(instrumentation.targetContext.getExternalFilesDir(null), "review-profile").apply { mkdirs() }
     private fun shell(command: String): String = ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
@@ -25,7 +40,7 @@ class AdaptiveUiTest {
     @After fun reset() {
         shell("mkdir -p /sdcard/Download/pantrypal-profile")
         shell("cp -r ${output.absolutePath}/. /sdcard/Download/pantrypal-profile/")
-        shell("wm size reset"); shell("wm density reset"); shell("settings put system font_scale 1.0") }
+    }
 
     @Test fun failedAddRetainsInputAndDoesNotDismiss() {
         var error by mutableStateOf<String?>(null)
@@ -41,7 +56,6 @@ class AdaptiveUiTest {
     }
 
     @Test fun tabletRecipePanesAndScrollCapture() {
-        shell("wm size 1920x1200"); shell("wm density 160")
         val recipes = (1..200).map { Recipe(id = it.toLong(), title = "Recipe $it", ingredients = emptyList()) }
         var selected by mutableStateOf<Recipe?>(recipes.first())
         compose.setContent { MaterialTheme {
@@ -63,7 +77,6 @@ class AdaptiveUiTest {
         File(output, "environment.txt").writeText("API 35 CI emulator, debug APK, 1920x1200 at 160 dpi, 200 recipes, 12 upward swipes of 250ms, one run. Absolute timings are not phone measurements.\n" + shell("getprop ro.build.fingerprint"))
     }
     @Test fun landscapeLargeFontUsesReachableRecipeDialog() {
-        shell("wm size 1200x800"); shell("wm density 160"); shell("settings put system font_scale 1.5")
         val recipe = Recipe(id = 1, title = "Large text recipe", ingredients = emptyList(), instructions = (1..30).map { "Step $it: prepare the ingredients and cook." })
         compose.setContent { MaterialTheme {
             RecipeScreen(state = RecipeScreenState(savedRecipes = listOf(recipe), selectedRecipe = recipe),
