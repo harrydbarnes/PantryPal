@@ -1,0 +1,86 @@
+package com.example.pantrypal
+
+import android.graphics.Bitmap
+import android.os.ParcelFileDescriptor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.*
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.test.platform.app.InstrumentationRegistry
+import com.example.pantrypal.domain.recipe.Recipe
+import com.example.pantrypal.ui.screens.*
+import java.io.File
+import org.junit.*
+
+/** Reproducible layout evidence and a focused, single-run emulator frame snapshot. */
+class AdaptiveUiTest {
+    private val compose = createComposeRule()
+    // Apply device configuration before the host Activity launches. Changing it after
+    // setContent races Activity recreation and loses the test's composition.
+    @get:Rule val rules: org.junit.rules.TestRule = org.junit.rules.RuleChain.outerRule(object : org.junit.rules.TestRule {
+        override fun apply(base: org.junit.runners.model.Statement, description: org.junit.runner.Description) = object : org.junit.runners.model.Statement() {
+            override fun evaluate() {
+                if (description.methodName == "tabletRecipePanesAndScrollCapture") {
+                    shell("wm size 1920x1200"); shell("wm density 160")
+                } else if (description.methodName == "landscapeLargeFontUsesReachableRecipeDialog") {
+                    shell("wm size 1200x800"); shell("wm density 160"); shell("settings put system font_scale 1.5")
+                }
+                try { base.evaluate() }
+                finally { shell("wm size reset"); shell("wm density reset"); shell("settings put system font_scale 1.0") }
+            }
+        }
+    }).around(compose)
+    private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
+    private val output get() = File(instrumentation.targetContext.getExternalFilesDir(null), "review-profile").apply { mkdirs() }
+    private fun shell(command: String): String = ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
+    private fun screenshot(name: String) {
+        compose.waitForIdle()
+        File(output, "$name.png").outputStream().use { instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+    @After fun reset() {
+        shell("mkdir -p /sdcard/Download/pantrypal-profile")
+        shell("cp -r ${output.absolutePath}/. /sdcard/Download/pantrypal-profile/")
+    }
+
+    @Test fun failedAddRetainsInputAndDoesNotDismiss() {
+        var error by mutableStateOf<String?>(null)
+        var dismissed = false
+        compose.setContent { MaterialTheme {
+            AddScreen(error = error, onCancel = { dismissed = true }, onAdd = { _, _, _, _, _, _, _, _, _, _, _, _ -> error = "Injected save failure" })
+        } }
+        compose.onNodeWithText("Name").performTextInput("Keep this draft")
+        compose.onNodeWithText("Add item").performClick()
+        compose.onNodeWithText("Keep this draft").assertIsDisplayed()
+        compose.onNodeWithText("Injected save failure").assertIsDisplayed()
+        Assert.assertFalse(dismissed)
+    }
+
+    @Test fun tabletRecipePanesAndScrollCapture() {
+        val recipes = (1..200).map { Recipe(id = it.toLong(), title = "Recipe $it", ingredients = emptyList()) }
+        var selected by mutableStateOf<Recipe?>(recipes.first())
+        compose.setContent { MaterialTheme {
+            RecipeScreen(state = RecipeScreenState(savedRecipes = recipes, selectedRecipe = selected),
+                onSearchQueryChange = {}, onExternalSearch = { _, _ -> }, onImportUrl = {},
+                onRecipeSelected = { r, _ -> selected = r }, onRecipeDismissed = { selected = null },
+                onImportPreviewDismissed = {}, onSaveRecipe = {}, onToggleFavourite = { _, _ -> },
+                onRateRecipe = { _, _ -> }, onMarkCooked = {}, onOpenSource = {}, onAddToPlan = {}, onAddMissingToShopping = { _, _ -> })
+        } }
+        compose.onNodeWithTag("recipe-detail-pane").assertIsDisplayed()
+        screenshot("tablet-recipes")
+        compose.runOnIdle { selected = null }
+        screenshot("tablet-recipe-library")
+    }
+    @Test fun landscapeLargeFontUsesReachableRecipeDialog() {
+        val recipe = Recipe(id = 1, title = "Large text recipe", ingredients = emptyList(), instructions = (1..30).map { "Step $it: prepare the ingredients and cook." })
+        compose.setContent { MaterialTheme {
+            RecipeScreen(state = RecipeScreenState(savedRecipes = listOf(recipe), selectedRecipe = recipe),
+                onSearchQueryChange = {}, onExternalSearch = { _, _ -> }, onImportUrl = {},
+                onRecipeSelected = { _, _ -> }, onRecipeDismissed = {},
+                onImportPreviewDismissed = {}, onSaveRecipe = {}, onToggleFavourite = { _, _ -> },
+                onRateRecipe = { _, _ -> }, onMarkCooked = {}, onOpenSource = {}, onAddToPlan = {}, onAddMissingToShopping = { _, _ -> })
+        } }
+        compose.onNodeWithTag("recipe-detail-pane").assertDoesNotExist()
+        compose.onNodeWithText("Done").assertIsDisplayed()
+        screenshot("landscape-recipes-font-150")
+    }
+}

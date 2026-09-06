@@ -13,6 +13,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface InventoryDao {
+    @Query("SELECT * FROM inventory WHERE inventoryId = :id")
+    suspend fun getById(id: Long): InventoryEntity?
+
+    @Query("SELECT COALESCE(SUM(quantity), 0) FROM inventory WHERE itemId = :id")
+    suspend fun totalQuantity(id: Long): Double
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInventory(inventory: InventoryEntity): Long
 

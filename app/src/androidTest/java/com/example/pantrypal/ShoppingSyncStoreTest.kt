@@ -81,4 +81,23 @@ class ShoppingSyncStoreTest {
         assertTrue(db.shoppingSyncDao().pending().any { it.recordKey == "item:" + item.syncId })
     }
 
+    @Test fun compactedDeletesRemoveStaleRowsButKeepOfflineEdits() = runBlocking {
+        val old = ShoppingItemEntity(name = "Old", sectionId = 3)
+        val edited = ShoppingItemEntity(name = "Offline edit", sectionId = 3)
+        db.shoppingDao().insertShoppingItem(old)
+        val editedId = db.shoppingDao().insertShoppingItem(edited)
+        store.resetQueue()
+        db.shoppingDao().updateShoppingItem(edited.copy(shoppingId = editedId, quantity = 2.0))
+        store.accept(ShoppingWireState(), null, authoritative = true)
+        assertNull(db.shoppingSyncDao().item(old.syncId))
+        assertEquals(2.0, db.shoppingSyncDao().item(edited.syncId)!!.quantity, 0.0)
+    }
+
+    @Test fun largeOfflineQueueIsSentInBoundedBatches() = runBlocking {
+        repeat(205) { db.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = "Item $it", sectionId = 3)) }
+        val first = store.batch("home")!!
+        assertEquals(100, store.changes(first).size)
+        store.accept(ShoppingWireState(records = store.changes(first)), first)
+        assertEquals(100, store.changes(store.batch("home")!!).size)
+    }
 }

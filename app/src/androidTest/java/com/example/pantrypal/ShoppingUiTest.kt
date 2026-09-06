@@ -37,4 +37,31 @@ class ShoppingUiTest {
             compose.onNodeWithText("Shop by Aldi aisle").assertIsDisplayed()
         }
     }
+    @Test fun tabletMealDaysUseMoreThanOneColumn() {
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        fun shell(cmd: String) = android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(cmd)).bufferedReader().use { it.readText() }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences(AppPreferences.FILE_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, true)
+            .putBoolean(AppPreferences.KEY_MEAL_PLAN_INTRO_SEEN, true).commit()
+        try {
+            shell("wm size 1920x1200"); shell("wm density 160")
+            ActivityScenario.launch(MainActivity::class.java).use {
+                compose.onNodeWithText("Plan").performClick()
+                compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange))
+                    .performScrollToNode(hasContentDescription("Add meal on Monday"))
+                val monday = compose.onNodeWithContentDescription("Add meal on Monday").fetchSemanticsNode().boundsInRoot
+                val tuesday = compose.onNodeWithContentDescription("Add meal on Tuesday").fetchSemanticsNode().boundsInRoot
+                org.junit.Assert.assertTrue("Adjacent day columns expected", tuesday.left > monday.right)
+                val output = java.io.File(context.getExternalFilesDir(null), "review-profile").apply { mkdirs() }
+                java.io.File(output, "tablet-meal-plan.png").outputStream().use { stream ->
+                    instrumentation.uiAutomation.takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                }
+            }
+        } finally {
+            shell("mkdir -p /sdcard/Download/pantrypal-profile")
+            shell("cp -r ${java.io.File(context.getExternalFilesDir(null), "review-profile").absolutePath}/. /sdcard/Download/pantrypal-profile/")
+            shell("wm size reset"); shell("wm density reset")
+        }
+    }
 }

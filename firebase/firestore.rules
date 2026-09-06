@@ -27,16 +27,54 @@ service cloud.firestore {
           && request.auth.uid in request.resource.data.memberIds
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'joinProofs'])));
       allow delete: if false;
+      function validAuthor() {
+        return request.resource.data.updatedBy == request.auth.uid
+          && request.resource.data.updatedAt == request.time;
+      }
+      function control() {
+        return get(/databases/$(database)/documents/households/$(id)/state/current).data;
+      }
+      function recordWrite() {
+        return isMember(id) && control().protocol == 3
+          && (control().phase == 'migrating' ||
+            getAfter(/databases/$(database)/documents/households/$(id)/state/current).data.revision == control().revision + 1);
+      }
       match /state/{stateId} {
         allow read: if stateId == 'current' && isMember(id);
-        // Reject legacy whole-backup publishers, including installed v1 clients.
-        allow create, update: if stateId == 'current' && isMember(id)
-          && request.resource.data.keys().hasOnly(['shoppingV2', 'protocol', 'updatedBy', 'updatedAt'])
-          && request.resource.data.protocol == 2
-          && request.resource.data.shoppingV2 is string
-          && request.resource.data.shoppingV2.size() < 850000
-          && request.resource.data.updatedBy == request.auth.uid
-          && request.resource.data.updatedAt == request.time;
+        // Once v3 begins, old clients cannot downgrade or overwrite its state.
+        allow create: if stateId == 'current' && isMember(id) && validAuthor()
+          && request.resource.data.keys().hasOnly(['protocol', 'phase', 'revision', 'updatedBy', 'updatedAt'])
+          && request.resource.data.protocol == 3 && request.resource.data.phase == 'migrating'
+          && request.resource.data.revision == 0;
+        allow update: if stateId == 'current' && isMember(id) && validAuthor()
+          && request.resource.data.protocol == 3
+          && ((resource.data.get('protocol', 1) != 3
+              && request.resource.data.phase == 'migrating' && request.resource.data.revision == 0
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['protocol', 'phase', 'revision', 'updatedBy', 'updatedAt']))
+            || (resource.data.protocol == 3 && resource.data.phase == 'migrating'
+              && request.resource.data.phase == 'ready' && request.resource.data.revision == 0
+              && request.resource.data.keys().hasOnly(['protocol', 'phase', 'revision', 'updatedBy', 'updatedAt']))
+            || (resource.data.protocol == 3 && resource.data.phase == 'ready'
+              && request.resource.data.phase == 'ready' && request.resource.data.revision == resource.data.revision + 1
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revision', 'updatedBy', 'updatedAt'])));
+        allow delete: if false;
+      }
+      match /shoppingRecords/{record} {
+        allow read: if isMember(id);
+        allow create, update: if recordWrite() && validAuthor()
+          && request.resource.data.keys().hasOnly(['key', 'token', 'data', 'deleted', 'updatedBy', 'updatedAt'])
+          && request.resource.data.key is string && request.resource.data.token is string
+          && request.resource.data.deleted is bool
+          && ((request.resource.data.deleted && request.resource.data.data == null)
+            || (!request.resource.data.deleted && request.resource.data.data is string && request.resource.data.data.size() < 100000));
+        allow delete: if recordWrite() && resource.data.deleted
+          && resource.data.updatedAt < request.time - duration.value(30, 'd');
+      }
+      match /shoppingDevices/{device} {
+        allow read: if isMember(id);
+        allow create, update: if recordWrite() && validAuthor()
+          && request.resource.data.keys().hasOnly(['batch', 'updatedBy', 'updatedAt'])
+          && request.resource.data.batch is string;
         allow delete: if false;
       }
     }

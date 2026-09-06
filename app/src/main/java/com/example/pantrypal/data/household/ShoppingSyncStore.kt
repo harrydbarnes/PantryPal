@@ -24,7 +24,7 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
             require(existing.householdId == household) { "Finish or leave the previous household before switching." }
             return@withTransaction existing
         }
-        val pending = dao.pending()
+        val pending = dao.pending().take(100)
         if (pending.isEmpty()) return@withTransaction null
         val current = currentRecords()
         ShoppingSyncBatchEntity(householdId = household, batchId = UUID.randomUUID().toString(),
@@ -37,15 +37,19 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
     suspend fun resetQueue() = db.withTransaction { dao.clearQueue(); dao.clearBatch() }
 
     /** Accept server state while retaining local edits made during the network request. */
-    suspend fun accept(remote: ShoppingWireState, batch: ShoppingSyncBatchEntity?) = db.withTransaction {
+    suspend fun accept(remote: ShoppingWireState, batch: ShoppingSyncBatchEntity?, authoritative: Boolean = false) = db.withTransaction {
         if (batch != null) {
             changes(batch).forEach { (key, record) -> dao.acknowledge(key, record.token) }
             dao.clearBatch()
         }
         val pending = dao.pending().map { it.recordKey }.toSet()
         val current = currentRecords()
+        // Full v3 snapshots also remove records whose tombstones have been compacted.
+        val incoming = if (authoritative) {
+            (current.keys - remote.records.keys - pending).associateWith { ShoppingRecord(data = null) } + remote.records
+        } else remote.records
         // Parents before children. Section IDs are local; only sync IDs cross devices.
-        remote.records.entries.sortedBy { if (it.key.startsWith("section:")) 0 else 1 }.forEach { (key, record) ->
+        incoming.entries.sortedBy { if (it.key.startsWith("section:")) 0 else 1 }.forEach { (key, record) ->
             if (key in pending || current[key] == record.data) return@forEach
             apply(key, record.data)
             // Suppress only this remote write, in this transaction. Never drop user edits.
@@ -99,7 +103,7 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
             key.startsWith("item:") -> if (data == null) dao.deleteItem(id) else {
                 val json = JsonParser.parseString(data).asJsonObject
                 val row = gson.fromJson(json, ShoppingItemEntity::class.java)
-                require(row.name.isNotBlank() && row.quantity.isFinite() && row.quantity > 0 && row.unit.isNotBlank())
+                require(row.name.isNotBlank() && row.quantity.isFinite() && row.quantity >= 0 && row.unit.isNotBlank())
                 val section = dao.section(json.get("sectionSyncId").asString)
                     ?: dao.section(ShoppingSectionEntity.KEY_THE_REST)
                     ?: error("Shopping section missing; retry the household update.")

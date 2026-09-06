@@ -1,5 +1,7 @@
 # Repository review fixes, September 2026
 
+For the subsequent v3 sync, atomic stock operations and adaptive layouts, see [P2_P3_FOLLOWUP.md](P2_P3_FOLLOWUP.md). This page records the original #72 changes.
+
 ## Implemented
 - Shopping-only live sync no longer calls full backup restore. Shopping records, sections, week labels and aisle settings merge transactionally in Firestore.
 - SQLite triggers record each shopping change in the same transaction as the data. A persistent in-flight batch and server receipt prevent a lost acknowledgement replaying an old edit. Deletes have tombstones. Remote application preserves newer pending local edits and translates shared section identities to local database IDs.

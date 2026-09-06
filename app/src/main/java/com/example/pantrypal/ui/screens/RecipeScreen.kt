@@ -2,6 +2,10 @@
 
 package com.example.pantrypal.ui.screens
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +57,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,6 +71,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -122,9 +128,12 @@ fun RecipeScreen(
         derivedStateOf { RecipeSearch.local(state.savedRecipes, state.searchQuery) }
     }
 
-    Scaffold(modifier = modifier) { padding ->
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    val expanded = maxWidth >= 840.dp * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)
+    Row(Modifier.fillMaxSize()) {
+    Scaffold(modifier = Modifier.weight(1f)) { padding ->
         LazyColumn(
-            modifier = Modifier
+            modifier = Modifier.testTag("recipe-list")
                 .fillMaxSize()
                 .padding(padding),
             contentPadding = PaddingValues(
@@ -320,6 +329,8 @@ fun RecipeScreen(
 
     state.selectedRecipe?.let { recipe ->
         RecipeDetailDialog(
+            inline = expanded,
+            modifier = if (expanded) Modifier.weight(1f).fillMaxHeight() else Modifier,
             recipe = recipe,
             missingIngredients = state.selectedMissingIngredients,
             onDismiss = onRecipeDismissed,
@@ -337,6 +348,8 @@ fun RecipeScreen(
         )
     }
 }
+    }
+    }
 
 private fun RecipeIdeaShelves.isEmpty(): Boolean =
     cookNow.isEmpty() &&
@@ -860,6 +873,8 @@ private fun RecipeImportReviewDialog(
 
 @Composable
 private fun RecipeDetailDialog(
+    inline: Boolean = false,
+    modifier: Modifier = Modifier,
     recipe: Recipe,
     missingIngredients: List<RecipeIngredient>,
     onDismiss: () -> Unit,
@@ -871,7 +886,7 @@ private fun RecipeDetailDialog(
     onAddMissingToShopping: () -> Unit,
     onSave: () -> Unit
 ) {
-    AlertDialog(
+    RecipeDetailSurface(inline = inline, modifier = modifier,
         onDismissRequest = onDismiss,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -968,6 +983,20 @@ private fun RecipeDetailDialog(
             TextButton(onClick = onDismiss) { Text("Done") }
         }
     )
+}
+
+@Composable
+private fun RecipeDetailSurface(inline: Boolean, modifier: Modifier, onDismissRequest: () -> Unit,
+    title: @Composable () -> Unit, text: @Composable () -> Unit, confirmButton: @Composable () -> Unit) {
+    if (inline) {
+        Surface(modifier.testTag("recipe-detail-pane"), tonalElevation = 2.dp) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                androidx.compose.material3.ProvideTextStyle(MaterialTheme.typography.headlineSmall) { title() }
+                text(); confirmButton()
+            }
+        }
+    } else AlertDialog(onDismissRequest = onDismissRequest, title = title,
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { text() } }, confirmButton = confirmButton)
 }
 
 @Composable

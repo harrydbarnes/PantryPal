@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -81,15 +84,19 @@ fun MealPlanScreen(
     viewModel: MainViewModel,
     onOpenRecipes: () -> Unit = {}
 ) {
+    val saving by viewModel.saving.collectAsState()
+    val error by viewModel.actionError.collectAsState()
     val currentWeek by viewModel.currentWeek.collectAsState()
     val meals by viewModel.mealsState.collectAsState()
     val weeks by viewModel.mealWeeksState.collectAsState()
     val inventory by viewModel.inventoryState.collectAsState()
     val hasSeenMealPlanIntro by viewModel.hasSeenMealPlanIntro.collectAsState()
-    var displayedWeek by remember(currentWeek) { mutableStateOf(currentWeek) }
+    var displayedWeek by rememberSaveable(currentWeek) { mutableStateOf(currentWeek) }
     var showMealPlanIntro by rememberSaveable { mutableStateOf(!hasSeenMealPlanIntro) }
-    var editingMeal by remember { mutableStateOf<MealEntity?>(null) }
-    var showEditor by remember { mutableStateOf(false) }
+    var editingMeal by rememberSaveable(stateSaver = androidx.compose.runtime.saveable.Saver<MealEntity?, String>(
+        save = { com.google.gson.Gson().toJson(it) }, restore = { com.google.gson.Gson().fromJson(it, MealEntity::class.java) }
+    )) { mutableStateOf<MealEntity?>(null) }
+    var showEditor by rememberSaveable { mutableStateOf(false) }
     var showCopyWeekDialog by remember { mutableStateOf(false) }
     var editingWeek by remember { mutableStateOf<MealWeekEntity?>(null) }
     var copyingMeal by remember { mutableStateOf<MealEntity?>(null) }
@@ -134,13 +141,15 @@ fun MealPlanScreen(
             )
         }
     ) { padding ->
-        LazyColumn(
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(320.dp * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (showMealPlanIntro) {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     ExpressiveHero(
                         eyebrow = "Four-week rhythm",
                         title = "Dinner plans, minus the daily scramble",
@@ -166,7 +175,7 @@ fun MealPlanScreen(
                 }
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 FilledTonalButton(
                     onClick = onOpenRecipes,
                     modifier = Modifier.fillMaxWidth()
@@ -177,7 +186,7 @@ fun MealPlanScreen(
                 }
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -203,7 +212,7 @@ fun MealPlanScreen(
                 }
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(end = 8.dp)
@@ -221,7 +230,7 @@ fun MealPlanScreen(
                 }
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 Card(
                     shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(
@@ -304,7 +313,7 @@ fun MealPlanScreen(
             }
 
             if (weekMeals.isEmpty()) {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     EmptyMealPlan(
                         week = displayedWeekDetails?.displayName ?: "Week $displayedWeek",
                         onAdd = {
@@ -315,7 +324,7 @@ fun MealPlanScreen(
                     )
                 }
             } else {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     SectionHeading(
                         title = "The week at a glance",
                         supportingText = "Tap a day’s plus button to fill any gaps."
@@ -356,52 +365,55 @@ fun MealPlanScreen(
             week = displayedWeek,
             meal = editingMeal,
             ingredientSuggestions = ingredientSuggestions,
+            saving = saving,
+            error = error,
             onDismiss = { showEditor = false },
             onSave = { name, day, slot, ingredients ->
                 val existing = editingMeal?.takeIf { it.mealId != 0L }
                 if (existing == null) {
-                    viewModel.addMeal(name, displayedWeek, day, slot, ingredients)
+                    viewModel.addMeal(name, displayedWeek, day, slot, ingredients) { showEditor = false }
                 } else {
-                    viewModel.updateMeal(existing, name, day, slot, ingredients)
+                    viewModel.updateMeal(existing, name, day, slot, ingredients) { showEditor = false }
                 }
-                showEditor = false
             }
         )
     }
 
     if (showCopyWeekDialog) {
         CopyWeekDialog(
+            saving = saving, error = error,
             targetWeek = displayedWeek,
             weeks = weeks,
             onDismiss = { showCopyWeekDialog = false },
             onCopy = { sourceWeek ->
-                viewModel.copyWeek(sourceWeek, displayedWeek)
-                showCopyWeekDialog = false
+                viewModel.copyWeek(sourceWeek, displayedWeek) { showCopyWeekDialog = false }
             }
         )
     }
 
     editingWeek?.let { week ->
         WeekEditorDialog(
+            saving = saving, error = error,
             week = week,
             onDismiss = { editingWeek = null },
             onSave = { name, emoji ->
-                viewModel.updateMealWeek(week, name, emoji)
-                editingWeek = null
+                viewModel.updateMealWeek(week, name, emoji) { editingWeek = null }
             }
         )
     }
 
     copyingMeal?.let { meal ->
         CopyMealDialog(
+            saving = saving, error = error,
             meal = meal,
             weeks = weeks,
             onDismiss = { copyingMeal = null },
             onCopy = { targetWeek ->
-                viewModel.copyMealToWeek(meal, targetWeek)
+                viewModel.copyMealToWeek(meal, targetWeek) {
                 val target = weeks.firstOrNull { it.weekId == targetWeek }
                 scope.launch { snackbarHostState.showSnackbar("Copied to ${target?.displayName ?: "Week $targetWeek"}") }
                 copyingMeal = null
+                }
             }
         )
     }
@@ -409,6 +421,7 @@ fun MealPlanScreen(
 
 @Composable
 private fun WeekEditorDialog(
+    saving: Boolean, error: String?,
     week: MealWeekEntity,
     onDismiss: () -> Unit,
     onSave: (String, String) -> Unit
@@ -417,7 +430,7 @@ private fun WeekEditorDialog(
     var emoji by remember(week) { mutableStateOf(week.emoji) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         title = { Text("Name this rotation week") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -445,15 +458,19 @@ private fun WeekEditorDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(name, emoji) }, enabled = name.isNotBlank()) { Text("Save") }
+            Column {
+            if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+            Button(onClick = { onSave(name, emoji) }, enabled = !saving && name.isNotBlank()) { Text("Save") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CopyWeekDialog(
+    saving: Boolean, error: String?,
     targetWeek: String,
     weeks: List<MealWeekEntity>,
     onDismiss: () -> Unit,
@@ -462,7 +479,7 @@ private fun CopyWeekDialog(
     val choices = weeks.filterNot { it.weekId == targetWeek }
     var selected by remember(targetWeek, choices) { mutableStateOf(choices.firstOrNull()?.weekId) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         icon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
         title = { Text("Reuse another week") },
         text = {
@@ -480,15 +497,19 @@ private fun CopyWeekDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { selected?.let(onCopy) }, enabled = selected != null) { Text("Add meals") }
+            Column {
+            if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+            Button(onClick = { selected?.let(onCopy) }, enabled = !saving && selected != null) { Text("Add meals") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CopyMealDialog(
+    saving: Boolean, error: String?,
     meal: MealEntity,
     weeks: List<MealWeekEntity>,
     onDismiss: () -> Unit,
@@ -497,7 +518,7 @@ private fun CopyMealDialog(
     val choices = weeks.filterNot { it.weekId == meal.week }
     var selected by remember(meal, choices) { mutableStateOf(choices.firstOrNull()?.weekId) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         icon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
         title = { Text("Copy ${meal.name}") },
         text = {
@@ -515,9 +536,12 @@ private fun CopyMealDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { selected?.let(onCopy) }, enabled = selected != null) { Text("Copy meal") }
+            Column {
+            if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+            Button(onClick = { selected?.let(onCopy) }, enabled = !saving && selected != null) { Text("Copy meal") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -645,14 +669,16 @@ private fun MealEditorDialog(
     meal: MealEntity?,
     ingredientSuggestions: List<String>,
     onDismiss: () -> Unit,
+    saving: Boolean,
+    error: String?,
     onSave: (String, Int, String, List<String>) -> Unit
 ) {
-    var name by remember(meal) { mutableStateOf(meal?.name.orEmpty()) }
-    var ingredients by remember(meal) { mutableStateOf(meal?.ingredients?.toList().orEmpty()) }
-    var day by remember(meal) { mutableIntStateOf(meal?.dayOfWeek ?: 1) }
-    var slot by remember(meal) { mutableStateOf(meal?.mealSlot ?: MealEntity.SLOT_DINNER) }
-    var addIngredientDialogVisible by remember(meal) { mutableStateOf(false) }
-    var additionalIngredient by remember(meal) { mutableStateOf("") }
+    var name by rememberSaveable(meal?.mealId) { mutableStateOf(meal?.name.orEmpty()) }
+    var ingredients by rememberSaveable(meal?.mealId) { mutableStateOf(meal?.ingredients?.toList().orEmpty()) }
+    var day by rememberSaveable(meal?.mealId) { mutableIntStateOf(meal?.dayOfWeek ?: 1) }
+    var slot by rememberSaveable(meal?.mealId) { mutableStateOf(meal?.mealSlot ?: MealEntity.SLOT_DINNER) }
+    var addIngredientDialogVisible by rememberSaveable(meal?.mealId) { mutableStateOf(false) }
+    var additionalIngredient by rememberSaveable(meal?.mealId) { mutableStateOf("") }
 
     val ingredientChoices = remember(ingredientSuggestions, ingredients) {
         MealIngredientSelection.choices(ingredients, ingredientSuggestions)
@@ -670,7 +696,7 @@ private fun MealEditorDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         title = { Text(if (meal?.mealId == 0L || meal == null) "Add to Week $week" else "Edit meal") },
         text = {
             LazyColumn(
@@ -760,14 +786,17 @@ private fun MealEditorDialog(
             }
         },
         confirmButton = {
+            Column {
+            if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
             Button(
                 onClick = {
                     onSave(name, day, slot, ingredients)
                 },
-                enabled = name.isNotBlank()
-            ) { Text("Save") }
+                enabled = name.isNotBlank() && !saving
+            ) { Text(if (saving) "Saving…" else "Save") }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
     )
 
     if (addIngredientDialogVisible) {
