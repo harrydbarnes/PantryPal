@@ -13,7 +13,8 @@ data class ShoppingItemEntity(
     val addedAt: Long = System.currentTimeMillis(),
     val frequency: String = FREQ_ONE_OFF,
     val sectionId: Long = ShoppingSectionEntity.ID_THE_REST,
-    val weekId: String? = null
+    val weekId: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "''") val syncId: String = java.util.UUID.randomUUID().toString()
 ) {
     companion object {
         const val FREQ_ONE_OFF = "One-Off"

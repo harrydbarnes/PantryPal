@@ -50,9 +50,12 @@ import com.google.gson.Gson
         PriceHistoryEntity::class,
         BudgetWeeklyEntity::class,
         RecipeEntity::class,
-        RecipeIngredientEntity::class
+        RecipeIngredientEntity::class,
+        com.example.pantrypal.data.entity.ShoppingLayoutEntity::class,
+        com.example.pantrypal.data.entity.ShoppingSyncQueueEntity::class,
+        com.example.pantrypal.data.entity.ShoppingSyncBatchEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -69,6 +72,7 @@ abstract class KitchenDatabase : RoomDatabase() {
     abstract fun budgetWeeklyDao(): BudgetWeeklyDao
     abstract fun recipeDao(): RecipeDao
     abstract fun backupDao(): BackupDao
+    abstract fun shoppingSyncDao(): com.example.pantrypal.data.dao.ShoppingSyncDao
 
     companion object {
         @Volatile
@@ -183,6 +187,10 @@ abstract class KitchenDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) = ShoppingSyncSchema.migrate(db)
+        }
+
         fun getDatabase(context: Context): KitchenDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -196,9 +204,14 @@ abstract class KitchenDatabase : RoomDatabase() {
                     MIGRATION_3_4,
                     MIGRATION_4_5,
                     MIGRATION_5_6,
-                    MIGRATION_6_7
+                    MIGRATION_6_7,
+                    MIGRATION_7_8
                 )
                 .addCallback(object : Callback() {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        ShoppingSyncSchema.installTriggers(db)
+                    }
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         seedPlannerDefaults(db)

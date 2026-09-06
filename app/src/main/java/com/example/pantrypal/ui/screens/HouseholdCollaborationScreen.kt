@@ -1,34 +1,24 @@
 package com.example.pantrypal.ui.screens
 
 import android.Manifest
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.FileOpen
-import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material.icons.outlined.QrCode2
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.example.pantrypal.ui.BarcodeScanner
-import com.example.pantrypal.ui.components.PantryPalSpacing
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
-import java.text.DateFormat
-import java.util.Date
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class HouseholdSyncUiState(
     val householdName: String = "My household",
@@ -41,12 +31,20 @@ data class HouseholdSyncUiState(
     val accountName: String? = null,
     val liveHouseholdId: String? = null,
     val liveInvite: String? = null,
-    val liveSyncing: Boolean = false
-)
+    val liveSyncing: Boolean = false,
+    val liveWorking: Boolean = false,
+    val liveFailed: Boolean = false,
+    val lastSyncedAt: Long? = null
+) {
+    val syncLabel: String get() = when {
+        liveHouseholdId == null -> "This device only"
+        liveFailed -> "Sync needs attention"
+        liveSyncing -> "Syncing shopping changes…"
+        lastSyncedAt != null -> "Shopping list synced"
+        else -> "Connecting to household…"
+    }
+}
 
-private enum class HouseholdShareStep { OVERVIEW, CHOOSE, SHARE, JOIN }
-
-/** A friendly local-first hand-off. The actual data travels through Android's share sheet. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HouseholdCollaborationScreen(
@@ -56,246 +54,101 @@ fun HouseholdCollaborationScreen(
     onGoogleSignIn: () -> Unit = {},
     onCreateLiveHousehold: () -> Unit = {},
     onJoinLiveHousehold: (String) -> Unit = {},
+    onRetry: () -> Unit = {},
+    onDisconnect: () -> Unit = {},
+    onSignOut: () -> Unit = {},
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     showTopBar: Boolean = false
 ) {
-    var step by remember { mutableStateOf(HouseholdShareStep.OVERVIEW) }
-    val pairingCode = remember(state.liveInvite, state.householdName) {
-        state.liveInvite?.let { "PANTRYPAL-LIVE|$it" } ?: householdPairingCode(state.householdName)
+    var invite by rememberSaveable { mutableStateOf("") }
+    var showQr by rememberSaveable { mutableStateOf(false) }
+    var scanning by rememberSaveable { mutableStateOf(false) }
+    var confirmJoin by rememberSaveable { mutableStateOf(false) }
+    var confirmDisconnect by rememberSaveable { mutableStateOf(false) }
+    var cameraMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        scanning = it
+        cameraMessage = if (it) null else "Camera permission was denied. Paste the full invite below instead."
     }
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = {
-            if (showTopBar) {
-                TopAppBar(
-                    title = { Text(if (step == HouseholdShareStep.OVERVIEW) "Household" else "Set up household") },
-                    navigationIcon = {
-                        TextButton(onClick = {
-                            if (step == HouseholdShareStep.OVERVIEW) onBack?.invoke()
-                            else step = HouseholdShareStep.OVERVIEW
-                        }) { Text("Back") }
-                    }
-                )
-            }
-        }
-    ) { contentPadding ->
-        when (step) {
-            HouseholdShareStep.OVERVIEW -> HouseholdOverview(state, { step = HouseholdShareStep.CHOOSE }, onGoogleSignIn, onCreateLiveHousehold, Modifier.padding(contentPadding))
-            HouseholdShareStep.CHOOSE -> SetupChoice({ step = HouseholdShareStep.SHARE }, { step = HouseholdShareStep.JOIN }, Modifier.padding(contentPadding))
-            HouseholdShareStep.SHARE -> ShareSetupCode(pairingCode, state.isWorking, onShareSnapshot, Modifier.padding(contentPadding))
-            HouseholdShareStep.JOIN -> JoinSetupCode(onImportSnapshot, onJoinLiveHousehold, Modifier.padding(contentPadding))
-        }
-    }
-}
-
-@Composable
-private fun HouseholdOverview(
-    state: HouseholdSyncUiState,
-    onSetUp: () -> Unit,
-    onGoogleSignIn: () -> Unit,
-    onCreateLiveHousehold: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(PantryPalSpacing.md),
-        verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
-    ) {
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                Row(Modifier.padding(PantryPalSpacing.md), horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Group, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Column(Modifier.weight(1f)) {
-                        Text(state.householdName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        Text(
-                            when {
-                                state.liveHouseholdId != null -> "Live sync is on${if (state.liveSyncing) "…" else ""}"
-                                state.signedIn -> "Signed in as ${state.accountName ?: "Google account"}"
-                                else -> "This device only"
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-            }
-        }
-        item {
-            Text("Keep the kitchen in step", style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.size(6.dp))
-            Text("Send a setup copy to another phone or tablet. You can review it before anything on that device changes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (!state.signedIn) {
-            item {
-                Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
-                    Text("Sign in with Google for live sync")
-                }
-            }
-        } else if (state.liveHouseholdId == null) {
-            item {
-                Button(onClick = onCreateLiveHousehold, modifier = Modifier.fillMaxWidth()) {
-                    Text("Create live household")
-                }
-            }
-        }
-        item {
-            Button(onClick = onSetUp, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Outlined.Group, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Set up household")
-            }
-        }
-        item {
-            Text("One-off copy", style = MaterialTheme.typography.titleMedium)
-            Text("Changes will not sync automatically. Live household sync can be added later without changing this hand-off.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        item { SnapshotTime("Last shared", state.lastSharedAtEpochMs) }
-        item { SnapshotTime("Last imported", state.lastImportedAtEpochMs) }
-        state.message?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.primary) } }
-    }
-}
-
-@Composable
-private fun SetupChoice(onShare: () -> Unit, onJoin: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxSize().padding(PantryPalSpacing.md), verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)) {
-        Text("Share PantryPal with another device", style = MaterialTheme.typography.headlineSmall)
-        Text("Choose what you are doing on this device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(modifier = Modifier.fillMaxWidth(), onClick = onShare) {
-            Row(Modifier.padding(PantryPalSpacing.md), horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Share, contentDescription = null)
-                Column {
-                    Text("Share a setup code", fontWeight = FontWeight.SemiBold)
-                    Text("Show a QR code and send a setup copy.", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        Card(modifier = Modifier.fillMaxWidth(), onClick = onJoin) {
-            Row(Modifier.padding(PantryPalSpacing.md), horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.QrCode2, contentDescription = null)
-                Column {
-                    Text("Join with a code", fontWeight = FontWeight.SemiBold)
-                    Text("Scan the QR code, then choose the shared copy.", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        Text("One-off copy. Changes will not sync automatically.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun ShareSetupCode(code: String, isWorking: Boolean, onShareCopy: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxSize().padding(PantryPalSpacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
-    ) {
-        Text("Share a setup code", style = MaterialTheme.typography.headlineSmall)
-        Text("On the other device, scan this code or enter the words.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        PairingQrCode(code)
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-            Text(code.removePrefix("PANTRYPAL-"), modifier = Modifier.padding(PantryPalSpacing.md), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        Button(onClick = onShareCopy, enabled = !isWorking, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Outlined.UploadFile, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Send setup copy")
-        }
-        Text("The setup copy contains your pantry, shopping list, meal plan, recipes and preferences.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Send it only through an app or service you trust.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun JoinSetupCode(
-    onImportSnapshot: () -> Unit,
-    onJoinLiveHousehold: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var scannedCode by remember { mutableStateOf<String?>(null) }
-    var manualCode by remember { mutableStateOf("") }
-    var showScanner by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> showScanner = granted }
-    if (showScanner) {
+    BackHandler(scanning) { scanning = false }
+    if (scanning) {
         Box(modifier.fillMaxSize()) {
-            BarcodeScanner(viewfinderAspectRatio = 1f, onBarcodeDetected = { value ->
-                if (value.startsWith("PANTRYPAL-")) {
-                    scannedCode = value
-                    showScanner = false
-                }
+            BarcodeScanner(viewfinderAspectRatio = 1f, onBarcodeDetected = {
+                if (it.startsWith("PANTRYPAL-LIVE|")) { invite = it; scanning = false }
+                else cameraMessage = "This is not a live household invite."
             })
-            TextButton(onClick = { showScanner = false }, modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)) { Text("Cancel") }
+            TextButton(onClick = { scanning = false }) { Text("Back to household") }
         }
         return
     }
-    Column(
-        modifier = modifier.fillMaxSize().padding(PantryPalSpacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
-    ) {
-        Text("Join with a code", style = MaterialTheme.typography.headlineSmall)
-        Text("Scan the code on the sharing device to join live sync, or use a one-off copy below.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedButton(onClick = {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) showScanner = true
-            else cameraPermission.launch(Manifest.permission.CAMERA)
-        }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Outlined.QrCode2, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Scan QR code")
-        }
-        OutlinedTextField(
-            value = manualCode,
-            onValueChange = { manualCode = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Or enter the six words") },
-            singleLine = true
-        )
-        TextButton(onClick = { if (manualCode.trim().isNotBlank()) scannedCode = manualCode.trim() }) {
-            Text("Use entered code")
-        }
-        scannedCode?.let { code ->
-            if (code.startsWith("PANTRYPAL-LIVE|")) {
-                Text("Live household recognised", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                Button(
-                    onClick = { onJoinLiveHousehold(code.removePrefix("PANTRYPAL-LIVE|")) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Join live household") }
+    Scaffold(modifier, topBar = {
+        if (showTopBar) TopAppBar(title = { Text("Household") }, navigationIcon = {
+            TextButton(onClick = { onBack?.invoke() }) { Text("Back") }
+        })
+    }) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding).imePadding(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            item {
+                Text("My shopping household", style = MaterialTheme.typography.headlineSmall)
+                Text(state.syncLabel, style = MaterialTheme.typography.titleMedium)
+                Text("Live sync shares shopping items, sections and My Aldi aisle settings. Pantry, recipes, meal plans and device settings remain on each device.")
+            }
+            item {
+                if (state.liveWorking || state.isWorking || state.liveSyncing) LinearProgressIndicator(Modifier.fillMaxWidth())
+                state.message?.let { Text(it, color = if (state.liveFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+                cameraMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (state.liveFailed && state.liveHouseholdId != null) TextButton(onClick = onRetry) { Text("Retry sync") }
+            }
+            if (!state.signedIn) {
+                item { Button(onClick = onGoogleSignIn, enabled = !state.liveWorking, modifier = Modifier.fillMaxWidth()) { Text("Sign in with Google") } }
             } else {
-                Text("Setup code recognised", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                item { Text("Signed in as ${state.accountName ?: "Google account"}") }
+                if (state.liveHouseholdId == null) {
+                    item { Button(onClick = onCreateLiveHousehold, enabled = !state.liveWorking, modifier = Modifier.fillMaxWidth()) { Text("Create a shopping household") } }
+                    item {
+                        Text("Or join your partner", style = MaterialTheme.typography.titleMedium)
+                        OutlinedButton(onClick = { permission.launch(Manifest.permission.CAMERA) }, enabled = !state.liveWorking) { Text("Scan household QR") }
+                        OutlinedTextField(invite, { invite = it }, label = { Text("Complete household invite") }, supportingText = { Text("Paste the full invite beginning PANTRYPAL-LIVE|. The six words alone are not enough.") }, modifier = Modifier.fillMaxWidth())
+                        Button(onClick = { confirmJoin = true }, enabled = invite.startsWith("PANTRYPAL-LIVE|") && !state.liveWorking) { Text("Review and join") }
+                    }
+                } else {
+                    state.liveInvite?.let { code ->
+                        item {
+                            OutlinedButton(onClick = { showQr = !showQr }, modifier = Modifier.fillMaxWidth()) { Text(if (showQr) "Hide invite" else "Share household invite") }
+                            if (showQr) {
+                                PairingQrCode("PANTRYPAL-LIVE|$code")
+                                androidx.compose.foundation.text.selection.SelectionContainer { Text("PANTRYPAL-LIVE|$code", style = MaterialTheme.typography.bodySmall) }
+                                Text("Ask your partner to sign in, then scan this code. Or select and copy the complete invite above.")
+                            }
+                        }
+                    }
+                    item { OutlinedButton(onClick = { confirmDisconnect = true }, enabled = !state.liveWorking) { Text("Disconnect this device") } }
+                }
+                item { TextButton(onClick = onSignOut, enabled = !state.liveWorking && state.liveHouseholdId == null) { Text("Sign out") } }
+            }
+            item {
+                HorizontalDivider()
+                Text("One-off kitchen copy", style = MaterialTheme.typography.titleMedium)
+                Text("Export or import the full kitchen separately. Import is reviewed before replacing data. It is not live sync.")
+                OutlinedButton(onClick = onShareSnapshot, enabled = !state.isWorking) { Text("Export kitchen copy") }
+                OutlinedButton(onClick = onImportSnapshot, enabled = !state.isWorking && state.liveHouseholdId == null) { Text("Import kitchen copy") }
+                if (state.liveHouseholdId != null) Text("Disconnect before importing a full kitchen copy.")
             }
         }
-        HorizontalDivider()
-        Button(onClick = onImportSnapshot, enabled = scannedCode != null && !scannedCode!!.startsWith("PANTRYPAL-LIVE|"), modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Outlined.FileOpen, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Choose shared copy")
-        }
-        Text("You will review the copy before it replaces anything on this device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    if (confirmJoin) AlertDialog(onDismissRequest = { confirmJoin = false }, title = { Text("Join this shopping household?") }, text = { Text("Your current shopping list, custom sections and aisle settings will be replaced by the household's list. Pantry, meals, recipes and settings stay here. A full safety backup is saved on this device before joining. Both devices must use this updated PantryPal version.") }, confirmButton = { TextButton(onClick = { confirmJoin = false; onJoinLiveHousehold(invite) }) { Text("Join household") } }, dismissButton = { TextButton(onClick = { confirmJoin = false }) { Text("Cancel") } })
+    if (confirmDisconnect) AlertDialog(onDismissRequest = { confirmDisconnect = false }, title = { Text("Disconnect this device?") }, text = { Text("Your local data is kept. Unsent changes will no longer be sent to this household. This does not revoke your Google account's membership on the server.") }, confirmButton = { TextButton(onClick = { confirmDisconnect = false; onDisconnect() }) { Text("Disconnect") } }, dismissButton = { TextButton(onClick = { confirmDisconnect = false }) { Text("Cancel") } })
 }
 
 @Composable
 private fun PairingQrCode(code: String) {
-    val bitmap = remember(code) {
-        val matrix = QRCodeWriter().encode(code, BarcodeFormat.QR_CODE, 480, 480)
-        Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888).also { bitmap ->
-            for (x in 0 until matrix.width) for (y in 0 until matrix.height) bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+    val bitmap by produceState<Bitmap?>(null, code) {
+        value = withContext(Dispatchers.Default) {
+            val matrix = QRCodeWriter().encode(code, BarcodeFormat.QR_CODE, 480, 480)
+            val pixels = IntArray(480 * 480) { i -> if (matrix[i % 480, i / 480]) android.graphics.Color.BLACK else android.graphics.Color.WHITE }
+            Bitmap.createBitmap(pixels, 480, 480, Bitmap.Config.ARGB_8888)
         }
     }
-    Image(bitmap.asImageBitmap(), contentDescription = "Household setup QR code", modifier = Modifier.size(240.dp))
-}
-
-private fun householdPairingCode(householdName: String): String {
-    val words = listOf("maple", "river", "lemon", "brick", "frost", "note", "orbit", "meadow", "pepper", "harbour", "copper", "willow")
-    val seed = (householdName.hashCode().toLong() xor System.currentTimeMillis() / 86_400_000L).toInt()
-    return "PANTRYPAL-" + (0 until 6).joinToString("-") { words[kotlin.math.abs(seed + it * 17) % words.size] }
-}
-
-@Composable
-private fun SnapshotTime(label: String, epochMs: Long?) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(epochMs?.let { DateFormat.getDateTimeInstance().format(Date(it)) } ?: "Not yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    bitmap?.let { Image(it.asImageBitmap(), "Household invite QR", Modifier.sizeIn(maxWidth = 240.dp, maxHeight = 240.dp).aspectRatio(1f)) }
+        ?: CircularProgressIndicator()
 }

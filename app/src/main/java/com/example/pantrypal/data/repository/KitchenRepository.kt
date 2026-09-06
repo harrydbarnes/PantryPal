@@ -53,6 +53,11 @@ class KitchenRepository(
             .create(OpenFoodFactsApi::class.java)
     }
 
+    val shoppingLayout = database?.shoppingSyncDao()?.observeLayout() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    suspend fun saveShoppingLayout(key: String, value: String) {
+        requireNotNull(database).shoppingSyncDao().putLayout(com.example.pantrypal.data.entity.ShoppingLayoutEntity(key, value))
+    }
+
     private val shoppingMutationMutex = Mutex()
 
     companion object {

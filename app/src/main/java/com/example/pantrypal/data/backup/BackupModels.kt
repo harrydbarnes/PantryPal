@@ -32,7 +32,8 @@ data class BackupPayload(
     val priceHistory: List<BackupPriceHistory> = emptyList(),
     val weeklyBudgets: List<BackupWeeklyBudget> = emptyList(),
     val shoppingLocations: List<BackupShoppingLocation> = emptyList(),
-    val preferences: BackupPreferences = BackupPreferences()
+    val preferences: BackupPreferences = BackupPreferences(),
+    val shoppingLayout: Map<String, String>? = null
 )
 
 data class BackupItem(
@@ -74,7 +75,8 @@ data class BackupShoppingSection(
     val name: String = "",
     val sortOrder: Int = 0,
     val recursEveryWeek: Boolean = false,
-    val systemKey: String? = null
+    val systemKey: String? = null,
+    val syncId: String? = null
 )
 
 data class BackupShoppingItem(
@@ -86,7 +88,8 @@ data class BackupShoppingItem(
     val addedAt: Long = 0,
     val frequency: String = "One-Off",
     val sectionId: Long = 0,
-    val weekId: String? = null
+    val weekId: String? = null,
+    val syncId: String? = null
 )
 
 data class BackupShoppingArchive(

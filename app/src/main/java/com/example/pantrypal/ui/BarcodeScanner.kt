@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -59,9 +63,22 @@ fun BarcodeScanner(
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val scannerConfig = remember { AtomicReference(ScannerConfig()) }
+    val disposed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val providerRef = remember { AtomicReference<ProcessCameraProvider?>(null) }
+    val previewRef = remember { AtomicReference<Preview?>(null) }
+    val analysisRef = remember { AtomicReference<ImageAnalysis?>(null) }
+    val scanner = remember { BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS).build()) }
+    val currentOnBarcode by rememberUpdatedState(onBarcodeDetected)
+    var cameraError by remember { mutableStateOf<String?>(null) }
+    var starting by remember { mutableStateOf(true) }
 
     DisposableEffect(Unit) {
         onDispose {
+            disposed.set(true)
+            analysisRef.get()?.clearAnalyzer()
+            val owned = listOfNotNull(previewRef.get(), analysisRef.get()).toTypedArray()
+            if (owned.isNotEmpty()) providerRef.get()?.unbind(*owned)
+            scanner.close()
             cameraExecutor.shutdown()
         }
     }
@@ -74,40 +91,48 @@ fun BarcodeScanner(
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
 
                 cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
+                    if (disposed.get()) return@addListener
+                    val cameraProvider = try { cameraProviderFuture.get() } catch (error: Exception) {
+                        starting = false
+                        cameraError = "Camera unavailable. Return and try again, or use manual entry."
+                        return@addListener
+                    }
+                    providerRef.set(cameraProvider)
                     val preview = Preview.Builder().build().also {
                         it.setSurfaceProvider(previewView.surfaceProvider)
                     }
-
-                    val options = BarcodeScannerOptions.Builder()
-                        .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
-                        .build()
-                    val scanner = BarcodeScanning.getClient(options)
 
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
                         .also {
                             it.setAnalyzer(cameraExecutor) { imageProxy ->
-                                processImageProxy(scanner, imageProxy, onBarcodeDetected, scannerConfig.get())
+                                processImageProxy(scanner, imageProxy, { if (!disposed.get()) currentOnBarcode(it) }, scannerConfig.get())
                             }
                         }
 
                     try {
-                        cameraProvider.unbindAll()
+                        previewRef.set(preview)
+                        analysisRef.set(imageAnalysis)
                         cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
                             imageAnalysis
                         )
+                        starting = false
                     } catch (exc: Exception) {
+                        starting = false
+                        cameraError = "Camera could not start. Return and try again, or use manual entry."
                         android.util.Log.e("BarcodeScanner", "Use case binding failed", exc)
                     }
                 }, ContextCompat.getMainExecutor(ctx))
                 previewView
             }
         )
+
+        if (starting) androidx.compose.material3.CircularProgressIndicator()
+        cameraError?.let { androidx.compose.material3.Text(it, color = androidx.compose.ui.graphics.Color.White) }
 
         // Viewfinder overlay
         Canvas(modifier = Modifier.fillMaxSize()) {

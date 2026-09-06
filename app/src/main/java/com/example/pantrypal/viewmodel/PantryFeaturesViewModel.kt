@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +89,7 @@ class PantryFeaturesViewModel(
             recentPrices = prices.take(20),
             message = message
         )
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = ShoppingToolsUiState()
@@ -104,20 +105,20 @@ class PantryFeaturesViewModel(
                         liveHouseholdId = live.householdId,
                         liveInvite = live.invite,
                         liveSyncing = live.syncing,
+                        liveWorking = live.working,
+                        liveFailed = live.failed,
+                        lastSyncedAt = live.lastSyncedAt,
                         message = live.status ?: it.message
                     )
                 }
             }
         }
         viewModelScope.launch {
-            repository.recipes.collect { recipes ->
-                refreshRecipeState(recipes = recipes)
-            }
-        }
-        viewModelScope.launch {
-            repository.pantryForRecipes.collect { pantry ->
+            combine(repository.recipes, repository.pantryForRecipes) { recipes, pantry ->
+                Triple(recipes, pantry, RecipeRanker.buildShelves(recipes, pantry))
+            }.flowOn(Dispatchers.Default).collect { (recipes, pantry, shelves) ->
                 pantryForRecipes = pantry
-                refreshRecipeState()
+                _recipeState.update { it.copy(savedRecipes = recipes, ideaShelves = shelves) }
             }
         }
         viewModelScope.launch {
@@ -129,6 +130,10 @@ class PantryFeaturesViewModel(
     fun signInToHousehold(activity: Activity) {
         viewModelScope.launch { firebaseHouseholdSync.signIn(activity) }
     }
+
+    fun retryHousehold() = firebaseHouseholdSync.retry()
+    fun disconnectHousehold() = firebaseHouseholdSync.leaveHousehold()
+    fun signOutHousehold() = firebaseHouseholdSync.signOut()
 
     fun createLiveHousehold() = firebaseHouseholdSync.createHousehold()
 
@@ -473,16 +478,6 @@ class PantryFeaturesViewModel(
                         )
                     }
                 }
-        }
-    }
-
-    private fun refreshRecipeState(recipes: List<Recipe>? = null) {
-        _recipeState.update { state ->
-            val currentRecipes = recipes ?: state.savedRecipes
-            state.copy(
-                savedRecipes = currentRecipes,
-                ideaShelves = RecipeRanker.buildShelves(currentRecipes, pantryForRecipes)
-            )
         }
     }
 
