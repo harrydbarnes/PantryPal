@@ -14,7 +14,8 @@ object ShoppingSyncSchema {
     }
 
     fun installTriggers(db: SupportSQLiteDatabase) {
-        // Also repair the built-in sections inserted by the original SQL seed helper.
+        // Repair rows inserted by the original SQL seed helpers before exposing them to Room.
+        db.execSQL("UPDATE shopping_list SET syncId = 'legacy-item-' || shoppingId WHERE syncId = ''")
         db.execSQL("UPDATE shopping_sections SET syncId = COALESCE(systemKey, 'legacy-section-' || sectionId) WHERE syncId = ''")
         for ((table, prefix, key) in listOf(
             Triple("shopping_list", "item:", "syncId"),
