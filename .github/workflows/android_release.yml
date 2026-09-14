@@ -72,11 +72,14 @@ jobs:
         PANTRYPAL_RELEASE_KEY_ALIAS: ${{ secrets.PANTRYPAL_RELEASE_KEY_ALIAS }}
       run: |
         set -euo pipefail
-        keytool -list -v \
+        if certificate="$(keytool -list -v \
           -keystore "$PANTRYPAL_RELEASE_KEYSTORE" \
           -storepass "$PANTRYPAL_RELEASE_STORE_PASSWORD" \
-          -alias "$PANTRYPAL_RELEASE_KEY_ALIAS" \
-          | grep 'SHA1:'
+          -alias "$PANTRYPAL_RELEASE_KEY_ALIAS" 2>&1)"; then
+          echo "$certificate" | grep -E 'SHA-?1:' || echo "::warning::SHA-1 fingerprint was not present in keytool output."
+        else
+          echo "::warning::Could not report the signing SHA-1. The release build will validate the signing details."
+        fi
 
     - name: Build signed release bundle and APK
       shell: bash
