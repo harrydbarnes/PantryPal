@@ -1,6 +1,6 @@
 # PantryPal app overview
 
-PantryPal is a local-first Android kitchen companion built with Kotlin, Jetpack Compose, Material 3, Room, WorkManager, CameraX, Retrofit, and ML Kit. It connects pantry inventory, a four-week meal rotation, recipes, shopping, receipt capture, and household-safe data portability.
+PantryPal is a local-first Android kitchen companion built with Kotlin, Jetpack Compose, Material 3, Room, WorkManager, CameraX, Retrofit, and ML Kit. It connects pantry inventory, a four-week meal rotation, recipes, shopping, receipt capture, and opt-in private household shopping sync.
 
 ## User journeys
 
@@ -14,7 +14,7 @@ PantryPal is a local-first Android kitchen companion built with Kotlin, Jetpack 
 - **Shopping:** use an in-store-first checklist with an always-ready quick-add field and history suggestions; unchecked items come first, completed items collapse below, and row actions live in an accessible overflow menu with undo for accidental deletes. Use **Plan & prepare** for rotation-week choice, meal-plan review, receipt, and budget tools; custom/recurring sections, shopping builds, and finish-and-put-away remain available.
 - **Receipts and budget:** select an image for on-device text recognition or paste receipt text, correct uncertain names, quantities and prices, add purchases to pantry and price history, compare unit-price changes, and track weekly spending against a target.
 - **Past items:** review consumption history.
-- **Settings and data:** control appearance/reminders, export or restore a complete backup, exchange checksummed household snapshots, replay onboarding, and view build information.
+- **Settings and data:** control appearance/reminders, export or restore a complete backup, sign in with Google, create or join a private household shopping list by QR/invite, replay onboarding, and view build information.
 
 ## Architecture
 
@@ -22,12 +22,12 @@ The app remains a compact single Android module:
 
 1. Compose screens render state and send user events to `MainViewModel` or `PantryFeaturesViewModel`.
 2. `MainViewModel` owns the core pantry, meal-plan, and shopping workflows.
-3. `PantryFeaturesViewModel` owns recipe discovery, receipt review, budgets, backups, and household snapshot state.
+3. `PantryFeaturesViewModel` owns recipe discovery, receipt review, budgets, backups, and household collaboration state.
 4. `KitchenRepository` is the core boundary around Room and Open Food Facts. `PantryFeaturesRepository` coordinates the linked feature workflows.
 5. `KitchenDatabase` stores the complete local kitchen and exposes a dependency-aware backup DAO.
 6. `ExpirationWorker` performs scheduled expiry checks.
 
-The app uses manual screen state in `MainActivity` rather than Navigation Compose. Data is stored on-device. Network requests occur only for an unknown scanned barcode, an explicit online recipe search, or an explicitly imported recipe URL.
+The app uses manual screen state in `MainActivity` rather than Navigation Compose. Data is stored on-device first. Network requests occur only for an unknown scanned barcode, an explicit online recipe search, an explicitly imported recipe URL, or opt-in Firebase household shopping sync.
 
 ## Implementation guardrails
 
@@ -70,5 +70,36 @@ Room schema version 6 adds inventory stock settings, meal recipe/serving fields,
 - Imported ingredient quantities and pantry quantities do not always share comparable units. PantryPal labels uncertain matches **Check stock** instead of claiming a precise shortage.
 - The default rotation is four weeks (A–D). Choosing **Make current** anchors that template to the current Monday; the rotation advances each Monday.
 - TheMealDB key `1` is suitable for development/education. A public store release needs a production/supporter key.
-- Household sharing currently exchanges complete checksummed snapshots. The transport boundary and conflict model are ready, but real-time multi-device sync still needs an opt-in backend and account/security design.
+- Household sharing is opt-in and currently syncs the shopping list only. Each person signs in with their own Google account, then joins the same household by QR/invite. Meal plans, pantry inventory, receipts, budgets, and backups remain device-local.
+- Household sync is local-first: shopping changes queue locally while offline and retry with backoff. The protocol exchanges deltas, retains a cloud revision cursor, and compacts cloud history daily. It is designed for a trusted two-person household, not collaborative editing by a large group.
 - Receipt recognition is review-first: users confirm names, quantities, and prices before anything is stored.
+
+
+## Firebase household sync and release status
+
+### Household sync
+
+Google sign-in uses Android Credential Manager, Firebase Authentication, and Cloud Firestore. A signed-in owner creates a household; a second signed-in person joins through a QR code or complete invite string. Firestore rules restrict household state to those member UIDs.
+
+`FirebaseHouseholdSync` is intentionally shopping-only. It preserves the local Room database as the source of truth, journals shopping edits, sends deltas, listens for remote state, and retries failed transfers. Joining saves a local backup before replacing the device's shopping state.
+
+### Firebase project
+
+- Firebase project: `pantrypal-12e55`
+- Android package: `com.example.pantrypal`
+- Google provider: enabled in Firebase Authentication
+- Firestore rules: `firebase/firestore.rules`
+- Android configuration: `app/google-services.json`
+
+### Signed releases
+
+The GitHub Actions **Release Android Bundle** workflow creates a signed AAB and an installable signed APK. It requires these repository secrets:
+
+- `PANTRYPAL_RELEASE_KEYSTORE_BASE64`
+- `PANTRYPAL_RELEASE_STORE_PASSWORD`
+- `PANTRYPAL_RELEASE_KEY_ALIAS`
+- `PANTRYPAL_RELEASE_KEY_PASSWORD`
+
+Keep the keystore and its passwords outside the repository. The release signing SHA-1 must be registered on the Firebase Android app for Google sign-in to work in a release APK. The current signing SHA-1 is `7C:7B:22:1D:FE:78:D1:09:E6:03:A4:1E:01:A7:34:53:11:D7:4F:23`.
+
+The successful release workflow produces both `pantrypal-release-bundle-main` and `pantrypal-release-apk-main` artifacts.
