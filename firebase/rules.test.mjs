@@ -37,8 +37,10 @@ const record = db => doc(db, 'households/home/shoppingRecords/milk');
 async function ready(db) {
   await setDoc(state(db), {protocol: 3, phase: 'migrating', revision: 0, ...author()});
   await setDoc(state(db), {protocol: 3, phase: 'ready', revision: 0, ...author()});
+  await setDoc(state(db), {protocol: 4, phase: 'migrating', revision: 0, historyFloor: 0, ...author()});
+  await setDoc(state(db), {protocol: 4, phase: 'ready', revision: 0, historyFloor: 0, ...author()});
 }
-test('v2 migration preserves its seed; interrupted seed chunks are retryable; downgrade fails', async () => {
+test('v2 and v3 migrations preserve their seed; interrupted chunks are retryable; downgrade fails', async () => {
   const db = user('owner');
   await env.withSecurityRulesDisabled(async ctx => setDoc(state(ctx.firestore()), {protocol: 2, shoppingV2: '{"records":{}}'}));
   await assertSucceeds(updateDoc(state(db), {protocol: 3, phase: 'migrating', revision: 0, ...author()}));
@@ -46,13 +48,17 @@ test('v2 migration preserves its seed; interrupted seed chunks are retryable; do
   await assertSucceeds(setDoc(record(db), seed));
   await assertSucceeds(setDoc(record(db), seed));
   await assertSucceeds(setDoc(state(db), {protocol: 3, phase: 'ready', revision: 0, ...author()}));
+  await assertSucceeds(setDoc(state(db), {protocol: 4, phase: 'migrating', revision: 0, historyFloor: 0, ...author()}));
+  await assertSucceeds(updateDoc(record(db), {revision: 0}));
+  await assertSucceeds(updateDoc(record(db), {revision: 0}));
+  await assertSucceeds(setDoc(state(db), {protocol: 4, phase: 'ready', revision: 0, historyFloor: 0, ...author()}));
   await assertFails(setDoc(record(db), seed));
   await assertFails(setDoc(state(db), {protocol: 2, shoppingV2: '{}', ...author()}));
   await assertFails(updateDoc(state(db), {phase: 'migrating', ...author()}));
 });
 test('record writes require membership, author and an atomic revision increment', async () => {
   const db = user('owner'); await ready(db);
-  const data = {key: 'item:milk', token: 'edit', data: '{}', deleted: false, ...author()};
+  const data = {key: 'item:milk', token: 'edit', data: '{}', deleted: false, revision: 1, ...author()};
   await assertFails(setDoc(record(db), data));
   const batch = writeBatch(db);
   batch.set(record(db), data);
@@ -61,7 +67,7 @@ test('record writes require membership, author and an atomic revision increment'
   await assertSucceeds(batch.commit());
   await assertFails(getDoc(record(user('outsider'))));
   const spoof = writeBatch(db);
-  spoof.set(record(db), {...data, updatedBy: 'partner'});
+  spoof.set(record(db), {...data, revision: 2, updatedBy: 'partner'});
   spoof.update(state(db), {revision: 2, ...author()});
   await assertFails(spoof.commit());
 });
@@ -69,14 +75,37 @@ test('only tombstones older than 30 days can be compacted', async () => {
   const db = user('owner'); await ready(db);
   await env.withSecurityRulesDisabled(async ctx => setDoc(record(ctx.firestore()), {
     key: 'item:milk', token: 'delete', data: null, deleted: true,
-    updatedBy: 'owner', updatedAt: Timestamp.fromMillis(Date.now() - 31 * 86400000)
+    revision: 0, updatedBy: 'owner', updatedAt: Timestamp.fromMillis(Date.now() - 31 * 86400000)
   }));
-  const prune = writeBatch(db); prune.delete(record(db)); prune.update(state(db), {revision: 1, ...author()});
+  const prune = writeBatch(db); prune.delete(record(db)); prune.update(state(db), {revision: 1, historyFloor: 0, ...author()});
   await assertSucceeds(prune.commit());
   const create = writeBatch(db);
-  create.set(record(db), {key: 'item:milk', token: 'new', data: '{}', deleted: false, ...author()});
+  create.set(record(db), {key: 'item:milk', token: 'new', data: '{}', deleted: false, revision: 2, ...author()});
   create.update(state(db), {revision: 2, ...author()}); await create.commit();
   const bad = writeBatch(db); bad.delete(record(db)); bad.update(state(db), {revision: 3, ...author()});
   await assertFails(bad.commit());
   await assertFails(deleteDoc(record(db)));
+});
+test('compaction advances the retained-history floor to the deleted revision', async () => {
+  const db = user('owner');
+  await env.withSecurityRulesDisabled(async ctx => {
+    const admin = ctx.firestore();
+    await setDoc(state(admin), {
+      protocol: 4, phase: 'ready', revision: 2, historyFloor: 0,
+      updatedBy: 'owner', updatedAt: Timestamp.now()
+    });
+    await setDoc(record(admin), {
+      key: 'item:milk', token: 'delete', data: null, deleted: true, revision: 2,
+      updatedBy: 'owner', updatedAt: Timestamp.fromMillis(Date.now() - 31 * 86400000)
+    });
+  });
+  const unsafe = writeBatch(db);
+  unsafe.delete(record(db));
+  unsafe.update(state(db), {revision: 3, ...author()});
+  await assertFails(unsafe.commit());
+
+  const safe = writeBatch(db);
+  safe.delete(record(db));
+  safe.update(state(db), {revision: 3, historyFloor: 2, ...author()});
+  await assertSucceeds(safe.commit());
 });

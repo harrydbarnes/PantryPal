@@ -44,7 +44,7 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
         }
         val pending = dao.pending().map { it.recordKey }.toSet()
         val current = currentRecords()
-        // Full v3 snapshots also remove records whose tombstones have been compacted.
+        // Authoritative snapshots also remove records whose tombstones have been compacted.
         val incoming = if (authoritative) {
             (current.keys - remote.records.keys - pending).associateWith { ShoppingRecord(data = null) } + remote.records
         } else remote.records
