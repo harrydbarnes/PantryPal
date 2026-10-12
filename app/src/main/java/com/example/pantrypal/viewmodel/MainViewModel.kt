@@ -556,6 +556,11 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                             }
                             ShoppingChangeKind.KEEP -> Unit
                         }
+                        if (change.kind == ShoppingChangeKind.KEEP &&
+                            preview.layout[ShoppingMetadata.baseline(change.item.syncId)] == ShoppingMetadata.fingerprint(change.item) &&
+                            !change.item.isChecked) {
+                            repository.saveShoppingLayout(ShoppingMetadata.checkStock(change.item.syncId), change.checkStock.toString())
+                        }
                         if (change.kind == ShoppingChangeKind.ADD || change.kind == ShoppingChangeKind.UPDATE) {
                             repository.saveShoppingLayout(ShoppingMetadata.baseline(change.item.syncId), ShoppingMetadata.fingerprint(change.item))
                             repository.saveShoppingLayout(ShoppingMetadata.checkStock(change.item.syncId), change.checkStock.toString())
@@ -770,6 +775,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     fun toggleShoppingItem(item: ShoppingItemEntity) {
         shoppingAction {
             repository.updateShoppingItem(item.copy(isChecked = !item.isChecked))
+            if (item.isChecked) repository.deleteShoppingMetadata(ShoppingMetadata.completed(item.syncId))
             markShoppingChanged()
         }
     }
@@ -788,11 +794,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
-    fun clearCheckedShoppingItems(weekId: String = _currentWeek.value) {
-        viewModelScope.launch {
-            repository.archiveAndClearCheckedShoppingItems(weekId)
-            markShoppingChanged()
-        }
+    fun clearCheckedShoppingItems(weekId: String = _currentWeek.value) = action {
+        repository.transaction { repository.archiveAndClearCheckedShoppingItems(weekId) }
+        markShoppingChanged()
     }
 
     fun finishShopping(

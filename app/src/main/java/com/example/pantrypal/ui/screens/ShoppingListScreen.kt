@@ -220,6 +220,7 @@ fun ShoppingListScreen(
         ) {
             if (loading) item { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
             shoppingError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+            actionError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
             item {
                 QuickAddShoppingItem(
                     value = quickAddName,
@@ -673,6 +674,7 @@ private fun PutAwayDialog(
                         Checkbox(checked = updatePantry, enabled = !saving, onCheckedChange = { updatePantry = it })
                         Text("Also update pantry stock")
                     }
+                    Text("If a receipt has already added these purchases to your pantry, switch this off to avoid adding them twice.", style = MaterialTheme.typography.bodySmall)
                 }
                 if (updatePantry) {
                     item {
