@@ -50,7 +50,9 @@ data class ShoppingReconciliationLine(
     val requiredQuantity: Double,
     val availableQuantity: Double,
     val unit: String,
-    val status: ShoppingNeedStatus
+    val status: ShoppingNeedStatus,
+    val buyQuantity: Double = requiredQuantity,
+    val stockNote: String? = null
 )
 
 fun classifyExpiry(
@@ -123,48 +125,54 @@ fun normalizeShoppingName(value: String): String {
 
 fun reconcileShoppingIngredients(
     ingredients: List<String>,
-    inventory: List<InventoryWithItemMap>
+    inventory: List<InventoryWithItemMap>,
+    nowMillis: Long = System.currentTimeMillis()
 ): List<ShoppingReconciliationLine> {
-    return ingredients
-        .map(String::trim)
-        .filter(String::isNotEmpty)
-        .map(::parseShoppingRequirement)
-        .distinctBy(ShoppingRequirement::normalizedName)
-        .map { ingredient ->
-            val batches = inventory.filter {
-                normalizeShoppingName(it.name) == ingredient.normalizedName
-            }
-            val rawAvailable = batches.sumOf { it.quantity }
-            val requiredUnit = ingredient.unit
-            val converted = requiredUnit?.let { unit ->
-                batches.mapNotNull { batch ->
-                    convertQuantity(batch.quantity, batch.unit, unit)
-                }.sum()
-            }
-            val available = converted ?: rawAvailable
-            val hasIncompatibleStock = requiredUnit != null &&
-                batches.any { batch ->
-                    batch.quantity > 0 &&
-                        convertQuantity(batch.quantity, batch.unit, requiredUnit) == null
-                }
-            val hasMixedUnspecifiedUnits = requiredUnit == null &&
-                batches.map { canonicalShoppingUnit(it.unit) }.distinct().size > 1
-            val status = when {
-                rawAvailable <= 0.0 -> ShoppingNeedStatus.NEED_TO_BUY
-                hasMixedUnspecifiedUnits -> ShoppingNeedStatus.CHECK_STOCK
-                available >= ingredient.quantity -> ShoppingNeedStatus.ALREADY_AT_HOME
-                available > 0.0 || hasIncompatibleStock -> ShoppingNeedStatus.CHECK_STOCK
-                else -> ShoppingNeedStatus.CHECK_STOCK
-            }
-            ShoppingReconciliationLine(
-                name = ingredient.displayName,
-                normalizedName = ingredient.normalizedName,
-                requiredQuantity = ingredient.quantity,
-                availableQuantity = available,
-                unit = requiredUnit ?: batches.firstOrNull()?.unit ?: "pcs",
-                status = status
+    // Keep unlike measures separate: a tin is not interchangeable with grams.
+    val requirements = mutableListOf<ShoppingRequirement>()
+    ingredients.map(String::trim).filter(String::isNotEmpty).map(::parseShoppingRequirement).forEach { next ->
+        val index = requirements.indexOfFirst {
+            it.normalizedName == next.normalizedName &&
+                convertShoppingQuantity(next.quantity, next.unit ?: "pcs", it.unit ?: "pcs") != null
+        }
+        if (index < 0) requirements += next
+        else {
+            val previous = requirements[index]
+            val amount = convertShoppingQuantity(next.quantity, next.unit ?: "pcs", previous.unit ?: "pcs")!!
+            requirements[index] = previous.copy(
+                quantity = previous.quantity + amount,
+                unit = if (previous.unit == null || next.unit == null) null else previous.unit
             )
         }
+    }
+    return requirements.map { ingredient ->
+        val matching = inventory.filter { normalizeShoppingName(it.name) == ingredient.normalizedName }
+        val batches = matching.filter { classifyExpiry(it.expirationDate, nowMillis) != ExpiryStatus.EXPIRED }
+        val unit = ingredient.unit ?: "pcs"
+        val available = batches.sumOf { convertShoppingQuantity(it.quantity, it.unit, unit) ?: 0.0 }
+        val incompatible = batches.any { it.quantity > 0 && convertShoppingQuantity(it.quantity, it.unit, unit) == null }
+        val hasUnspecifiedStock = ingredient.unit == null && batches.any { it.quantity > 0 }
+        val uncertain = incompatible || hasUnspecifiedStock
+        val status = when {
+            uncertain -> ShoppingNeedStatus.CHECK_STOCK
+            available >= ingredient.quantity -> ShoppingNeedStatus.ALREADY_AT_HOME
+            else -> ShoppingNeedStatus.NEED_TO_BUY
+        }
+        ShoppingReconciliationLine(
+            name = ingredient.displayName,
+            normalizedName = ingredient.normalizedName,
+            requiredQuantity = ingredient.quantity,
+            availableQuantity = available,
+            unit = unit,
+            status = status,
+            buyQuantity = if (uncertain) ingredient.quantity else (ingredient.quantity - available).coerceAtLeast(0.0),
+            stockNote = when {
+                uncertain -> "Confirm the amount at home; these measures may not be comparable."
+                matching.any { classifyExpiry(it.expirationDate, nowMillis) == ExpiryStatus.EXPIRED } -> "Expired stock excluded."
+                else -> null
+            }
+        )
+    }
 }
 
 private data class ShoppingRequirement(
@@ -196,11 +204,11 @@ private fun parseShoppingRequirement(raw: String): ShoppingRequirement {
             normalizeShoppingName(parsed.name)
         },
         quantity = parsed.quantity ?: 1.0,
-        unit = parsed.unit?.let(::canonicalShoppingUnit)
+        unit = parsed.unit?.let(::canonicalShoppingUnit) ?: if (parsed.quantity != null) "pcs" else null
     )
 }
 
-private fun convertQuantity(quantity: Double, fromUnit: String, toUnit: String): Double? {
+fun convertShoppingQuantity(quantity: Double, fromUnit: String, toUnit: String): Double? {
     val from = canonicalShoppingUnit(fromUnit)
     val to = canonicalShoppingUnit(toUnit)
     if (from == to) return quantity
@@ -217,7 +225,7 @@ private fun convertQuantity(quantity: Double, fromUnit: String, toUnit: String):
     }
 }
 
-private fun canonicalShoppingUnit(value: String): String = when (
+fun canonicalShoppingUnit(value: String): String = when (
     value.trim().lowercase(Locale.ROOT)
 ) {
     "pc", "piece", "pieces", "each" -> "pcs"
@@ -227,4 +235,13 @@ private fun canonicalShoppingUnit(value: String): String = when (
     "kilogram", "kilograms" -> "kg"
     "gram", "grams" -> "g"
     else -> value.trim().lowercase(Locale.ROOT)
+}
+
+data class QuickShoppingEntry(val name: String, val quantity: Double, val unit: String)
+
+fun parseQuickShoppingEntry(text: String): QuickShoppingEntry? {
+    val requirement = parseShoppingRequirement(text.trim())
+    if (requirement.displayName.isBlank() || requirement.normalizedName.isBlank() ||
+        !requirement.quantity.isFinite() || requirement.quantity <= 0) return null
+    return QuickShoppingEntry(requirement.displayName, requirement.quantity, requirement.unit ?: "pcs")
 }

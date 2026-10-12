@@ -82,8 +82,9 @@ class InventoryShoppingLogicTest {
         ).associateBy { it.normalizedName }
 
         assertEquals(3, result.size)
-        assertEquals(ShoppingNeedStatus.ALREADY_AT_HOME, result.getValue("milk").status)
-        assertEquals(ShoppingNeedStatus.CHECK_STOCK, result.getValue("onion").status)
+        assertEquals(ShoppingNeedStatus.CHECK_STOCK, result.getValue("milk").status)
+        assertEquals(2.0, result.getValue("milk").requiredQuantity, 0.0)
+        assertEquals(ShoppingNeedStatus.NEED_TO_BUY, result.getValue("onion").status)
         assertEquals(ShoppingNeedStatus.NEED_TO_BUY, result.getValue("bread").status)
     }
 
@@ -102,9 +103,41 @@ class InventoryShoppingLogicTest {
 
         assertEquals(ShoppingNeedStatus.ALREADY_AT_HOME, result.getValue("milk").status)
         assertEquals(1_000.0, result.getValue("milk").availableQuantity, 0.0)
-        assertEquals(ShoppingNeedStatus.CHECK_STOCK, result.getValue("flour").status)
+        assertEquals(ShoppingNeedStatus.NEED_TO_BUY, result.getValue("flour").status)
+        assertEquals(1.0, result.getValue("flour").buyQuantity, 0.0)
         assertEquals(ShoppingNeedStatus.ALREADY_AT_HOME, result.getValue("pizza").status)
         assertEquals(2.0, result.getValue("pizza").requiredQuantity, 0.0)
+    }
+
+    @Test
+    fun `weekly amounts add compatible measures and subtract stock once`() {
+        val result = reconcileShoppingIngredients(
+            listOf("200 g tomatoes", "0.4 kg tomatoes", "1 tin tomatoes"),
+            listOf(inventory("Tomatoes", quantity = 200.0, unit = "g")), now
+        )
+        val weight = result.single { it.unit == "g" }
+        assertEquals(600.0, weight.requiredQuantity, 0.0)
+        assertEquals(400.0, weight.buyQuantity, 0.0)
+        assertEquals(ShoppingNeedStatus.NEED_TO_BUY, weight.status)
+        assertEquals(ShoppingNeedStatus.CHECK_STOCK, result.single { it.unit == "tin" }.status)
+    }
+
+    @Test
+    fun `expired stock never suppresses a purchase`() {
+        val result = reconcileShoppingIngredients(listOf("500 ml milk"), listOf(
+            inventory("Milk", quantity = 2.0, unit = "l", expiration = millis(today.minusDays(1)))
+        ), now).single()
+        assertEquals(ShoppingNeedStatus.NEED_TO_BUY, result.status)
+        assertEquals(500.0, result.buyQuantity, 0.0)
+        assertEquals("Expired stock excluded.", result.stockNote)
+    }
+
+    @Test
+    fun `unspecified and counted ingredients share one requirement without reusing stock`() {
+        val result = reconcileShoppingIngredients(listOf("Onions", "2 onions"), listOf(inventory("Onion", quantity = 2.0)), now)
+        assertEquals(1, result.size)
+        assertEquals(3.0, result.single().requiredQuantity, 0.0)
+        assertEquals(ShoppingNeedStatus.CHECK_STOCK, result.single().status)
     }
 
     private fun millis(date: LocalDate): Long =

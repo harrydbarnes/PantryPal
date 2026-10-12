@@ -46,4 +46,4 @@ fun normalizedIngredients(raw: List<String>): List<String> = raw
     .distinctBy { it.lowercase(Locale.getDefault()) }
 
 fun mealsForShopping(meals: List<MealEntity>, week: String): List<String> =
-    normalizedIngredients(meals.filter { it.week == week }.flatMap { it.ingredients })
+    meals.filter { it.week == week }.flatMap { it.ingredients }.map(String::trim).filter(String::isNotEmpty)

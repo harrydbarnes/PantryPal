@@ -62,14 +62,83 @@ class KitchenRepository(
 
     suspend fun <T> transaction(block: suspend () -> T): T = requireNotNull(database).withTransaction { block() }
 
-    suspend fun finishShopping(weekId: String, storageLocation: String) = transaction {
+    suspend fun finishShopping(weekId: String, storageLocation: String) {
+        finishShopping(weekId, emptyMap(), storageLocation, true)
+    }
+
+    suspend fun finishShopping(
+        weekId: String,
+        locations: Map<String, String>,
+        defaultLocation: String,
+        updatePantry: Boolean,
+        reviewedItems: List<ShoppingItemEntity>? = null
+    ): Int = transaction {
         val sections = shoppingSections.first()
         val recurringIds = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
+        val layout = shoppingLayoutSnapshot()
         val checked = shoppingDao.getAllShoppingItemsSnapshot().filter {
-            it.isChecked && (it.sectionId in recurringIds || it.weekId == null || it.weekId == weekId)
+            it.isChecked && layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] != "true" &&
+                (it.sectionId in recurringIds || it.weekId == null || it.weekId == weekId)
         }
-        putAwayShoppingItems(checked, storageLocation)
-        completeShoppingTrip(checked, sections, weekId, storageLocation)
+        require(reviewedItems == null || checked.toSet() == reviewedItems.toSet()) {
+            "The purchases changed while you were finishing. Review them again before saving."
+        }
+        val tripId = UUID.randomUUID().toString()
+        val completedAt = System.currentTimeMillis()
+        checked.groupBy { locations[it.syncId] ?: defaultLocation }.forEach { (location, items) ->
+            require(location in InventoryEntity.STORAGE_LOCATIONS) { "Choose a valid storage location." }
+            if (updatePantry) putAwayShoppingItems(items, location)
+            completeShoppingTrip(items, sections, weekId, if (updatePantry) location else null, tripId, completedAt)
+        }
+        checked.size
+    }
+
+    suspend fun shoppingLayoutSnapshot(): Map<String, String> =
+        database?.shoppingSyncDao()?.layout()?.associate { it.layoutKey to it.value } ?: emptyMap()
+
+    suspend fun deleteShoppingMetadata(key: String) { database?.shoppingSyncDao()?.deleteLayout(key) }
+
+    suspend fun prepareNextShop() = shoppingTransaction {
+        val recurring = shoppingSections.first().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
+        val layout = shoppingLayoutSnapshot()
+        val items = shoppingDao.getAllShoppingItemsSnapshot().filter {
+            it.isChecked && it.sectionId in recurring &&
+                layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] == "true"
+        }
+        items.forEach {
+            shoppingDao.updateShoppingItem(it.copy(isChecked = false))
+            deleteShoppingMetadata(com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId))
+        }
+    }
+
+    /** Exact insert is used only by a reviewed plan delta, never to increment a protected edit. */
+    suspend fun insertReviewedShoppingItem(item: ShoppingItemEntity) {
+        requireValidShoppingItem(item)
+        shoppingDao.insertShoppingItem(item)
+    }
+
+    data class QuickAddChange(val before: ShoppingItemEntity?, val after: ShoppingItemEntity)
+
+    suspend fun quickAddShoppingItem(item: ShoppingItemEntity, weekId: String): QuickAddChange = shoppingTransaction {
+        requireValidShoppingItem(item)
+        val recurring = shoppingSections.first().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
+        val existing = shoppingDao.getAllShoppingItemsSnapshot().firstOrNull {
+            !it.isChecked && (it.weekId == weekId || it.weekId == null || it.sectionId in recurring) &&
+                normalizeShoppingName(it.name) == normalizeShoppingName(item.name) &&
+                com.example.pantrypal.util.convertShoppingQuantity(item.quantity, item.unit, it.unit) != null
+        }
+        val saved = if (existing != null) {
+            val quantity = existing.quantity + com.example.pantrypal.util.convertShoppingQuantity(item.quantity, item.unit, existing.unit)!!
+            existing.copy(quantity = quantity).also { requireValidShoppingItem(it); shoppingDao.updateShoppingItem(it) }
+        } else item.copy(shoppingId = shoppingDao.insertShoppingItem(item))
+        QuickAddChange(existing, saved)
+    }
+
+    suspend fun undoQuickAdd(change: QuickAddChange) = shoppingTransaction {
+        val current = shoppingDao.getAllShoppingItemsSnapshot().firstOrNull { it.syncId == change.after.syncId }
+        require(current == change.after) { "This item changed since you added it. Edit its quantity instead." }
+        if (change.before == null) shoppingDao.deleteShoppingItem(change.after)
+        else shoppingDao.updateShoppingItem(change.before)
     }
 
     private val shoppingMutationMutex = Mutex()
@@ -238,7 +307,9 @@ class KitchenRepository(
         checkedItems: List<ShoppingItemEntity>,
         sections: List<ShoppingSectionEntity>,
         weekId: String,
-        storageLocation: String?
+        storageLocation: String?,
+        tripId: String = UUID.randomUUID().toString(),
+        completedAt: Long = System.currentTimeMillis()
     ) {
         require(weekId.isNotBlank()) { "Shopping week must not be blank." }
         storageLocation?.let {
@@ -249,13 +320,12 @@ class KitchenRepository(
         val recurringSectionIds = sections
             .filter { it.recursEveryWeek }
             .mapTo(mutableSetOf()) { it.sectionId }
+        val layout = shoppingLayoutSnapshot()
         val eligibleItems = checkedItems.filter {
-            it.isChecked &&
+            layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] != "true" && it.isChecked &&
                 (it.sectionId in recurringSectionIds || it.weekId == null || it.weekId == weekId)
         }
         val sectionNames = sections.associate { it.sectionId to it.name }
-        val completedAt = System.currentTimeMillis()
-        val tripId = UUID.randomUUID().toString()
         val archivedItems = eligibleItems.map { item ->
             ShoppingArchiveEntity(
                 tripId = tripId,
@@ -268,17 +338,25 @@ class KitchenRepository(
                 storageLocation = storageLocation?.trim()?.takeIf(String::isNotBlank)
             )
         }
-        archiveAndClearCheckedItems(archivedItems, weekId)
+        archiveAndClearCheckedItems(archivedItems, eligibleItems, recurringSectionIds)
     }
 
     private suspend fun archiveAndClearCheckedItems(
         archivedItems: List<ShoppingArchiveEntity>,
-        weekId: String
+        eligibleItems: List<ShoppingItemEntity>,
+        recurringSectionIds: Set<Long>
     ) {
         suspend fun write() {
             if (archivedItems.isNotEmpty()) shoppingDao.insertShoppingArchive(archivedItems)
-            shoppingDao.deleteCheckedWeekItems(weekId)
-            shoppingDao.resetCheckedRecurringItems()
+            eligibleItems.forEach { item ->
+                if (item.sectionId in recurringSectionIds) {
+                    if (database != null) saveShoppingLayout(com.example.pantrypal.util.ShoppingMetadata.completed(item.syncId), "true")
+                } else {
+                    shoppingDao.deleteShoppingItem(item)
+                    deleteShoppingMetadata(com.example.pantrypal.util.ShoppingMetadata.baseline(item.syncId))
+                    deleteShoppingMetadata(com.example.pantrypal.util.ShoppingMetadata.checkStock(item.syncId))
+                }
+            }
         }
         if (database == null) write() else database.withTransaction { write() }
     }

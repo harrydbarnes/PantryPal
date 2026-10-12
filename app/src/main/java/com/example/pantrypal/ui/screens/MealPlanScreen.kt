@@ -84,6 +84,7 @@ fun MealPlanScreen(
     viewModel: MainViewModel,
     onOpenRecipes: () -> Unit = {}
 ) {
+    val buildPreview by viewModel.shoppingBuildPreview.collectAsState()
     val saving by viewModel.saving.collectAsState()
     val error by viewModel.actionError.collectAsState()
     val currentWeek by viewModel.currentWeek.collectAsState()
@@ -102,6 +103,10 @@ fun MealPlanScreen(
     var copyingMeal by remember { mutableStateOf<MealEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    buildPreview?.let { preview ->
+        ShoppingPreparationDialog(viewModel, preview, weeks.firstOrNull { it.weekId == preview.weekId }?.displayName ?: "Week ${preview.weekId}")
+    }
 
     LaunchedEffect(Unit) {
         viewModel.markMealPlanIntroSeen()
@@ -290,14 +295,14 @@ fun MealPlanScreen(
                             Button(
                                 onClick = {
                                     viewModel.buildShoppingListForWeek(displayedWeek)
-                                    scope.launch { snackbarHostState.showSnackbar("Week $displayedWeek added for review") }
+
                                 },
                                 enabled = hasIngredients,
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.Default.ShoppingCart, contentDescription = null)
                                 Spacer(Modifier.size(8.dp))
-                                Text("Build list")
+                                Text("Review shopping list")
                             }
                             OutlinedButton(
                                 onClick = { showCopyWeekDialog = true },
