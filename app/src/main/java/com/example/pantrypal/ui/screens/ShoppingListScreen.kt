@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.animation.animateContentSize
 import com.example.pantrypal.util.ShoppingAisles
@@ -86,6 +87,10 @@ import com.example.pantrypal.ui.components.ExpressiveHero
 import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.viewmodel.MainViewModel
 import com.example.pantrypal.util.ShoppingNeedStatus
+import com.example.pantrypal.util.ShoppingMetadata
+import com.example.pantrypal.util.normalizeShoppingName
+import com.example.pantrypal.util.parseQuickShoppingEntry
+import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -100,11 +105,25 @@ fun ShoppingListScreen(
     household: HouseholdSyncUiState = HouseholdSyncUiState()
 ) {
     val layout by viewModel.shoppingLayoutState.collectAsState()
-    var aisleMode by rememberSaveable { mutableStateOf(false) }
+    val profile by viewModel.shoppingProfile.collectAsState()
+    var newShopName by rememberSaveable { mutableStateOf("") }
+    var showAddShop by rememberSaveable { mutableStateOf(false) }
+    val profileNames = remember(layout) {
+        val type = object : com.google.gson.reflect.TypeToken<Map<String, String>>() {}.type
+        mapOf(ShoppingAisles.DEFAULT_PROFILE to "My Aldi") + runCatching {
+            layout[ShoppingAisles.PROFILES_KEY]?.let { com.google.gson.Gson().fromJson<Map<String, String>>(it, type) }.orEmpty()
+        }.getOrDefault(emptyMap())
+    }
+    val profileName = profileNames[profile] ?: "My shop"
+    val aisleMode by viewModel.prefersAisleMode.collectAsState()
+    val inventory by viewModel.inventoryState.collectAsState()
+    val currentWeek by viewModel.currentWeek.collectAsState()
+    val saving by viewModel.saving.collectAsState()
+    val actionError by viewModel.actionError.collectAsState()
     var editAisles by rememberSaveable { mutableStateOf(false) }
     var movingItem by remember { mutableStateOf<ShoppingItemEntity?>(null) }
-    val aisles = remember(layout) {
-        runCatching { com.google.gson.Gson().fromJson(layout[ShoppingAisles.ORDER_KEY], Array<String>::class.java)?.toList() }
+    val aisles = remember(layout, profile) {
+        runCatching { com.google.gson.Gson().fromJson(layout[ShoppingAisles.orderKey(profile)], Array<String>::class.java)?.toList() }
             .getOrNull()?.let(ShoppingAisles::cleanOrder) ?: ShoppingAisles.exampleOrder
     }
     val shoppingList by viewModel.shoppingListState.collectAsState()
@@ -124,6 +143,7 @@ fun ShoppingListScreen(
     var showSectionEditor by remember { mutableStateOf(false) }
     var showPutAwayDialog by remember { mutableStateOf(false) }
     var showShoppingArchive by rememberSaveable { mutableStateOf(false) }
+    var finishedCount by rememberSaveable { mutableStateOf<Int?>(null) }
 
     val currentWeekDetails = mealWeeks.firstOrNull { it.weekId == selectedWeek }
     val visibleItems = remember(shoppingList, sections, selectedWeek) {
@@ -137,17 +157,29 @@ fun ShoppingListScreen(
     var quickAddName by rememberSaveable { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val defaultQuickAddSection = sections.firstOrNull { it.systemKey == ShoppingSectionEntity.KEY_THE_REST }
-        ?: sections.firstOrNull()
+    val unfinishedPurchases = visibleItems.filter { it.isChecked && layout[ShoppingMetadata.completed(it.syncId)] != "true" }
+    val hasFinishedRegulars = visibleItems.any { layout[ShoppingMetadata.completed(it.syncId)] == "true" }
+    val weekOrder = mealWeeks.sortedBy { it.sortOrder }.map { it.weekId }
+    val weekOffset = if (weekOrder.isEmpty()) 0 else
+        (weekOrder.indexOf(selectedWeek) - weekOrder.indexOf(currentWeek)).mod(weekOrder.size)
+    val monday = com.example.pantrypal.util.startOfWeek(java.time.LocalDate.now()).plusWeeks(weekOffset.toLong())
+    val dateFormat = java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.UK)
+    val dates = "${monday.format(dateFormat)}–${monday.plusDays(6).format(dateFormat)}"
 
-    fun submitQuickAdd() {
-        val section = defaultQuickAddSection ?: return
-        val name = quickAddName.trim()
-        if (name.isNotEmpty()) {
-            viewModel.addShoppingItem(name, 1.0, "pcs", section.sectionId, if (section.recursEveryWeek) null else selectedWeek)
-            quickAddName = ""
+    fun addQuickEntry(text: String) {
+        viewModel.quickAddShoppingItem(text) { change ->
+            if (quickAddName == text) quickAddName = ""
+            scope.launch {
+                val message = if (change.before == null) "${change.after.name} added" else
+                    "${change.after.name} increased to ${formatQuantity(change.after.quantity)} ${change.after.unit}"
+                if (snackbarHostState.showSnackbar(message, "Undo") == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                    viewModel.undoQuickAdd(change)
+                }
+            }
         }
     }
+
+    fun submitQuickAdd() { if (parseQuickShoppingEntry(quickAddName) != null) addQuickEntry(quickAddName) }
 
     fun deleteWithUndo(item: ShoppingItemEntity) {
         viewModel.deleteShoppingItem(item)
@@ -160,7 +192,26 @@ fun ShoppingListScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            Surface {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("${currentWeekDetails?.displayName ?: "Week $selectedWeek"} · ${visibleItems.count { !it.isChecked }} left", style = MaterialTheme.typography.titleMedium)
+                            Text(dates, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (unfinishedPurchases.isNotEmpty()) TextButton(enabled = !saving, onClick = { showPutAwayDialog = true; viewModel.dismissActionError() }) { Text("Finish shop") }
+                        else if (hasFinishedRegulars) TextButton(enabled = !saving, onClick = { viewModel.prepareNextShop() }) { Text("Prepare next shop") }
+                    }
+                    TextButton(onClick = onOpenHousehold, contentPadding = PaddingValues(0.dp)) {
+                        Icon(Icons.Outlined.Group, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(household.syncLabel)
+                    }
+                }
+            }
+        }
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -174,57 +225,11 @@ fun ShoppingListScreen(
                     value = quickAddName,
                     onValueChange = { quickAddName = it },
                     onSubmit = ::submitQuickAdd,
-                    onAddSuggestion = { name ->
-                        defaultQuickAddSection?.let { section ->
-                            viewModel.addShoppingItem(
-                                name = name,
-                                quantity = 1.0,
-                                unit = "pcs",
-                                sectionId = section.sectionId,
-                                weekId = if (section.recursEveryWeek) null else selectedWeek
-                            )
-                        }
-                    },
-                    suggestions = history.map { it.displayName }
+                    onAddSuggestion = ::addQuickEntry,
+                    suggestions = history.map { it.displayName },
+                    listedNames = visibleItems.filterNot { it.isChecked }.map { normalizeShoppingName(it.name) }.toSet()
+
                 )
-            }
-
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StatusPill(
-                        label = household.syncLabel,
-                        icon = Icons.Outlined.CloudOff,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        household.lastSyncedAt?.let {
-                            "Last synced · ${DateFormat.getDateTimeInstance().format(Date(it))}"
-                        } ?: if (household.liveHouseholdId == null) "Set up a household to share this list." else "Changes are saved here while sync connects.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenHousehold),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Outlined.Group, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        Column(Modifier.weight(1f)) {
-                            Text("My household", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Text(household.syncLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                        Text(if (household.liveHouseholdId == null) "Set up" else "Manage", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
-                }
             }
 
             item {
@@ -321,13 +326,13 @@ fun ShoppingListScreen(
                         label = "${sections.size} sections",
                         icon = Icons.Default.Category
                     )
-                    if (visibleItems.any { it.isChecked }) {
+                    if (unfinishedPurchases.isNotEmpty()) {
                         AssistChip(
                             onClick = { viewModel.clearCheckedShoppingItems(selectedWeek) },
                             label = { Text("Archive checked") }
                         )
                         AssistChip(
-                            onClick = { showPutAwayDialog = true },
+                            onClick = { showPutAwayDialog = true; viewModel.dismissActionError() },
                             label = { Text("Finish shop & put away") },
                             leadingIcon = { Icon(Icons.Default.Inventory2, contentDescription = null) }
                         )
@@ -339,20 +344,30 @@ fun ShoppingListScreen(
 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Shop by Aldi aisle", modifier = Modifier.weight(1f))
-                    Switch(checked = aisleMode, onCheckedChange = { aisleMode = it })
+                    Text("Shop by aisle · $profileName", modifier = Modifier.weight(1f))
+                    Switch(checked = aisleMode, onCheckedChange = viewModel::setAisleMode)
                 }
-                if (aisleMode) TextButton(onClick = { editAisles = true }) { Text("Edit My Aldi aisle order") }
+                if (aisleMode) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(profileNames.entries.toList(), key = { it.key }) { entry ->
+                            FilterChip(selected = profile == entry.key, onClick = { viewModel.selectShoppingProfile(entry.key) }, label = { Text(entry.value) })
+                        }
+                    }
+                    Row {
+                        TextButton(onClick = { editAisles = true }) { Text("Edit aisle order") }
+                        TextButton(onClick = { showAddShop = true }) { Text("Add another shop") }
+                    }
+                }
             }
             if (aisleMode) {
-                val groups = visibleItems.groupBy { ShoppingAisles.aisleFor(it.name, aisles, layout) }
+                val groups = visibleItems.groupBy { ShoppingAisles.aisleFor(it.name, aisles, layout, inventory.firstOrNull { stock -> normalizeShoppingName(stock.name) == normalizeShoppingName(it.name) }?.category, inventory.firstOrNull { stock -> normalizeShoppingName(stock.name) == normalizeShoppingName(it.name) }?.storageLocation, profile) }
                 (aisles + ShoppingAisles.UNASSIGNED).forEach { aisle ->
                     val rows = groups[aisle].orEmpty().sortedBy { it.isChecked }
                     if (rows.isNotEmpty()) {
                         item(key = "aisle-$aisle") { Text(aisle, style = MaterialTheme.typography.titleLarge) }
                         items(rows, key = { "item-${it.syncId}" }) { row ->
                             Card(Modifier.fillMaxWidth().animateItem()) {
-                                ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) })
+                                ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) })
                                 TextButton(onClick = { movingItem = row }) { Text("Aisle / section") }
                             }
                         }
@@ -368,7 +383,7 @@ fun ShoppingListScreen(
                     }
                     items(sectionItems, key = { "item-${it.syncId}" }) { row ->
                         Card(Modifier.fillMaxWidth().animateItem()) {
-                            ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = section }, { deleteWithUndo(row) })
+                            ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = section }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) })
                             TextButton(onClick = { movingItem = row }) { Text("Move section / assign aisle") }
                         }
                     }
@@ -476,12 +491,18 @@ fun ShoppingListScreen(
         )
     }
 
-    if (editAisles) AisleOrderDialog(aisles, { editAisles = false }) { order -> viewModel.saveAisleOrder(order); editAisles = false }
+    if (showAddShop) AlertDialog(onDismissRequest = { showAddShop = false },
+        title = { Text("Add a shop") },
+        text = { OutlinedTextField(value = newShopName, onValueChange = { newShopName = it }, label = { Text("Shop name") }, singleLine = true) },
+        confirmButton = { Button(enabled = newShopName.isNotBlank(), onClick = { viewModel.addShoppingProfile(newShopName) { newShopName = ""; showAddShop = false } }) { Text("Add shop") } },
+        dismissButton = { TextButton(onClick = { showAddShop = false }) { Text("Cancel") } })
+
+    if (editAisles) AisleOrderDialog(aisles, profileName, { editAisles = false }) { order -> viewModel.saveAisleOrder(order); editAisles = false }
     movingItem?.let { row ->
         AlertDialog(onDismissRequest = { movingItem = null }, title = { Text("Place ${row.name}") },
             text = {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { Text("My Aldi aisle", style = MaterialTheme.typography.titleMedium) }
+                    item { Text("$profileName aisle", style = MaterialTheme.typography.titleMedium) }
                     items(aisles + ShoppingAisles.UNASSIGNED) { aisle ->
                         TextButton(onClick = { viewModel.assignAisle(row.name, aisle); movingItem = null }) { Text(aisle) }
                     }
@@ -513,37 +534,32 @@ fun ShoppingListScreen(
     }
 
     buildPreview?.let { preview ->
-        ShoppingBuildPreviewDialog(
-            weekName = mealWeeks.firstOrNull { it.weekId == preview.weekId }?.displayName ?: "Week ${preview.weekId}",
-            needToBuy = preview.lines.count { it.status == ShoppingNeedStatus.NEED_TO_BUY },
-            alreadyAtHome = preview.lines.count { it.status == ShoppingNeedStatus.ALREADY_AT_HOME },
-            checkStock = preview.lines.count { it.status == ShoppingNeedStatus.CHECK_STOCK },
-            lines = preview.lines.map { line ->
-                when (line.status) {
-                    ShoppingNeedStatus.NEED_TO_BUY ->
-                        "Need · ${line.name} · ${line.requiredQuantity.shoppingNumber()} ${line.unit}"
-                    ShoppingNeedStatus.ALREADY_AT_HOME ->
-                        "At home · ${line.name} · ${line.availableQuantity.shoppingNumber()} ${line.unit}"
-                    ShoppingNeedStatus.CHECK_STOCK ->
-                        "Check · ${line.name} · need ${line.requiredQuantity.shoppingNumber()}, " +
-                            "found ${line.availableQuantity.shoppingNumber()} ${line.unit}"
-                }
-            },
-            onDismiss = viewModel::dismissShoppingBuildPreview,
-            onCommit = { viewModel.commitShoppingBuildPreview(includeCheckStock = true) }
-        )
+        ShoppingPreparationDialog(viewModel, preview, mealWeeks.firstOrNull { it.weekId == preview.weekId }?.displayName ?: "Week ${preview.weekId}")
     }
 
     if (showPutAwayDialog) {
         PutAwayDialog(
-            checkedCount = visibleItems.count { it.isChecked },
+            items = unfinishedPurchases,
+            inventory = inventory,
+            saving = saving,
+            error = actionError,
             onDismiss = { showPutAwayDialog = false },
-            onPutAway = { location ->
-                viewModel.finishShopping(selectedWeek, location)
-                showPutAwayDialog = false
+            onFinish = { locations, defaultLocation, updatePantry ->
+                viewModel.finishShopping(selectedWeek, locations, defaultLocation, updatePantry) { count ->
+                    showPutAwayDialog = false
+                    finishedCount = count
+                }
             }
         )
     }
+    finishedCount?.let { count ->
+        AlertDialog(onDismissRequest = { finishedCount = null },
+            title = { Text("Shop finished") },
+            text = { Text("$count purchases saved to your shop history. ${visibleItems.count { !it.isChecked }} items are still unpurchased. Recurring essentials stay ticked until you prepare the next shop.") },
+            confirmButton = { Button(enabled = !saving, onClick = { viewModel.prepareNextShop { finishedCount = null } }) { Text("Prepare next shop") } },
+            dismissButton = { TextButton(onClick = { finishedCount = null }) { Text("Done") } })
+    }
+
 }
 
 private fun Double.shoppingNumber(): String =
@@ -561,7 +577,8 @@ private fun QuickAddShoppingItem(
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onAddSuggestion: (String) -> Unit,
-    suggestions: List<String>
+    suggestions: List<String>,
+    listedNames: Set<String>
 ) {
     var showPreviousItems by rememberSaveable { mutableStateOf(false) }
     val matchingSuggestions = remember(suggestions, value) {
@@ -576,7 +593,8 @@ private fun QuickAddShoppingItem(
             value = value,
             onValueChange = onValueChange,
             label = { Text("Quick add") },
-            placeholder = { Text("Type an item, then press done") },
+            placeholder = { Text("Milk x2 or 500 g pasta") },
+            trailingIcon = { IconButton(enabled = parseQuickShoppingEntry(value) != null, onClick = onSubmit) { Icon(Icons.Default.Add, "Add shopping item") } },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onSubmit() }),
@@ -592,7 +610,7 @@ private fun QuickAddShoppingItem(
                     items(visibleSuggestions, key = { it.lowercase() }) { suggestion ->
                         AssistChip(
                             onClick = { onAddSuggestion(suggestion) },
-                            label = { Text(suggestion) },
+                            label = { Text(if (normalizeShoppingName(suggestion) in listedNames) "$suggestion · On your list" else suggestion) },
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
                         )
                     }
@@ -616,7 +634,7 @@ private fun QuickAddShoppingItem(
                     previousSuggestions.forEach { suggestion ->
                         AssistChip(
                             onClick = { onAddSuggestion(suggestion) },
-                            label = { Text(suggestion) },
+                            label = { Text(if (normalizeShoppingName(suggestion) in listedNames) "$suggestion · On your list" else suggestion) },
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
                         )
                     }
@@ -626,74 +644,65 @@ private fun QuickAddShoppingItem(
     }
 }
 
-@Composable
-private fun ShoppingBuildPreviewDialog(
-    weekName: String,
-    needToBuy: Int,
-    alreadyAtHome: Int,
-    checkStock: Int,
-    lines: List<String>,
-    onDismiss: () -> Unit,
-    onCommit: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Prepare $weekName") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("$needToBuy to buy · $alreadyAtHome already at home · $checkStock to check")
-                lines.take(12).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                if (lines.size > 12) {
-                    Text("+ ${lines.size - 12} more", style = MaterialTheme.typography.bodySmall)
-                }
-                Text(
-                    "Items already at home will stay off the list. Check-stock items will be included so you can confirm them in the shop.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = { Button(onClick = onCommit) { Text("Build list") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PutAwayDialog(
-    checkedCount: Int,
+    items: List<ShoppingItemEntity>,
+    inventory: List<com.example.pantrypal.viewmodel.InventoryUiModel>,
+    saving: Boolean,
+    error: String?,
     onDismiss: () -> Unit,
-    onPutAway: (String) -> Unit
+    onFinish: (Map<String, String>, String, Boolean) -> Unit
 ) {
-    var location by remember { mutableStateOf(InventoryEntity.LOCATION_PANTRY) }
+    var updatePantry by rememberSaveable { mutableStateOf(true) }
+    var defaultLocation by rememberSaveable { mutableStateOf(InventoryEntity.LOCATION_PANTRY) }
+    var locations by rememberSaveable(items.map { it.syncId }) {
+        mutableStateOf(items.map { item ->
+            inventory.firstOrNull { normalizeShoppingName(it.name) == normalizeShoppingName(item.name) }?.storageLocation
+                ?: ShoppingAisles.suggestStorage(item.name)
+        })
+    }
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Put purchases away") },
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("Finish this shop") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("$checkedCount checked item${if (checkedCount == 1) "" else "s"} will be added to your stock.")
-                Text("Default location", style = MaterialTheme.typography.labelLarge)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    InventoryEntity.STORAGE_LOCATIONS.forEach { option ->
-                        FilterChip(
-                            selected = location == option,
-                            onClick = { location = option },
-                            label = { Text(option) }
-                        )
+            LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    Text("${items.size} purchases will be saved to your shop history.")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = updatePantry, enabled = !saving, onCheckedChange = { updatePantry = it })
+                        Text("Also update pantry stock")
                     }
                 }
-                Text(
-                    "Matching products in the same location are merged. You can move individual batches afterwards.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (updatePantry) {
+                    item {
+                        Text("Set all locations", style = MaterialTheme.typography.titleSmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            InventoryEntity.STORAGE_LOCATIONS.forEach { option ->
+                                FilterChip(selected = defaultLocation == option, enabled = !saving,
+                                    onClick = { defaultLocation = option; locations = items.map { option } }, label = { Text(option) })
+                            }
+                        }
+                    }
+                    items(items.indices.toList(), key = { items[it].syncId }) { index ->
+                        Column {
+                            Text(items[index].name, style = MaterialTheme.typography.titleMedium)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                InventoryEntity.STORAGE_LOCATIONS.forEach { option ->
+                                    FilterChip(selected = locations.getOrNull(index) == option, enabled = !saving,
+                                        onClick = { locations = locations.toMutableList().apply { set(index, option) } }, label = { Text(option) })
+                                }
+                            }
+                        }
+                    }
+                }
+                error?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
             }
         },
-        confirmButton = { Button(onClick = { onPutAway(location) }) { Text("Put away") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { Button(enabled = !saving && items.isNotEmpty(), onClick = {
+            onFinish(items.mapIndexed { index, item -> item.syncId to locations[index] }.toMap(), defaultLocation, updatePantry)
+        }) { Text(if (saving) "Saving…" else "Finish shop") } },
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -779,6 +788,7 @@ private fun ShoppingItemEditorDialog(
                         value = quantity,
                         onValueChange = { quantity = it },
                         label = { Text("Quantity") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -859,7 +869,9 @@ fun ShoppingListItemRow(
     item: ShoppingItemEntity,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    needsStockCheck: Boolean = false,
+    onConfirmStock: () -> Unit = {}
 ) {
     var actionsExpanded by remember { mutableStateOf(false) }
     Row(
@@ -880,6 +892,7 @@ fun ShoppingListItemRow(
                     MaterialTheme.colorScheme.onSurface
                 }
             )
+            if (needsStockCheck) Text("Check stock at home", style = MaterialTheme.typography.labelSmall)
             Text(
                 text = "${formatQuantity(item.quantity)} ${item.unit}",
                 style = MaterialTheme.typography.bodySmall,
@@ -890,6 +903,7 @@ fun ShoppingListItemRow(
             Icon(Icons.Default.MoreVert, contentDescription = "More options for ${item.name}")
         }
         DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
+            if (needsStockCheck) DropdownMenuItem(text = { Text("Stock checked") }, onClick = { actionsExpanded = false; onConfirmStock() })
             DropdownMenuItem(
                 text = { Text("Edit") },
                 onClick = {
@@ -913,13 +927,13 @@ private fun formatQuantity(quantity: Double): String =
     if (quantity % 1.0 == 0.0) quantity.toLong().toString() else quantity.toString()
 
 @Composable
-private fun AisleOrderDialog(initial: List<String>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
+private fun AisleOrderDialog(initial: List<String>, shopName: String, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
     var order by rememberSaveable { mutableStateOf(initial) }
     var newName by rememberSaveable { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("My Aldi aisle order") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("$shopName aisle order") },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { Text("This is an editable example. Put aisles in the order you walk through your Aldi. Removed aisles move their items to Unassigned.") }
+                item { Text("This is an editable example. Put aisles in the order you walk through $shopName. Removed aisles move their items to Unassigned.") }
                 items(order, key = { it }) { aisle ->
                     val index = order.indexOf(aisle)
                     Column {

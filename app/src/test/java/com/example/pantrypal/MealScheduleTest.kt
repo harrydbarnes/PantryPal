@@ -19,12 +19,12 @@ class MealScheduleTest {
     }
 
     @Test
-    fun mealsForShopping_filtersWeekAndDeduplicatesIngredients() {
+    fun mealsForShopping_preservesRequirementsAcrossMeals() {
         val meals = listOf(
             MealEntity(name = "Pasta", week = "A", ingredients = listOf(" Pasta ", "Tomatoes")),
             MealEntity(name = "Soup", week = "A", ingredients = listOf("tomatoes", "Bread")),
             MealEntity(name = "Curry", week = "B", ingredients = listOf("Rice"))
         )
-        assertEquals(listOf("Pasta", "Tomatoes", "Bread"), mealsForShopping(meals, "A"))
+        assertEquals(listOf("Pasta", "Tomatoes", "tomatoes", "Bread"), mealsForShopping(meals, "A"))
     }
 }

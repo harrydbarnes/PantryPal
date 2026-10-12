@@ -56,6 +56,9 @@ import com.example.pantrypal.util.classifyExpiry
 import com.example.pantrypal.util.expiryLabel
 import com.example.pantrypal.util.expiringCutoffMillis
 import com.example.pantrypal.util.reconcileShoppingIngredients
+import com.example.pantrypal.util.ShoppingMetadata
+import com.example.pantrypal.util.ShoppingChangeKind
+import com.example.pantrypal.util.planShoppingUpdate
 
 // Helper flow for periodic updates
 fun tickerFlow(period: Long, initialDelay: Long = 0) = flow {
@@ -228,13 +231,57 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     val shoppingLayoutState = repository.shoppingLayout.map { rows -> rows.associate { it.layoutKey to it.value } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    val shoppingProfile = MutableStateFlow(prefs.getString("shopping_profile", com.example.pantrypal.util.ShoppingAisles.DEFAULT_PROFILE) ?: com.example.pantrypal.util.ShoppingAisles.DEFAULT_PROFILE)
+    fun selectShoppingProfile(id: String) {
+        shoppingProfile.value = id
+        prefs.edit().putString("shopping_profile", id).apply()
+    }
+    fun addShoppingProfile(name: String, onSuccess: () -> Unit) {
+        val id = "shop-" + java.util.UUID.randomUUID().toString()
+        shoppingAction(onSuccess = { selectShoppingProfile(id); onSuccess() }) {
+            val current = repository.shoppingLayoutSnapshot()[com.example.pantrypal.util.ShoppingAisles.PROFILES_KEY]
+            val type = object : com.google.gson.reflect.TypeToken<Map<String, String>>() {}.type
+            val names = current?.let { com.google.gson.Gson().fromJson<Map<String, String>>(it, type) }.orEmpty()
+            repository.saveShoppingLayout(com.example.pantrypal.util.ShoppingAisles.PROFILES_KEY,
+                com.google.gson.Gson().toJson(names + (id to name.trim())))
+        }
+    }
+
+    val prefersAisleMode = MutableStateFlow(prefs.getBoolean("shopping_aisle_mode", false))
+    fun setAisleMode(enabled: Boolean) {
+        prefersAisleMode.value = enabled
+        prefs.edit().putBoolean("shopping_aisle_mode", enabled).apply()
+    }
+
+    fun quickAddShoppingItem(text: String, onAdded: (KitchenRepository.QuickAddChange) -> Unit) {
+        val entry = com.example.pantrypal.util.parseQuickShoppingEntry(text) ?: return
+        var change: KitchenRepository.QuickAddChange? = null
+        shoppingAction(onSuccess = { change?.let(onAdded) }) {
+            change = repository.quickAddShoppingItem(ShoppingItemEntity(
+                name = entry.name, quantity = entry.quantity, unit = entry.unit,
+                sectionId = ShoppingSectionEntity.ID_THE_REST, weekId = _shoppingWeek.value
+            ), _shoppingWeek.value)
+            repository.rememberShoppingItem(entry.name)
+            markShoppingChanged()
+        }
+    }
+
+    fun undoQuickAdd(change: KitchenRepository.QuickAddChange) = shoppingAction {
+        repository.undoQuickAdd(change)
+        markShoppingChanged()
+    }
+
+    fun confirmShoppingStock(item: ShoppingItemEntity) = shoppingAction {
+        repository.saveShoppingLayout(ShoppingMetadata.checkStock(item.syncId), "false")
+    }
+
     fun saveAisleOrder(names: List<String>) {
-        shoppingAction { repository.saveShoppingLayout(com.example.pantrypal.util.ShoppingAisles.ORDER_KEY,
+        shoppingAction { repository.saveShoppingLayout(com.example.pantrypal.util.ShoppingAisles.orderKey(shoppingProfile.value),
             com.google.gson.Gson().toJson(com.example.pantrypal.util.ShoppingAisles.cleanOrder(names))) }
     }
 
     fun assignAisle(name: String, aisle: String) {
-        shoppingAction { repository.saveShoppingLayout(com.example.pantrypal.util.ShoppingAisles.assignmentKey(name), aisle) }
+        shoppingAction { repository.saveShoppingLayout(com.example.pantrypal.util.ShoppingAisles.assignmentKey(name, shoppingProfile.value), aisle) }
     }
 
     fun moveShoppingItem(item: ShoppingItemEntity, section: ShoppingSectionEntity) {
@@ -323,9 +370,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     val shoppingLoading = MutableStateFlow(true)
     val shoppingError = MutableStateFlow<String?>(null)
 
-    private fun shoppingAction(block: suspend () -> Unit) {
+    private fun shoppingAction(onSuccess: () -> Unit = {}, block: suspend () -> Unit) {
         viewModelScope.launch {
-            try { block(); shoppingError.value = null }
+            try { block(); shoppingError.value = null; onSuccess() }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (error: Exception) { shoppingError.value = error.message ?: "Shopping change could not be saved. Try again." }
         }
@@ -465,78 +512,60 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
-    fun buildShoppingListForWeek(week: String) {
-        _shoppingWeek.value = week
-        action {
-            val ingredients = mealsForShopping(repository.allMeals.first(), week)
-            val inventory = repository.currentInventory.first()
-            commitShoppingPreview(
-                ShoppingBuildPreview(
-                    weekId = week,
-                    lines = reconcileShoppingIngredients(ingredients, inventory)
-                )
-            )
-        }
-    }
+    fun buildShoppingListForWeek(week: String) = previewShoppingListForWeek(week)
 
     fun previewShoppingListForWeek(week: String) {
         _shoppingWeek.value = week
         action {
-            val ingredients = mealsForShopping(repository.allMeals.first(), week)
-            _shoppingBuildPreview.value = ShoppingBuildPreview(
-                weekId = week,
-                lines = reconcileShoppingIngredients(ingredients, repository.currentInventory.first())
-            )
+            repository.transaction {
+                _shoppingBuildPreview.value = ShoppingBuildPreview(
+                    weekId = week,
+                    lines = reconcileShoppingIngredients(mealsForShopping(repository.allMeals.first(), week), repository.currentInventory.first()),
+                    existingItems = repository.shoppingList.first(),
+                    sections = repository.shoppingSections.first(),
+                    layout = repository.shoppingLayoutSnapshot()
+                )
+            }
         }
     }
 
-    fun dismissShoppingBuildPreview() {
-        _shoppingBuildPreview.value = null
-    }
+    fun dismissShoppingBuildPreview() { _shoppingBuildPreview.value = null }
 
-    fun commitShoppingBuildPreview(includeCheckStock: Boolean = true) {
+    fun commitShoppingBuildPreview(
+        lines: List<ShoppingReconciliationLine>,
+        replaceEdited: Boolean = false,
+        onSuccess: () -> Unit = {}
+    ) {
         val preview = _shoppingBuildPreview.value ?: return
-        action {
-            commitShoppingPreview(preview, includeCheckStock)
+        action(onSuccess) {
+            repository.transaction {
+                require(repository.shoppingList.first().toSet() == preview.existingItems.toSet() &&
+                    repository.shoppingSections.first().toSet() == preview.sections.toSet() &&
+                    repository.shoppingLayoutSnapshot() == preview.layout) {
+                    "Your shared list changed during review. Close this preview and review it again."
+                }
+                planShoppingUpdate(lines, preview.existingItems, preview.sections, preview.weekId, preview.layout, replaceEdited)
+                    .forEach { change ->
+                        when (change.kind) {
+                            ShoppingChangeKind.ADD -> repository.insertReviewedShoppingItem(change.item)
+                            ShoppingChangeKind.UPDATE -> repository.updateShoppingItem(change.item)
+                            ShoppingChangeKind.REMOVE -> {
+                                repository.deleteShoppingItem(change.item)
+                                repository.deleteShoppingMetadata(ShoppingMetadata.baseline(change.item.syncId))
+                                repository.deleteShoppingMetadata(ShoppingMetadata.checkStock(change.item.syncId))
+                            }
+                            ShoppingChangeKind.KEEP -> Unit
+                        }
+                        if (change.kind == ShoppingChangeKind.ADD || change.kind == ShoppingChangeKind.UPDATE) {
+                            repository.saveShoppingLayout(ShoppingMetadata.baseline(change.item.syncId), ShoppingMetadata.fingerprint(change.item))
+                            repository.saveShoppingLayout(ShoppingMetadata.checkStock(change.item.syncId), change.checkStock.toString())
+                            repository.rememberShoppingItem(change.item.name)
+                        }
+                    }
+                markShoppingChanged()
+            }
             _shoppingBuildPreview.value = null
         }
-    }
-
-    private suspend fun commitShoppingPreview(
-        preview: ShoppingBuildPreview,
-        includeCheckStock: Boolean = true
-    ) = repository.transaction {
-            val week = preview.weekId
-            val existing = repository.shoppingList.first()
-            val sections = repository.shoppingSections.first()
-            val recurringSectionIds = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
-            val namesAlreadyCovered = existing.filter {
-                it.sectionId in recurringSectionIds ||
-                    (it.weekId == week && it.sectionId != ShoppingSectionEntity.ID_MEAL_PLAN)
-            }.map { normalizeShoppingName(it.name) }.toSet()
-
-            repository.deleteShoppingItemsInSectionForWeek(ShoppingSectionEntity.ID_MEAL_PLAN, week)
-            markShoppingChanged()
-            preview.lines
-                .filter {
-                    it.status == ShoppingNeedStatus.NEED_TO_BUY ||
-                        (includeCheckStock && it.status == ShoppingNeedStatus.CHECK_STOCK)
-                }
-                .forEach { line ->
-                repository.rememberShoppingItem(line.name)
-                if (normalizeShoppingName(line.name) !in namesAlreadyCovered) {
-                    repository.addShoppingItem(
-                        ShoppingItemEntity(
-                            name = line.name,
-                            quantity = line.requiredQuantity,
-                            unit = line.unit,
-                            frequency = ShoppingItemEntity.FREQ_ONE_OFF,
-                            sectionId = ShoppingSectionEntity.ID_MEAL_PLAN,
-                            weekId = week
-                        )
-                    )
-                }
-            }
     }
 
     fun updateMealWeek(week: MealWeekEntity, name: String, emoji: String, onSaved: () -> Unit = {}) {
@@ -766,8 +795,22 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
-    fun finishShopping(weekId: String, storageLocation: String) = action {
-        repository.finishShopping(weekId, storageLocation)
+    fun finishShopping(
+        weekId: String,
+        locations: Map<String, String>,
+        defaultLocation: String,
+        updatePantry: Boolean,
+        onFinished: (Int) -> Unit
+    ) {
+        var count = 0
+        action(onSuccess = { onFinished(count) }) {
+            count = repository.finishShopping(weekId, locations, defaultLocation, updatePantry)
+            markShoppingChanged()
+        }
+    }
+
+    fun prepareNextShop(onSuccess: () -> Unit = {}) = action(onSuccess) {
+        repository.prepareNextShop()
         markShoppingChanged()
     }
 
@@ -831,7 +874,10 @@ fun InventoryWithItemMap.toUiModel(totalQuantity: Double = quantity): InventoryU
 
 data class ShoppingBuildPreview(
     val weekId: String,
-    val lines: List<ShoppingReconciliationLine>
+    val lines: List<ShoppingReconciliationLine>,
+    val existingItems: List<ShoppingItemEntity>,
+    val sections: List<ShoppingSectionEntity>,
+    val layout: Map<String, String>
 )
 
 class MainViewModelFactory(private val repository: KitchenRepository, private val application: Application) : ViewModelProvider.Factory {
