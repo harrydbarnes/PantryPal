@@ -100,9 +100,15 @@ class KitchenRepository(
 
     suspend fun prepareNextShop() = shoppingTransaction {
         val recurring = shoppingSections.first().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
-        val items = shoppingDao.getAllShoppingItemsSnapshot().filter { it.isChecked && it.sectionId in recurring }
-        items.forEach { deleteShoppingMetadata(com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)) }
-        shoppingDao.resetCheckedRecurringItems()
+        val layout = shoppingLayoutSnapshot()
+        val items = shoppingDao.getAllShoppingItemsSnapshot().filter {
+            it.isChecked && it.sectionId in recurring &&
+                layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] == "true"
+        }
+        items.forEach {
+            shoppingDao.updateShoppingItem(it.copy(isChecked = false))
+            deleteShoppingMetadata(com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId))
+        }
     }
 
     /** Exact insert is used only by a reviewed plan delta, never to increment a protected edit. */

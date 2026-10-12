@@ -40,6 +40,18 @@ class ShoppingCompletionTest {
         assertFalse(db.shoppingDao().getAllShoppingItemsSnapshot().single().isChecked)
         assertEquals(1, db.shoppingDao().getShoppingArchiveSnapshot().size)
     }
+    @Test fun nextShopDoesNotResetNewUnfinishedPurchases() = runBlocking {
+        val regular = ShoppingItemEntity(name = "Milk", isChecked = true, sectionId = 1)
+        db.shoppingDao().insertShoppingItem(regular)
+        repo.finishShopping("A", emptyMap(), "Pantry", false)
+        val newlyBought = ShoppingItemEntity(name = "Bread", isChecked = true, sectionId = 1)
+        db.shoppingDao().insertShoppingItem(newlyBought)
+        repo.prepareNextShop()
+        val rows = db.shoppingDao().getAllShoppingItemsSnapshot().associateBy { it.name }
+        assertFalse(rows.getValue("Milk").isChecked)
+        assertTrue(rows.getValue("Bread").isChecked)
+    }
+
     @Test fun perItemLocationsAndNoPantryOptionAreRespected() = runBlocking {
         val milk = ShoppingItemEntity(name = "Milk", isChecked = true, sectionId = 3, weekId = "A")
         val peas = ShoppingItemEntity(name = "Peas", isChecked = true, sectionId = 3, weekId = "A")
