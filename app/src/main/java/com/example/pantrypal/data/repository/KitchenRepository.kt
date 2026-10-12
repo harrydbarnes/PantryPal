@@ -70,7 +70,8 @@ class KitchenRepository(
         weekId: String,
         locations: Map<String, String>,
         defaultLocation: String,
-        updatePantry: Boolean
+        updatePantry: Boolean,
+        reviewedItems: List<ShoppingItemEntity>? = null
     ): Int = transaction {
         val sections = shoppingSections.first()
         val recurringIds = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
@@ -79,10 +80,15 @@ class KitchenRepository(
             it.isChecked && layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] != "true" &&
                 (it.sectionId in recurringIds || it.weekId == null || it.weekId == weekId)
         }
+        require(reviewedItems == null || checked.toSet() == reviewedItems.toSet()) {
+            "The purchases changed while you were finishing. Review them again before saving."
+        }
+        val tripId = UUID.randomUUID().toString()
+        val completedAt = System.currentTimeMillis()
         checked.groupBy { locations[it.syncId] ?: defaultLocation }.forEach { (location, items) ->
             require(location in InventoryEntity.STORAGE_LOCATIONS) { "Choose a valid storage location." }
             if (updatePantry) putAwayShoppingItems(items, location)
-            completeShoppingTrip(items, sections, weekId, if (updatePantry) location else null)
+            completeShoppingTrip(items, sections, weekId, if (updatePantry) location else null, tripId, completedAt)
         }
         checked.size
     }
@@ -295,7 +301,9 @@ class KitchenRepository(
         checkedItems: List<ShoppingItemEntity>,
         sections: List<ShoppingSectionEntity>,
         weekId: String,
-        storageLocation: String?
+        storageLocation: String?,
+        tripId: String = UUID.randomUUID().toString(),
+        completedAt: Long = System.currentTimeMillis()
     ) {
         require(weekId.isNotBlank()) { "Shopping week must not be blank." }
         storageLocation?.let {
@@ -312,8 +320,6 @@ class KitchenRepository(
                 (it.sectionId in recurringSectionIds || it.weekId == null || it.weekId == weekId)
         }
         val sectionNames = sections.associate { it.sectionId to it.name }
-        val completedAt = System.currentTimeMillis()
-        val tripId = UUID.randomUUID().toString()
         val archivedItems = eligibleItems.map { item ->
             ShoppingArchiveEntity(
                 tripId = tripId,

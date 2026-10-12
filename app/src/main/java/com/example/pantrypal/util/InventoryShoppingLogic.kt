@@ -133,15 +133,16 @@ fun reconcileShoppingIngredients(
     ingredients.map(String::trim).filter(String::isNotEmpty).map(::parseShoppingRequirement).forEach { next ->
         val index = requirements.indexOfFirst {
             it.normalizedName == next.normalizedName &&
-                (it.unit == next.unit || (it.unit != null && next.unit != null &&
-                    convertShoppingQuantity(next.quantity, next.unit, it.unit) != null))
+                convertShoppingQuantity(next.quantity, next.unit ?: "pcs", it.unit ?: "pcs") != null
         }
         if (index < 0) requirements += next
         else {
             val previous = requirements[index]
-            val amount = if (previous.unit != null && next.unit != null)
-                convertShoppingQuantity(next.quantity, next.unit, previous.unit)!! else next.quantity
-            requirements[index] = previous.copy(quantity = previous.quantity + amount)
+            val amount = convertShoppingQuantity(next.quantity, next.unit ?: "pcs", previous.unit ?: "pcs")!!
+            requirements[index] = previous.copy(
+                quantity = previous.quantity + amount,
+                unit = if (previous.unit == null || next.unit == null) null else previous.unit
+            )
         }
     }
     return requirements.map { ingredient ->

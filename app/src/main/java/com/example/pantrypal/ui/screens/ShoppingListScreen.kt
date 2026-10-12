@@ -546,7 +546,7 @@ fun ShoppingListScreen(
             error = actionError,
             onDismiss = { showPutAwayDialog = false },
             onFinish = { locations, defaultLocation, updatePantry ->
-                viewModel.finishShopping(selectedWeek, locations, defaultLocation, updatePantry) { count ->
+                viewModel.finishShopping(selectedWeek, locations, defaultLocation, updatePantry, unfinishedPurchases) { count ->
                     showPutAwayDialog = false
                     finishedCount = count
                 }

@@ -45,6 +45,7 @@ class ShoppingCompletionTest {
         val peas = ShoppingItemEntity(name = "Peas", isChecked = true, sectionId = 3, weekId = "A")
         db.shoppingDao().insertShoppingItem(milk); db.shoppingDao().insertShoppingItem(peas)
         assertEquals(2, repo.finishShopping("A", mapOf(milk.syncId to "Fridge", peas.syncId to "Freezer"), "Pantry", true))
+        assertEquals(1, db.shoppingDao().getShoppingArchiveSnapshot().map { it.tripId }.distinct().size)
         assertEquals(setOf("Fridge", "Freezer"), db.inventoryDao().getAllInventorySnapshot().map { it.storageLocation }.toSet())
         val soap = ShoppingItemEntity(name = "Soap", isChecked = true, sectionId = 3, weekId = "A")
         db.shoppingDao().insertShoppingItem(soap)
@@ -52,6 +53,17 @@ class ShoppingCompletionTest {
         assertEquals(2, db.inventoryDao().getAllInventorySnapshot().size)
         assertNull(db.shoppingDao().getShoppingArchiveSnapshot().first { it.name == "Soap" }.storageLocation)
     }
+    @Test fun changedPurchasesRequireAnotherReview() = runBlocking {
+        val milk = ShoppingItemEntity(name = "Milk", isChecked = true, sectionId = 3, weekId = "A")
+        val id = db.shoppingDao().insertShoppingItem(milk)
+        val reviewed = milk.copy(shoppingId = id)
+        repo.updateShoppingItem(reviewed.copy(quantity = 2.0))
+        try { repo.finishShopping("A", emptyMap(), "Pantry", true, listOf(reviewed)); fail("Expected stale completion rejection") }
+        catch (_: IllegalArgumentException) {}
+        assertTrue(db.inventoryDao().getAllInventorySnapshot().isEmpty())
+        assertTrue(db.shoppingDao().getShoppingArchiveSnapshot().isEmpty())
+    }
+
     @Test fun quickAddUndoCannotOverwriteAnotherPersonsEdit() = runBlocking {
         val change = repo.quickAddShoppingItem(ShoppingItemEntity(name = "Milk", quantity = 2.0, sectionId = 3, weekId = "A"), "A")
         repo.updateShoppingItem(change.after.copy(quantity = 3.0))

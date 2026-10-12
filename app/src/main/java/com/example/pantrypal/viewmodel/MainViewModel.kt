@@ -804,11 +804,12 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         locations: Map<String, String>,
         defaultLocation: String,
         updatePantry: Boolean,
+        reviewedItems: List<ShoppingItemEntity>,
         onFinished: (Int) -> Unit
     ) {
         var count = 0
         action(onSuccess = { onFinished(count) }) {
-            count = repository.finishShopping(weekId, locations, defaultLocation, updatePantry)
+            count = repository.finishShopping(weekId, locations, defaultLocation, updatePantry, reviewedItems)
             markShoppingChanged()
         }
     }

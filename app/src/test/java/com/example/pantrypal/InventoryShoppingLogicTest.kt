@@ -132,6 +132,14 @@ class InventoryShoppingLogicTest {
         assertEquals("Expired stock excluded.", result.stockNote)
     }
 
+    @Test
+    fun `unspecified and counted ingredients share one requirement without reusing stock`() {
+        val result = reconcileShoppingIngredients(listOf("Onions", "2 onions"), listOf(inventory("Onion", quantity = 2.0)), now)
+        assertEquals(1, result.size)
+        assertEquals(3.0, result.single().requiredQuantity, 0.0)
+        assertEquals(ShoppingNeedStatus.CHECK_STOCK, result.single().status)
+    }
+
     private fun millis(date: LocalDate): Long =
         date.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
 
