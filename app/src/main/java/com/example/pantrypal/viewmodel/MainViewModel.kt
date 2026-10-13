@@ -292,7 +292,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             change = repository.quickAddShoppingItem(ShoppingItemEntity(
                 name = entry.name, quantity = entry.quantity, unit = entry.unit,
                 sectionId = ShoppingSectionEntity.ID_THE_REST, weekId = _shoppingWeek.value
-            ), _shoppingWeek.value)
+            ), _shoppingWeek.value, inheritUnit = entry.unit == "pcs" &&
+                !Regex("^\\s*[0-9.,/]+\\s+(?:pcs?|pieces?)\\b", RegexOption.IGNORE_CASE).containsMatchIn(text))
             repository.rememberShoppingItem(entry.name)
             markShoppingChanged()
         }

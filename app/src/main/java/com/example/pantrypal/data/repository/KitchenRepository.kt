@@ -141,20 +141,21 @@ class KitchenRepository(
 
     data class QuickAddChange(val before: ShoppingItemEntity?, val after: ShoppingItemEntity)
 
-    suspend fun quickAddShoppingItem(item: ShoppingItemEntity, weekId: String): QuickAddChange = shoppingTransaction {
+    suspend fun quickAddShoppingItem(item: ShoppingItemEntity, weekId: String, inheritUnit: Boolean = false): QuickAddChange = shoppingTransaction {
         requireValidShoppingItem(item)
         val recurring = shoppingSections.first().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
-        val existing = shoppingDao.getAllShoppingItemsSnapshot().firstOrNull {
+        val beforeRows = shoppingDao.getAllShoppingItemsSnapshot()
+        val existing = beforeRows.firstOrNull {
             !it.isChecked && (it.weekId == weekId || it.weekId == null || it.sectionId in recurring) &&
                 normalizeShoppingName(it.name) == normalizeShoppingName(item.name) &&
                 com.example.pantrypal.util.convertShoppingQuantity(item.quantity, item.unit, it.unit) != null
         }
         val saved = if (database != null) database.shoppingListDao().upsertShoppingItem(item.name, item.quantity, item.source,
-            weekId, unit = item.unit) else if (existing != null) {
+            weekId, unit = item.unit.takeUnless { inheritUnit }) else if (existing != null) {
             val quantity = existing.quantity + com.example.pantrypal.util.convertShoppingQuantity(item.quantity, item.unit, existing.unit)!!
             existing.copy(quantity = quantity).also { requireValidShoppingItem(it); shoppingDao.updateShoppingItem(it) }
         } else item.copy(shoppingId = shoppingDao.insertShoppingItem(item))
-        QuickAddChange(existing, saved)
+        QuickAddChange(beforeRows.firstOrNull { it.syncId == saved.syncId }, saved)
     }
 
     suspend fun undoQuickAdd(change: QuickAddChange) = shoppingTransaction {

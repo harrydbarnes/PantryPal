@@ -172,7 +172,7 @@ abstract class ShoppingListDao {
         val event = logConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = stock.quantity, type = ConsumptionType.FINISHED))
         val after = stock.copy(quantity = 0.0)
         updateStock(after)
-        val shopping = upsertShoppingItem(item.name, 1.0, "EMPTY_STOCK", weekId, unit = stock.unit)
+        val shopping = upsertShoppingItem(item.name, stock.quantity, "EMPTY_STOCK", weekId, unit = stock.unit)
         return EmptyChange(stock, after, event, before, shopping)
     }
 

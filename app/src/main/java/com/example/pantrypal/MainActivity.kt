@@ -235,7 +235,10 @@ private fun extractShoppingIncoming(intent: Intent?, operationId: String): Shopp
         return ShoppingIncomingRequest(operationId, text, "VOICE")
     }
     if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+        val shared = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+        val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim()
+        val text = if (!subject.isNullOrBlank() && shared.lineSequence().firstOrNull()?.trim() == subject)
+            shared.substringAfter('\n', "") else shared
         if (Regex("https?://\\S+").containsMatchIn(text)) return null
         return ShoppingIncomingRequest(operationId, text, "KEEP_SHARE")
     }
