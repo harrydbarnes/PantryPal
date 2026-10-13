@@ -39,4 +39,25 @@ class ShoppingMigrationTest {
             }
         } finally { context.deleteDatabase(name) }
     }
+    @Test fun roomUpgradeFromEightKeepsShoppingAndCreatesLocalLedger() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val name = "ledger-migration-${java.util.UUID.randomUUID()}.db"
+        val original = androidx.room.Room.databaseBuilder(context, com.example.pantrypal.data.database.KitchenDatabase::class.java, name).build()
+        try {
+            original.shoppingDao().insertShoppingItem(com.example.pantrypal.data.entity.ShoppingItemEntity(name = "Milk", quantity = 2.0))
+            original.openHelper.writableDatabase.apply {
+                execSQL("DROP TABLE purchase_records")
+                execSQL("DROP TABLE receipt_imports")
+                execSQL("PRAGMA user_version = 8")
+            }
+            original.close()
+            val upgraded = androidx.room.Room.databaseBuilder(context, com.example.pantrypal.data.database.KitchenDatabase::class.java, name)
+                .addMigrations(com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_8_9).build()
+            try {
+                assertEquals("Milk", upgraded.shoppingDao().getAllShoppingItemsSnapshot().single().name)
+                assertTrue(upgraded.purchaseRecordDao().records().isEmpty())
+                assertTrue(upgraded.purchaseRecordDao().imports().isEmpty())
+            } finally { upgraded.close() }
+        } finally { original.close(); context.deleteDatabase(name) }
+    }
 }

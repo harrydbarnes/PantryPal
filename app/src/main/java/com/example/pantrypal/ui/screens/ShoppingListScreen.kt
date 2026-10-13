@@ -307,7 +307,7 @@ fun ShoppingListScreen(
                     ) {
                         Icon(Icons.Default.RestaurantMenu, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Review meal-plan shopping")
+                        Text(if (buildPreview != null) "Resume saved shopping review" else "Review meal-plan shopping")
                     }
                 }
             }

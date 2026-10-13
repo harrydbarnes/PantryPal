@@ -39,7 +39,7 @@ object ShoppingSyncSchema {
         // Separate field records let quantity edits and ticks converge independently.
         for (field in listOf("name", "quantity", "unit", "isChecked", "sectionId", "weekId", "frequency")) {
             val wireField = if (field == "sectionId") "sectionSyncId" else field
-            val value = if (field == "sectionId") "COALESCE((SELECT syncId FROM shopping_sections WHERE sectionId = NEW.sectionId), 'the_rest')"
+            val value = if (field == "sectionId") "COALESCE((SELECT syncId FROM shopping_sections WHERE sectionId = NEW.sectionId), 'THE_REST')"
                 else "COALESCE(CAST(NEW.$field AS TEXT), '')"
             db.execSQL("DROP TRIGGER IF EXISTS shopping_field_$field")
             db.execSQL("""

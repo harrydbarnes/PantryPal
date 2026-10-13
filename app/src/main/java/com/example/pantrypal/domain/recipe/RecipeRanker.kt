@@ -14,25 +14,20 @@ object RecipeRanker {
     ): RecipeMatch {
         val essential = recipe.ingredients.filterNot { it.isOptional }
         val stock = pantry.map { ShoppingStock(it.name, it.quantity, it.unit, it.expirationDate, it.itemId) }
-        // Resolve explicit product links before the same reconciliation used by weekly shopping.
-        val texts = essential.map { shoppingIngredientText(it.name, it.quantity, it.unit) }
-        val linkedStock = stock.flatMap { batch ->
-            val aliases = essential.filter { it.linkedPantryItemId == batch.itemId }.map { it.name }.distinct()
-            if (aliases.isEmpty()) listOf(batch) else aliases.map { batch.copy(name = it) }
-        }
-        val lines = reconcileShoppingStock(texts, linkedStock, now)
+        val reconciliation = reconcileRecipeShopping(essential, stock, now)
+        val lines = reconciliation.lines
         val missing = lines.filter { it.status != ShoppingNeedStatus.ALREADY_AT_HOME }.map { line ->
-            essential.first { normalizeShoppingName(it.name) == line.normalizedName }.copy(
+            essential.first { normalizeShoppingName(reconciliation.ingredientNames.getValue(it)) == line.normalizedName }.copy(
                 quantity = line.buyQuantity, unit = line.unit
             )
         }
         val matched = essential.filter { ingredient ->
-            lines.filter { it.normalizedName == normalizeShoppingName(ingredient.name) }
+            lines.filter { it.normalizedName == normalizeShoppingName(reconciliation.ingredientNames.getValue(ingredient)) }
                 .all { it.status == ShoppingNeedStatus.ALREADY_AT_HOME }
         }
         val soonCutoff = now + useSoonWindowMillis
         val expiring = matched.filter { ingredient -> stock.any {
-            normalizeShoppingName(it.name) == normalizeShoppingName(ingredient.name) &&
+            normalizeShoppingName(it.name) == normalizeShoppingName(reconciliation.ingredientNames.getValue(ingredient)) &&
                 it.expirationDate?.let { date -> date in now..soonCutoff } == true
         } }.distinctBy { it.normalizedName }
 
@@ -91,19 +86,4 @@ object RecipeRanker {
         )
     }
 
-    private fun RecipeIngredient.matches(pantryItem: RecipePantryIngredient): Boolean {
-        if (linkedPantryItemId != null && linkedPantryItemId == pantryItem.itemId) return true
-        val ingredientName = normalizedName.ifBlank {
-            RecipeIngredientNormalizer.normalizeName(name)
-        }
-        val pantryName = RecipeIngredientNormalizer.normalizeName(pantryItem.name)
-        if (ingredientName.isBlank() || pantryName.isBlank()) return false
-        if (ingredientName == pantryName) return true
-
-        val ingredientTokens = ingredientName.split(' ')
-        val pantryTokens = pantryName.split(' ')
-        return ingredientTokens.size > 1 &&
-            pantryTokens.size > 1 &&
-            (ingredientTokens.containsAll(pantryTokens) || pantryTokens.containsAll(ingredientTokens))
-    }
 }

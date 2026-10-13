@@ -15,6 +15,7 @@ data class PurchaseRecordEntity(
     val unit: String,
     val stockRecorded: Boolean,
     val completed: Boolean,
+    val storageLocation: String? = null,
     val purchasedAt: Long = System.currentTimeMillis()
 )
 

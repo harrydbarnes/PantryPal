@@ -81,4 +81,14 @@ class RecipeNormalizationRankingTest {
         val unmeasured = Recipe(title = "Beans", ingredients = listOf(RecipeIngredientNormalizer.parse("beans")))
         assertTrue(!RecipeRanker.match(unmeasured, listOf(RecipePantryIngredient(1, "Beans", 2.0, "pcs"))).canCookNow)
     }
+    @Test fun `linked aliases share stock rather than each using the whole batch`() {
+        val ingredients = listOf(
+            RecipeIngredientNormalizer.parse("300 g spaghetti").copy(linkedPantryItemId = 1),
+            RecipeIngredientNormalizer.parse("300 g noodles").copy(linkedPantryItemId = 1)
+        )
+        val match = RecipeRanker.match(Recipe(title = "Linked pasta", ingredients = ingredients),
+            listOf(RecipePantryIngredient(1, "Pasta", 500.0, "g")))
+        assertTrue(!match.canCookNow)
+        assertEquals(100.0, match.missingIngredients.single().quantity!!, 0.001)
+    }
 }

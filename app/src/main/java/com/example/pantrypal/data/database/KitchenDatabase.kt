@@ -197,7 +197,7 @@ abstract class KitchenDatabase : RoomDatabase() {
 
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("CREATE TABLE IF NOT EXISTS purchase_records (purchaseId TEXT NOT NULL PRIMARY KEY, shoppingSyncId TEXT, receiptId TEXT, name TEXT NOT NULL, quantity REAL NOT NULL, unit TEXT NOT NULL, stockRecorded INTEGER NOT NULL, completed INTEGER NOT NULL, purchasedAt INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS purchase_records (purchaseId TEXT NOT NULL PRIMARY KEY, shoppingSyncId TEXT, receiptId TEXT, name TEXT NOT NULL, quantity REAL NOT NULL, unit TEXT NOT NULL, stockRecorded INTEGER NOT NULL, completed INTEGER NOT NULL, storageLocation TEXT, purchasedAt INTEGER NOT NULL)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS receipt_imports (receiptId TEXT NOT NULL PRIMARY KEY, importedAt INTEGER NOT NULL)")
             }
         }

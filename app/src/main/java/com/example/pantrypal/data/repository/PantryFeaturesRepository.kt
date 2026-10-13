@@ -183,11 +183,12 @@ class PantryFeaturesRepository(
                 (it.weekId == weekId || it.weekId == null || it.sectionId in recurring) &&
                     layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] != "true"
             }
-            val lines = com.example.pantrypal.util.reconcileShoppingIngredients(
-                ingredients.filterNot { it.isOptional }.map {
-                    com.example.pantrypal.util.shoppingIngredientText(it.name, it.quantity, it.unit)
-                }, kitchenRepository.currentInventory.first()
-            )
+            val stock = kitchenRepository.currentInventory.first().map {
+                com.example.pantrypal.util.ShoppingStock(it.name, it.quantity, it.unit, it.expirationDate, it.itemId)
+            }
+            val lines = com.example.pantrypal.domain.recipe.reconcileRecipeShopping(
+                ingredients.filterNot { it.isOptional }, stock
+            ).lines
             var added = 0
             lines.forEach { line ->
                 val covered = existing.filter { normalizeShoppingName(it.name) == line.normalizedName }.sumOf {
@@ -259,7 +260,8 @@ class PantryFeaturesRepository(
                 shoppingSyncId = link?.takeIf { it.startsWith("shopping:") }?.removePrefix("shopping:"),
                 name = candidate.name, quantity = candidate.quantity, unit = candidate.unit,
                 stockRecorded = false, completed = link?.startsWith("shopping:") != true, purchasedAt = now
-            )).copy(receiptId = receiptId, stockRecorded = true))
+            )).copy(receiptId = receiptId, stockRecorded = true,
+                storageLocation = if (previous?.stockRecorded == true) previous.storageLocation else storageLocation))
             priceHistoryDao.upsertAll(listOf(PriceHistoryEntity(
                 normalizedItemName = candidate.normalizedName, displayName = candidate.name,
                 priceMinor = candidate.totalPriceMinor, quantity = candidate.quantity, unit = candidate.unit,

@@ -100,9 +100,11 @@ class KitchenRepository(
                 purchases.put((previous ?: com.example.pantrypal.data.entity.PurchaseRecordEntity(
                     shoppingSyncId = item.syncId, name = item.name, quantity = item.quantity, unit = item.unit,
                     stockRecorded = false, completed = false
-                )).copy(stockRecorded = previous?.stockRecorded == true || updatePantry, completed = true))
+                )).copy(stockRecorded = previous?.stockRecorded == true || updatePantry, completed = true,
+                    storageLocation = if (previous?.stockRecorded == true) previous.storageLocation else if (updatePantry) location else null))
+                completeShoppingTrip(listOf(item), sections, weekId,
+                    if (previous?.stockRecorded == true) previous.storageLocation else if (updatePantry) location else null, tripId, completedAt)
             }
-            completeShoppingTrip(items, sections, weekId, if (updatePantry) location else null, tripId, completedAt)
         }
         checked.size
     }

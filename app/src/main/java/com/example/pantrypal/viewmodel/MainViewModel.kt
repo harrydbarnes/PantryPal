@@ -421,7 +421,10 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     private val _shoppingReviewOpen = MutableStateFlow(_shoppingBuildPreview.value != null)
     val shoppingReviewOpen = _shoppingReviewOpen.asStateFlow()
     fun pauseShoppingReview() { _shoppingReviewOpen.value = false }
-    fun resumeShoppingReview() { _shoppingReviewOpen.value = true }
+    fun resumeShoppingReview() {
+        _shoppingBuildPreview.value?.let { setShoppingWeek(it.weekId) }
+        _shoppingReviewOpen.value = true
+    }
 
     private fun saveShoppingDraft(draft: ShoppingBuildPreview?) {
         _shoppingBuildPreview.value = draft
