@@ -300,9 +300,7 @@ class PantryFeaturesRepository(
         backupCodec.encode(
             BackupDocument(
                 appVersion = BuildConfig.VERSION_NAME,
-                payload = snapshot().toPayload().copy(
-                    shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value },
-                    purchaseRecords = database.purchaseRecordDao().records(), receiptImports = database.purchaseRecordDao().imports())
+                payload = completeBackupPayload()
             ),
             pretty = true
         )
@@ -321,9 +319,7 @@ class PantryFeaturesRepository(
     suspend fun exportHouseholdSnapshot(): String = withContext(Dispatchers.Default) {
         val backup = BackupDocument(
             appVersion = BuildConfig.VERSION_NAME,
-            payload = snapshot().toPayload().copy(
-                    shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value },
-                    purchaseRecords = database.purchaseRecordDao().records(), receiptImports = database.purchaseRecordDao().imports())
+            payload = completeBackupPayload()
         )
         val now = System.currentTimeMillis()
         val householdId = householdId()
@@ -367,6 +363,14 @@ class PantryFeaturesRepository(
                 Result.failure(error)
             }
         }
+    }
+
+    private suspend fun completeBackupPayload(): BackupPayload = database.withTransaction {
+        snapshot().toPayload().copy(
+            shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value },
+            purchaseRecords = database.purchaseRecordDao().records(),
+            receiptImports = database.purchaseRecordDao().imports()
+        )
     }
 
     private suspend fun snapshot(): BackupEntitySnapshot = database.withTransaction {

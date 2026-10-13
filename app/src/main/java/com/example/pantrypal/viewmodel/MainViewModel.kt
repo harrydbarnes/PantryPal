@@ -90,7 +90,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         rotatingWeek(savedWeek, savedAnchorMonday, LocalDate.now())
     )
     val currentWeek: StateFlow<String> = _currentWeek.asStateFlow()
-    private val _shoppingWeek = MutableStateFlow(prefs.getString("active_shopping_week", null) ?: _currentWeek.value)
+    private val _shoppingWeek = MutableStateFlow(prefs.getString("active_shopping_week", null) ?: _currentWeek.value).also {
+        prefs.edit().putString("active_shopping_week", it.value).apply()
+    }
     val shoppingWeek: StateFlow<String> = _shoppingWeek.asStateFlow()
 
     private val _mealPlanStyle = MutableStateFlow(prefs.getString("meal_plan_style", null))
