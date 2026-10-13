@@ -126,7 +126,7 @@ abstract class ShoppingListDao {
             require(previous == null || convertShoppingQuantity(row.quantity, row.unit, previous.unit)?.let {
                 kotlin.math.abs(it - previous.quantity) < 0.000001 } == true) { "${row.name} changed after receipt import. Review its purchased quantity." }
             val putAwayLocation = if (restock && previous?.stockRecorded != true && row.quantity > 0) this.restock(row) else null
-            savePurchase((previous ?: PurchaseRecordEntity(shoppingSyncId = row.syncId, name = row.name, quantity = row.quantity,
+            if (row.quantity > 0) savePurchase((previous ?: PurchaseRecordEntity(shoppingSyncId = row.syncId, name = row.name, quantity = row.quantity,
                 unit = row.unit, stockRecorded = false, completed = false)).copy(completed = true,
                 stockRecorded = previous?.stockRecorded == true || restock,
                 storageLocation = if (previous?.stockRecorded == true) previous.storageLocation else putAwayLocation))

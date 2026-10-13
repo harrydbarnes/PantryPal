@@ -77,24 +77,22 @@ class KeepApiSyncWorker(context: Context, parameters: WorkerParameters) : Corout
                         if (note.get("trashed")?.asBoolean == true || note.get("title")?.asString?.contains("Shopping", true) != true) return@forEach
                         val name = note.get("name")?.asString ?: return@forEach
                         val lines = note.getAsJsonObject("body")?.getAsJsonObject("list")?.getAsJsonArray("listItems") ?: return@forEach
-                        val flattened = mutableListOf<Pair<String, com.google.gson.JsonObject>>()
-                        lines.forEachIndexed { index, value ->
-                            val line = value.asJsonObject
-                            flattened += index.toString() to line
-                            line.getAsJsonArray("childListItems")?.forEachIndexed { child, childValue ->
-                                flattened += "$index/$child" to childValue.asJsonObject
-                            }
+                        val prefix = "keep:" + hash(email) + ":" + hash("$name|$week") + ":"
+                        val entries = com.example.pantrypal.domain.shopping.KeepShoppingNoteParser.parse(lines)
+                        val seen = mutableSetOf<String>()
+                        for (line in entries) {
+                            val key = prefix + hash(line.identity)
+                            seen += key
+                            if (line.checked) {
+                                val previous = db.shoppingListDao().ingestState(key)
+                                if (previous == null || previous.quantity != 0.0)
+                                    db.shoppingListDao().saveIngestState(ShoppingIngestEntity(key, unit = line.item.unit.orEmpty()))
+                            } else if (db.shoppingListDao().importKeepItem(key, line.item, week)) imported++
                         }
-                        for ((path, line) in flattened) {
-                            val text = line.getAsJsonObject("text")?.get("text")?.asString.orEmpty()
-                            ShoppingListIngestParser.parseKeepSharedText(text).forEach { item ->
-                                val key = "keep:" + hash("$email|$name|$path|${item.name.trim().lowercase(java.util.Locale.UK)}")
-                                if (line.get("checked")?.asBoolean == true) {
-                                    db.shoppingListDao().saveIngestState(ShoppingIngestEntity(key, unit = item.unit.orEmpty()))
-                                } else if (db.shoppingListDao().importKeepItem(key, item, week)) imported++
-                            }
+                        // Removing and later re-adding a Keep entry represents a new request.
+                        db.shoppingListDao().ingestStates().filter { it.ingestKey.startsWith(prefix) && it.ingestKey !in seen && it.quantity != 0.0 }
+                            .forEach { db.shoppingListDao().saveIngestState(it.copy(quantity = 0.0)) }
 
-                        }
                     }
                 }
                 pageToken = response.get("nextPageToken")?.asString?.takeIf { it.isNotBlank() }
