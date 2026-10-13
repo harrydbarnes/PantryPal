@@ -2,7 +2,7 @@ package com.example.pantrypal.integration
 
 import android.content.Context
 import androidx.annotation.RequiresApi
-import androidx.appfunctions.AppFunctionDeclaration
+import androidx.appfunctions.AppFunction
 import androidx.appfunctions.AppFunctionInvalidArgumentException
 import androidx.appfunctions.AppFunctionService
 import androidx.appfunctions.AppFunctionServiceEntryPoint
@@ -44,7 +44,7 @@ abstract class PantryPalVoiceFunctions : AppFunctionService() {
      * @param store Optional Tesco, Aldi or Either preference. Omit this to keep remembered shops.
      * @return The number of shopping entries accepted.
      */
-    @AppFunctionDeclaration(isDescribedByKDoc = true)
+    @AppFunction(isDescribedByKDoc = true)
     suspend fun addShoppingItems(items: List<String>, store: String? = null): Int {
         return try { ShoppingVoiceEntry.addShoppingItems(applicationContext, items, store) }
         catch (error: IllegalArgumentException) { throw AppFunctionInvalidArgumentException(error.message ?: "Check the shopping items.") }

@@ -942,11 +942,11 @@ fun ShoppingListItemRow(
 ) {
     var actionsExpanded by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle)
+        modifier = Modifier.fillMaxWidth().clickable(enabled = item.quantity > 0 || item.isChecked, onClick = onToggle)
             .padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(checked = item.isChecked, onCheckedChange = { onToggle() })
+        Checkbox(checked = item.isChecked, enabled = item.quantity > 0 || item.isChecked, onCheckedChange = { onToggle() })
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(

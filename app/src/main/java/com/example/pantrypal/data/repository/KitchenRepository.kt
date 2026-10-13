@@ -136,7 +136,7 @@ class KitchenRepository(
     /** Exact insert is used only by a reviewed plan delta, never to increment a protected edit. */
     suspend fun insertReviewedShoppingItem(item: ShoppingItemEntity) {
         requireValidShoppingItem(item)
-        shoppingDao.insertShoppingItem(item)
+        shoppingDao.insertShoppingItem(enrichShoppingItem(item))
     }
 
     data class QuickAddChange(val before: ShoppingItemEntity?, val after: ShoppingItemEntity)
@@ -280,13 +280,13 @@ class KitchenRepository(
                         )
             }
             if (existing == null) {
-                shoppingDao.insertShoppingItem(item)
+                shoppingDao.insertShoppingItem(enrichShoppingItem(item))
             } else {
                 val combinedQuantity = existing.quantity + item.quantity
                 if (combinedQuantity.isFinite()) {
                     shoppingDao.updateShoppingItem(existing.copy(quantity = combinedQuantity))
                 } else {
-                    shoppingDao.insertShoppingItem(item)
+                    shoppingDao.insertShoppingItem(enrichShoppingItem(item))
                 }
             }
         }
@@ -315,10 +315,25 @@ class KitchenRepository(
         }
     }
 
+    private suspend fun enrichShoppingItem(row: ShoppingItemEntity): ShoppingItemEntity {
+        val db = database ?: return row
+        val product = db.shoppingListDao().product(row.name)
+        val linked = product?.let { db.shoppingListDao().stock(it.itemId).firstOrNull { batch ->
+            com.example.pantrypal.util.convertShoppingQuantity(row.quantity, row.unit, batch.unit) != null
+        } }
+        return row.copy(inventoryId = row.inventoryId ?: linked?.inventoryId,
+            category = row.category.takeUnless { it == "Uncategorised" } ?: product?.category
+                ?: com.example.pantrypal.domain.shopping.AisleCategoryMapper.categoryFor(row.name),
+            storeTag = row.storeTag.takeUnless { it == com.example.pantrypal.data.entity.StoreTag.EITHER }
+                ?: linked?.preferredStore ?: product?.preferredStore ?: com.example.pantrypal.data.entity.StoreTag.EITHER)
+    }
+
     suspend fun editShoppingItem(syncId: String, edit: (ShoppingItemEntity) -> ShoppingItemEntity) = shoppingTransaction {
         val current = shoppingDao.getAllShoppingItemsSnapshot().firstOrNull { it.syncId == syncId }
             ?: error("This item was removed. Refresh your list.")
-        val updated = edit(current)
+        var updated = edit(current)
+        if (!updated.name.equals(current.name, true)) updated = enrichShoppingItem(updated.copy(inventoryId = null,
+            category = "Uncategorised", storeTag = com.example.pantrypal.data.entity.StoreTag.EITHER))
         requireValidShoppingItem(updated)
         shoppingDao.updateShoppingItem(updated)
     }

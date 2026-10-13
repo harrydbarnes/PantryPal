@@ -125,14 +125,14 @@ abstract class ShoppingListDao {
             val previous = pendingPurchase(row.syncId)
             require(previous == null || convertShoppingQuantity(row.quantity, row.unit, previous.unit)?.let {
                 kotlin.math.abs(it - previous.quantity) < 0.000001 } == true) { "${row.name} changed after receipt import. Review its purchased quantity." }
-            if (restock && previous?.stockRecorded != true && row.quantity > 0) this.restock(row)
+            val putAwayLocation = if (restock && previous?.stockRecorded != true && row.quantity > 0) this.restock(row) else null
             savePurchase((previous ?: PurchaseRecordEntity(shoppingSyncId = row.syncId, name = row.name, quantity = row.quantity,
                 unit = row.unit, stockRecorded = false, completed = false)).copy(completed = true,
                 stockRecorded = previous?.stockRecorded == true || restock,
-                storageLocation = if (previous?.stockRecorded == true) previous.storageLocation else if (restock) "Pantry" else null))
+                storageLocation = if (previous?.stockRecorded == true) previous.storageLocation else putAwayLocation))
             archive(ShoppingArchiveEntity(tripId = trip, weekId = weekId ?: row.weekId ?: "A", name = row.name,
                 quantity = row.quantity, unit = row.unit, sectionName = sections.firstOrNull { it.sectionId == row.sectionId }?.name ?: "The rest",
-                storageLocation = if (previous?.stockRecorded == true) previous.storageLocation else if (restock) "Pantry" else null))
+                storageLocation = if (previous?.stockRecorded == true) previous.storageLocation else putAwayLocation))
             delete(row)
             listOf(ShoppingMetadata.completed(row.syncId), ShoppingMetadata.baseline(row.syncId), ShoppingMetadata.checkStock(row.syncId)).forEach { removeMetadata(it) }
         }
@@ -142,19 +142,21 @@ abstract class ShoppingListDao {
     @Transaction open suspend fun removeTickedOnly(weekId: String? = null, store: StoreTag? = null): Int =
         completeShopAndRestock(weekId, store, restock = false)
 
-    private suspend fun restock(row: ShoppingListEntity) {
+    private suspend fun restock(row: ShoppingListEntity): String {
         val linked = row.inventoryId?.let { batch(it) }
         val product = linked?.let { productById(it.itemId) } ?: product(row.name)
             ?: ItemEntity(name = row.name, defaultUnit = row.unit, category = row.category, preferredStore = row.storeTag)
                 .let { it.copy(itemId = insertProduct(it)) }
         rememberProductStore(product.itemId, row.storeTag)
         val target = (listOfNotNull(linked) + stock(product.itemId)).distinctBy { it.inventoryId }.firstOrNull {
-            it.expirationDate == null && it.storageLocation == InventoryEntity.LOCATION_PANTRY &&
+            it.expirationDate == null && (it.inventoryId == linked?.inventoryId || it.storageLocation == InventoryEntity.LOCATION_PANTRY) &&
                 classifyExpiry(it.expirationDate) != ExpiryStatus.EXPIRED && convertShoppingQuantity(row.quantity, row.unit, it.unit) != null
         }
         if (target != null) updateStock(target.copy(quantity = target.quantity + convertShoppingQuantity(row.quantity, row.unit, target.unit)!!,
             preferredStore = row.storeTag))
-        else insertStock(InventoryEntity(itemId = product.itemId, quantity = row.quantity, unit = row.unit, preferredStore = row.storeTag))
+        else insertStock(InventoryEntity(itemId = product.itemId, quantity = row.quantity, unit = row.unit, preferredStore = row.storeTag,
+            storageLocation = linked?.storageLocation ?: InventoryEntity.LOCATION_PANTRY))
+        return target?.storageLocation ?: linked?.storageLocation ?: InventoryEntity.LOCATION_PANTRY
     }
 
     data class EmptyChange(val before: InventoryEntity, val after: InventoryEntity, val historyId: Long,
