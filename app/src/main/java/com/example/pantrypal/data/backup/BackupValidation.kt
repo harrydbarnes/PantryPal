@@ -156,8 +156,14 @@ object BackupValidator {
         payload.shoppingSections.forEachIndexed { index, section ->
             if (section.name.isBlank()) errors += "shoppingSections[$index] has a blank name."
         }
+        val storeNames = com.example.pantrypal.data.entity.StoreTag.entries.map { it.name }.toSet()
+        (payload.items.map { it.preferredStore } + payload.inventory.map { it.preferredStore } + payload.shoppingItems.map { it.storeTag })
+            .filterNotNull().forEach { if (it !in storeNames) errors += "Unsupported shopping store '$it'." }
         payload.shoppingItems.forEachIndexed { index, item ->
             if (item.name.isBlank()) errors += "shoppingItems[$index] has a blank name."
+            if (item.inventoryId != null && payload.inventory.none { it.inventoryId == item.inventoryId }) {
+                errors += "shoppingItems[$index] refers to missing stock ${item.inventoryId}."
+            }
             if (!item.quantity.isFinite() || item.quantity < 0) {
                 errors += "shoppingItems[$index] has an invalid quantity."
             }

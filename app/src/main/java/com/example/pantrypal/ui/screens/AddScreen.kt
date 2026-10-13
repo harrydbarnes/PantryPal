@@ -191,13 +191,13 @@ fun AddScreen(
             ) {
                 OutlinedTextField(value = state.unit, onValueChange = { state.unit = it }, label = { Text("Unit") }, supportingText = { Text("Used as your next default") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 ExposedDropdownMenuBox(expanded = expandedLocation, onExpandedChange = { expandedLocation = !expandedLocation }, modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(value = state.storageLocation, onValueChange = { state.storageLocation = it }, label = { Text("Storage location") }, supportingText = { Text("Used as your next default") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedLocation) }, singleLine = true)
+                    OutlinedTextField(value = state.storageLocation, onValueChange = { state.storageLocation = it }, label = { Text("Storage location") }, supportingText = { Text("Used as your next default") }, modifier = Modifier.fillMaxWidth().menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryEditable), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedLocation) }, singleLine = true)
                     ExposedDropdownMenu(expanded = expandedLocation, onDismissRequest = { expandedLocation = false }) {
                         InventoryEntity.STORAGE_LOCATIONS.forEach { location -> DropdownMenuItem(text = { Text(location) }, onClick = { state.storageLocation = location; expandedLocation = false }) }
                     }
                 }
                 ExposedDropdownMenuBox(expanded = expandedCategory, onExpandedChange = { expandedCategory = !expandedCategory }, modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(value = state.category, onValueChange = { state.category = it }, label = { Text("Category") }, supportingText = { Text("Used as your next default") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedCategory) }, singleLine = true)
+                    OutlinedTextField(value = state.category, onValueChange = { state.category = it }, label = { Text("Category") }, supportingText = { Text("Used as your next default") }, modifier = Modifier.fillMaxWidth().menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryEditable), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedCategory) }, singleLine = true)
                     ExposedDropdownMenu(expanded = expandedCategory, onDismissRequest = { expandedCategory = false }) {
                         ItemEntity.CATEGORIES.forEach { category -> DropdownMenuItem(text = { Text(category) }, onClick = { state.category = category; expandedCategory = false }) }
                     }

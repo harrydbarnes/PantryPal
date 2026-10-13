@@ -25,7 +25,7 @@ fun KeepIntegrationSettings() {
     var enabled by remember { mutableStateOf(prefs.getBoolean("enabled", false)) }
     var email by rememberSaveable { mutableStateOf(prefs.getString("account", "").orEmpty()) }
     var pendingEmail by rememberSaveable { mutableStateOf("") }
-    var connecting by rememberSaveable { mutableStateOf(false) }
+    var connecting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     DisposableEffect(prefs) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
