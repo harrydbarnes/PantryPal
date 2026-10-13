@@ -428,12 +428,15 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         _shoppingReviewOpen.value = true
     }
 
-    private fun saveShoppingDraft(draft: ShoppingBuildPreview?) {
-        _shoppingBuildPreview.value = draft
+    private val shoppingDraftLock = Any()
+    private fun saveShoppingDraft(draft: ShoppingBuildPreview?) = synchronized(shoppingDraftLock) {
         val editor = prefs.edit()
         if (draft == null) editor.remove("shopping_preparation_draft")
         else editor.putString("shopping_preparation_draft", com.google.gson.Gson().toJson(draft))
+        // Persist before publishing: a UI edit can follow the emission immediately.
+        // Otherwise the initial background save can overwrite that newer edit.
         editor.apply()
+        _shoppingBuildPreview.value = draft
     }
     fun editShoppingDraft(index: Int, quantity: String? = null, decision: String? = null) {
         val draft = _shoppingBuildPreview.value ?: return
