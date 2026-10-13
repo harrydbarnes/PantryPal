@@ -72,4 +72,20 @@ class ShoppingPlanUpdateTest {
         assertEquals(ShoppingAisles.UNASSIGNED, ShoppingAisles.aisleFor("Milk", ShoppingAisles.exampleOrder, mapOf(ShoppingAisles.assignmentKey("Milk") to ShoppingAisles.UNASSIGNED)))
         assertNotEquals(ShoppingAisles.assignmentKey("Milk"), ShoppingAisles.assignmentKey("Milk", "tesco"))
     }
+    @Test fun `explicit have it removes a manually edited meal row without replacing other edits`() {
+        val original = item(800.0)
+        val other = item().copy(name = "Pasta")
+        val changes = planShoppingUpdate(listOf(line().copy(buyQuantity = 0.0, explicitDecision = true)),
+            listOf(original, other), emptyList(), "A", emptyMap())
+        assertEquals(ShoppingChangeKind.REMOVE, changes.first { it.item.syncId == original.syncId }.kind)
+        assertEquals(ShoppingChangeKind.KEEP, changes.first { it.item.syncId == other.syncId }.kind)
+    }
+    @Test fun `explicit reduced quantity updates a manual row and preserves ticks`() {
+        val manual = item(800.0)
+        val bought = item(100.0, true)
+        val changes = planShoppingUpdate(listOf(line().copy(buyQuantity = 300.0, explicitDecision = true)),
+            listOf(manual, bought), emptyList(), "A", emptyMap())
+        assertEquals(200.0, changes.first { it.item.syncId == manual.syncId }.item.quantity, 0.0)
+        assertEquals(bought, changes.first { it.item.syncId == bought.syncId }.item)
+    }
 }

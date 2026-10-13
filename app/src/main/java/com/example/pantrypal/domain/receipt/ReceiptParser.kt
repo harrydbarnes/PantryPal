@@ -17,8 +17,11 @@ data class ReceiptReviewCandidate(
     val currencyCode: String,
     val confidence: Double,
     val needsReview: Boolean,
-    val isIncluded: Boolean = true
+    val isIncluded: Boolean = true,
+    val purchaseLink: String? = null
 )
+
+data class ReceiptPurchaseOption(val key: String, val name: String, val quantity: Double, val unit: String, val alreadyInPantry: Boolean)
 
 data class ReceiptRejectedLine(
     val lineNumber: Int,
@@ -31,7 +34,8 @@ data class ReceiptParseResult(
     val rejectedLines: List<ReceiptRejectedLine>,
     val detectedReceiptTotalMinor: Long?,
     val candidateTotalMinor: Long,
-    val currencyCode: String
+    val currencyCode: String,
+    val receiptId: String = java.util.UUID.randomUUID().toString()
 ) {
     val differenceMinor: Long?
         get() = detectedReceiptTotalMinor?.minus(candidateTotalMinor)
@@ -147,7 +151,10 @@ object ReceiptParser {
             rejectedLines = rejected,
             detectedReceiptTotalMinor = detectedTotal,
             candidateTotalMinor = candidates.sumOf { it.totalPriceMinor },
-            currencyCode = detectedCurrency
+            currencyCode = detectedCurrency,
+            receiptId = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(receiptText.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT).toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
         )
     }
 

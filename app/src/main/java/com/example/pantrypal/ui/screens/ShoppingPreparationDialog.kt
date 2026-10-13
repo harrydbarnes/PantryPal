@@ -19,36 +19,27 @@ import com.example.pantrypal.viewmodel.ShoppingBuildPreview
 fun ShoppingPreparationDialog(viewModel: MainViewModel, preview: ShoppingBuildPreview, weekName: String) {
     val saving by viewModel.saving.collectAsState()
     val error by viewModel.actionError.collectAsState()
-    var quantities by rememberSaveable(preview.weekId, preview.existingItems.hashCode()) {
-        mutableStateOf(preview.lines.map { it.buyQuantity.readable() })
-    }
-    var decisions by rememberSaveable(preview.weekId, preview.existingItems.hashCode()) {
-        mutableStateOf(preview.lines.map {
-            when (it.status) {
-                ShoppingNeedStatus.ALREADY_AT_HOME -> "have"
-                ShoppingNeedStatus.CHECK_STOCK -> "check"
-                ShoppingNeedStatus.NEED_TO_BUY -> "need"
-            }
-        })
-    }
-    var replaceEdited by rememberSaveable { mutableStateOf(false) }
+    val quantities = preview.quantities
+    val decisions = preview.decisions
+    val replaceEdited = preview.replaceEdited
     val valid = quantities.indices.all { decisions[it] == "have" ||
         quantities[it].replace(',', '.').toDoubleOrNull()?.let { q -> q.isFinite() && q > 0 } == true }
     val selected = preview.lines.mapIndexed { index, line ->
         line.copy(
             buyQuantity = if (decisions[index] == "have") 0.0 else quantities[index].replace(',', '.').toDoubleOrNull() ?: 0.0,
-            status = if (decisions[index] == "check") ShoppingNeedStatus.CHECK_STOCK else ShoppingNeedStatus.NEED_TO_BUY
+            status = if (decisions[index] == "check") ShoppingNeedStatus.CHECK_STOCK else ShoppingNeedStatus.NEED_TO_BUY,
+            explicitDecision = preview.explicit[index]
         )
     }
     val changes = planShoppingUpdate(selected, preview.existingItems, preview.sections, preview.weekId, preview.layout, replaceEdited)
     AlertDialog(
-        onDismissRequest = { if (!saving) viewModel.dismissShoppingBuildPreview() },
+        onDismissRequest = { if (!saving) viewModel.pauseShoppingReview() },
         title = { Text("Prepare $weekName") },
         text = {
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     Text("${changes.count { it.kind == ShoppingChangeKind.ADD }} added · ${changes.count { it.kind == ShoppingChangeKind.UPDATE }} changed · ${changes.count { it.kind == ShoppingChangeKind.REMOVE }} removed")
-                    Text("Purchased items stay ticked. Your edits are kept unless you choose to replace them.", style = MaterialTheme.typography.bodySmall)
+                    Text("Purchased items stay ticked. Your explicit stock choices apply to this ingredient; other saved edits are kept. This review is saved while you work.", style = MaterialTheme.typography.bodySmall)
                 }
                 itemsIndexed(preview.lines) { index, line ->
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -57,16 +48,17 @@ fun ShoppingPreparationDialog(viewModel: MainViewModel, preview: ShoppingBuildPr
                         line.stockNote?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(selected = decisions[index] == "have", enabled = !saving,
-                                onClick = { decisions = decisions.toMutableList().apply { set(index, "have") } }, label = { Text("Have it") })
+                                onClick = { viewModel.editShoppingDraft(index, decision = "have") }, label = { Text("Have it") })
                             FilterChip(selected = decisions[index] == "need", enabled = !saving,
                                 onClick = {
-                                    decisions = decisions.toMutableList().apply { set(index, "need") }
-                                    if (quantities[index].toDoubleOrNull() == 0.0) quantities = quantities.toMutableList().apply { set(index, line.requiredQuantity.readable()) }
+                                    viewModel.editShoppingDraft(index,
+                                        quantity = if (quantities[index].toDoubleOrNull() == 0.0) line.requiredQuantity.readable() else null,
+                                        decision = "need")
                                 }, label = { Text("Need it") })
                         }
                         if (decisions[index] != "have") {
                             OutlinedTextField(value = quantities[index], enabled = !saving,
-                                onValueChange = { value -> quantities = quantities.toMutableList().apply { set(index, value) } },
+                                onValueChange = { value -> viewModel.editShoppingDraft(index, quantity = value, decision = "need") },
                                 label = { Text("Buy (${line.unit})") }, singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 isError = quantities[index].replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0 } != true,
@@ -78,18 +70,24 @@ fun ShoppingPreparationDialog(viewModel: MainViewModel, preview: ShoppingBuildPr
                 }
                 item {
                     Row {
-                        Checkbox(checked = replaceEdited, enabled = !saving, onCheckedChange = { replaceEdited = it })
+                        Checkbox(checked = replaceEdited, enabled = !saving, onCheckedChange = viewModel::replaceShoppingDraftEdits)
                         Text("Replace my unpurchased meal-list edits with these quantities", Modifier.padding(top = 12.dp))
                     }
                 }
                 itemsIndexed(changes) { _, change ->
                     Text("${change.kind.name.lowercase().replaceFirstChar { it.uppercase() }} · ${change.item.name} · ${change.item.quantity.readable()} ${change.item.unit}\n${change.explanation}", style = MaterialTheme.typography.bodySmall)
                 }
-                error?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+                error?.let { message -> item {
+                    Text(message, color = MaterialTheme.colorScheme.error)
+                    TextButton(enabled = !saving, onClick = { viewModel.previewShoppingListForWeek(preview.weekId, refresh = true) }) { Text("Refresh review") }
+                } }
             }
         },
         confirmButton = { Button(enabled = valid && !saving, onClick = { viewModel.commitShoppingBuildPreview(selected, replaceEdited) }) { Text(if (saving) "Saving…" else "Apply changes") } },
-        dismissButton = { TextButton(enabled = !saving, onClick = viewModel::dismissShoppingBuildPreview) { Text("Cancel") } }
+        dismissButton = { Row {
+            TextButton(enabled = !saving, onClick = viewModel::pauseShoppingReview) { Text("Save for later") }
+            TextButton(enabled = !saving, onClick = viewModel::dismissShoppingBuildPreview) { Text("Discard") }
+        } }
     )
 }
 

@@ -52,7 +52,8 @@ data class ShoppingReconciliationLine(
     val unit: String,
     val status: ShoppingNeedStatus,
     val buyQuantity: Double = requiredQuantity,
-    val stockNote: String? = null
+    val stockNote: String? = null,
+    val explicitDecision: Boolean = false
 )
 
 fun classifyExpiry(
@@ -127,6 +128,14 @@ fun reconcileShoppingIngredients(
     ingredients: List<String>,
     inventory: List<InventoryWithItemMap>,
     nowMillis: Long = System.currentTimeMillis()
+): List<ShoppingReconciliationLine> = reconcileShoppingStock(ingredients, inventory.map {
+    ShoppingStock(it.name, it.quantity, it.unit, it.expirationDate, it.itemId)
+}, nowMillis)
+
+data class ShoppingStock(val name: String, val quantity: Double, val unit: String?, val expirationDate: Long?, val itemId: Long = 0)
+
+fun reconcileShoppingStock(
+    ingredients: List<String>, stock: List<ShoppingStock>, nowMillis: Long = System.currentTimeMillis()
 ): List<ShoppingReconciliationLine> {
     // Keep unlike measures separate: a tin is not interchangeable with grams.
     val requirements = mutableListOf<ShoppingRequirement>()
@@ -146,11 +155,11 @@ fun reconcileShoppingIngredients(
         }
     }
     return requirements.map { ingredient ->
-        val matching = inventory.filter { normalizeShoppingName(it.name) == ingredient.normalizedName }
+        val matching = stock.filter { normalizeShoppingName(it.name) == ingredient.normalizedName }
         val batches = matching.filter { classifyExpiry(it.expirationDate, nowMillis) != ExpiryStatus.EXPIRED }
         val unit = ingredient.unit ?: "pcs"
-        val available = batches.sumOf { convertShoppingQuantity(it.quantity, it.unit, unit) ?: 0.0 }
-        val incompatible = batches.any { it.quantity > 0 && convertShoppingQuantity(it.quantity, it.unit, unit) == null }
+        val available = batches.sumOf { convertShoppingQuantity(it.quantity, it.unit ?: "", unit) ?: 0.0 }
+        val incompatible = batches.any { it.quantity > 0 && convertShoppingQuantity(it.quantity, it.unit ?: "", unit) == null }
         val hasUnspecifiedStock = ingredient.unit == null && batches.any { it.quantity > 0 }
         val uncertain = incompatible || hasUnspecifiedStock
         val status = when {
@@ -245,3 +254,6 @@ fun parseQuickShoppingEntry(text: String): QuickShoppingEntry? {
         !requirement.quantity.isFinite() || requirement.quantity <= 0) return null
     return QuickShoppingEntry(requirement.displayName, requirement.quantity, requirement.unit ?: "pcs")
 }
+
+fun shoppingIngredientText(name: String, quantity: Double?, unit: String?): String =
+    if (quantity == null) name else "$quantity ${unit.orEmpty()} $name"

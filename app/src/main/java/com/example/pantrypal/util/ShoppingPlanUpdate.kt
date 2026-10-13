@@ -33,12 +33,13 @@ fun planShoppingUpdate(
     val mealItems = visible.filter { it.sectionId == ShoppingSectionEntity.ID_MEAL_PLAN && it.weekId == week }
     val used = mutableSetOf<String>()
     val changes = mutableListOf<ShoppingPlanChange>()
-    lines.filter { it.buyQuantity > 0 }.forEach { line ->
+    lines.forEach { line ->
         val matches = mealItems.filter {
             normalizeShoppingName(it.name) == line.normalizedName &&
                 convertShoppingQuantity(it.quantity, it.unit, line.unit) != null
         }
-        val otherCoverage = visible.filter { it !in mealItems && normalizeShoppingName(it.name) == line.normalizedName }
+        val otherCoverage = visible.filter { it !in mealItems &&
+            layout[ShoppingMetadata.completed(it.syncId)] != "true" && normalizeShoppingName(it.name) == line.normalizedName }
             .sumOf { convertShoppingQuantity(it.quantity, it.unit, line.unit) ?: 0.0 }
         val boughtCoverage = matches.filter { it.isChecked }.sumOf {
             convertShoppingQuantity(it.quantity, it.unit, line.unit) ?: 0.0
@@ -46,7 +47,7 @@ fun planShoppingUpdate(
         val desired = (line.buyQuantity - otherCoverage - boughtCoverage).coerceAtLeast(0.0)
         val unchecked = matches.filterNot { it.isChecked }
         val protected = unchecked.filter {
-            !replaceEdited && layout[ShoppingMetadata.baseline(it.syncId)] != ShoppingMetadata.fingerprint(it)
+            !replaceEdited && !line.explicitDecision && layout[ShoppingMetadata.baseline(it.syncId)] != ShoppingMetadata.fingerprint(it)
         }
         protected.forEach {
             used += it.syncId
@@ -67,6 +68,11 @@ fun planShoppingUpdate(
                 if (target == null) "Add missing quantity" else "Update meal requirement"
             )
             target?.let { used += it.syncId }
+        }
+        if (line.explicitDecision) generated.filter { it.syncId !in used }.forEach { item ->
+            used += item.syncId
+            changes += ShoppingPlanChange(ShoppingChangeKind.REMOVE, item, item,
+                explanation = "Your explicit stock decision")
         }
         // Any extra unedited rows are handled below, rather than increasing quantities on rebuild.
     }

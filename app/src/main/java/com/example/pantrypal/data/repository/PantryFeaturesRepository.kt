@@ -78,15 +78,8 @@ class PantryFeaturesRepository(
 
     val pantryForRecipes: Flow<List<RecipePantryIngredient>> =
         kitchenRepository.currentInventory.map { rows ->
-            rows.groupBy { it.itemId }.map { (itemId, batches) ->
-                val first = batches.first()
-                RecipePantryIngredient(
-                    itemId = itemId,
-                    name = first.name,
-                    quantity = batches.sumOf { it.quantity },
-                    unit = first.unit,
-                    expirationDate = batches.mapNotNull { it.expirationDate }.minOrNull()
-                )
+            rows.map { batch ->
+                RecipePantryIngredient(batch.itemId, batch.name, batch.quantity, batch.unit, batch.expirationDate)
             }
         }
 
@@ -182,62 +175,98 @@ class PantryFeaturesRepository(
                 requireValidRecipeIngredient(ingredient, "Shopping ingredient $index")
             }
 
-        val existing = kitchenRepository.shoppingList.first()
-            .filterNot { it.isChecked }
-            .mapTo(mutableSetOf()) { normalizeShoppingName(it.name) }
-        var added = 0
-        ingredients.filterNot(RecipeIngredient::isOptional).forEach { ingredient ->
-            val normalizedName = normalizeShoppingName(ingredient.name)
-            if (normalizedName !in existing) {
-                kitchenRepository.addShoppingItem(
-                    ShoppingItemEntity(
-                        name = ingredient.name,
-                        quantity = ingredient.quantity ?: 1.0,
-                        unit = ingredient.unit ?: "pcs",
-                        sectionId = ShoppingSectionEntity.ID_MEAL_PLAN,
-                        weekId = weekId
-                    )
-                )
-                kitchenRepository.rememberShoppingItem(ingredient.name)
-                existing += normalizedName
-                added += 1
+        return database.withTransaction {
+            val sections = kitchenRepository.shoppingSections.first()
+            val recurring = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
+            val layout = kitchenRepository.shoppingLayoutSnapshot()
+            val existing = kitchenRepository.shoppingList.first().filter {
+                (it.weekId == weekId || it.weekId == null || it.sectionId in recurring) &&
+                    layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] != "true"
             }
+            val lines = com.example.pantrypal.util.reconcileShoppingIngredients(
+                ingredients.filterNot { it.isOptional }.map {
+                    com.example.pantrypal.util.shoppingIngredientText(it.name, it.quantity, it.unit)
+                }, kitchenRepository.currentInventory.first()
+            )
+            var added = 0
+            lines.forEach { line ->
+                val covered = existing.filter { normalizeShoppingName(it.name) == line.normalizedName }.sumOf {
+                    com.example.pantrypal.util.convertShoppingQuantity(it.quantity, it.unit, line.unit) ?: 0.0
+                }
+                val quantity = (line.buyQuantity - covered).coerceAtLeast(0.0)
+                if (quantity > 0) {
+                    val row = ShoppingItemEntity(name = line.name, quantity = quantity, unit = line.unit,
+                        sectionId = ShoppingSectionEntity.ID_MEAL_PLAN, weekId = weekId)
+                    kitchenRepository.insertReviewedShoppingItem(row)
+                    kitchenRepository.saveShoppingLayout(com.example.pantrypal.util.ShoppingMetadata.checkStock(row.syncId),
+                        (line.status == com.example.pantrypal.util.ShoppingNeedStatus.CHECK_STOCK).toString())
+                    kitchenRepository.rememberShoppingItem(line.name)
+                    added++
+                }
+            }
+            added
         }
-        return added
+    }
+
+    suspend fun receiptPurchaseOptions(): List<com.example.pantrypal.domain.receipt.ReceiptPurchaseOption> {
+        val ledger = database.purchaseRecordDao()
+        val records = ledger.records()
+        val layout = kitchenRepository.shoppingLayoutSnapshot()
+        val active = database.shoppingDao().getAllShoppingItemsSnapshot().filter {
+            it.isChecked && layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] != "true"
+        }.map { item ->
+            com.example.pantrypal.domain.receipt.ReceiptPurchaseOption("shopping:" + item.syncId, item.name, item.quantity, item.unit,
+                records.any { it.shoppingSyncId == item.syncId && !it.completed && it.stockRecorded })
+        }
+        val recent = records.filter { it.completed && it.receiptId == null &&
+            it.purchasedAt > System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000 }.map {
+            com.example.pantrypal.domain.receipt.ReceiptPurchaseOption("purchase:" + it.purchaseId, it.name, it.quantity, it.unit, it.stockRecorded)
+        }
+        return active + recent
     }
 
     suspend fun importReceiptPurchases(
         candidates: List<ReceiptReviewCandidate>,
-        storageLocation: String = InventoryEntity.LOCATION_PANTRY
+        storageLocation: String = InventoryEntity.LOCATION_PANTRY,
+        receiptId: String = UUID.randomUUID().toString()
     ): Int = database.withTransaction {
+        val ledger = database.purchaseRecordDao()
+        require(!ledger.imported(receiptId)) { "This receipt has already been imported. No stock or prices were added again." }
+        require(storageLocation in InventoryEntity.STORAGE_LOCATIONS)
         val selected = candidates.filter { it.isIncluded }
         selected.forEach(::requireValidReceiptCandidate)
+        val links = selected.mapNotNull { it.purchaseLink }
+        require(links.distinct().size == links.size) { "Link each purchase once. Combine duplicate receipt lines or leave them as new purchases." }
+        val options = receiptPurchaseOptions().associateBy { it.key }
         val now = System.currentTimeMillis()
-        priceHistoryDao.upsertAll(
-            selected.map { candidate ->
-                PriceHistoryEntity(
-                    normalizedItemName = candidate.normalizedName,
-                    displayName = candidate.name,
-                    priceMinor = candidate.totalPriceMinor,
-                    quantity = candidate.quantity,
-                    unit = candidate.unit,
-                    purchasedAt = now,
-                    currencyCode = candidate.currencyCode,
-                    source = PriceHistoryEntity.SOURCE_RECEIPT
-                )
+        selected.forEach { candidate ->
+            val link = candidate.purchaseLink
+            val previous = if (link == null) null else {
+                val option = options[link] ?: error("A linked purchase changed. Review the receipt again.")
+                val converted = com.example.pantrypal.util.convertShoppingQuantity(candidate.quantity, candidate.unit, option.unit)
+                require(converted != null && kotlin.math.abs(converted - option.quantity) < 0.000001) {
+                    "${candidate.name}: linked quantity must match the purchase. Correct the quantity or choose New purchase."
+                }
+                if (link.startsWith("shopping:")) ledger.pending(link.removePrefix("shopping:"))
+                else ledger.records().firstOrNull { it.purchaseId == link.removePrefix("purchase:") }
+                    ?: error("The linked purchase is no longer available.")
             }
-        )
-        kitchenRepository.putAwayShoppingItems(
-            selected.map { candidate ->
-                ShoppingItemEntity(
-                    name = candidate.name,
-                    quantity = candidate.quantity,
-                    unit = candidate.unit,
-                    isChecked = true
-                )
-            },
-            storageLocation
-        )
+            require(previous?.receiptId == null) { "This purchase already has a receipt. Choose a different purchase." }
+            if (previous?.stockRecorded != true) kitchenRepository.putAwayShoppingItems(listOf(
+                ShoppingItemEntity(name = candidate.name, quantity = candidate.quantity, unit = candidate.unit, isChecked = true)
+            ), storageLocation)
+            ledger.put((previous ?: com.example.pantrypal.data.entity.PurchaseRecordEntity(
+                shoppingSyncId = link?.takeIf { it.startsWith("shopping:") }?.removePrefix("shopping:"),
+                name = candidate.name, quantity = candidate.quantity, unit = candidate.unit,
+                stockRecorded = false, completed = link?.startsWith("shopping:") != true, purchasedAt = now
+            )).copy(receiptId = receiptId, stockRecorded = true))
+            priceHistoryDao.upsertAll(listOf(PriceHistoryEntity(
+                normalizedItemName = candidate.normalizedName, displayName = candidate.name,
+                priceMinor = candidate.totalPriceMinor, quantity = candidate.quantity, unit = candidate.unit,
+                purchasedAt = now, currencyCode = candidate.currencyCode, source = PriceHistoryEntity.SOURCE_RECEIPT
+            )))
+        }
+        ledger.markImported(com.example.pantrypal.data.entity.ReceiptImportEntity(receiptId, now))
         selected.size
     }
 
@@ -264,7 +293,9 @@ class PantryFeaturesRepository(
         backupCodec.encode(
             BackupDocument(
                 appVersion = BuildConfig.VERSION_NAME,
-                payload = snapshot().toPayload().copy(shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value })
+                payload = snapshot().toPayload().copy(
+                    shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value },
+                    purchaseRecords = database.purchaseRecordDao().records(), receiptImports = database.purchaseRecordDao().imports())
             ),
             pretty = true
         )
@@ -283,7 +314,9 @@ class PantryFeaturesRepository(
     suspend fun exportHouseholdSnapshot(): String = withContext(Dispatchers.Default) {
         val backup = BackupDocument(
             appVersion = BuildConfig.VERSION_NAME,
-            payload = snapshot().toPayload().copy(shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value })
+            payload = snapshot().toPayload().copy(
+                    shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value },
+                    purchaseRecords = database.purchaseRecordDao().records(), receiptImports = database.purchaseRecordDao().imports())
         )
         val now = System.currentTimeMillis()
         val householdId = householdId()
@@ -408,9 +441,13 @@ class PantryFeaturesRepository(
 
     private suspend fun restore(payload: BackupPayload) {
         database.withTransaction {
+            val purchases = database.purchaseRecordDao()
+            purchases.clearRecords(); purchases.clearImports()
+            payload.purchaseRecords.orEmpty().forEach { purchases.put(it) }
+            payload.receiptImports.orEmpty().forEach { purchases.markImported(it) }
             val restoredItemIds = payload.items.mapTo(mutableSetOf()) { it.itemId }
             database.shoppingSyncDao().layout().forEach { database.shoppingSyncDao().deleteLayout(it.layoutKey) }
-            payload.shoppingLayout.orEmpty().forEach { (key, value) -> database.shoppingSyncDao().putLayout(com.example.pantrypal.data.entity.ShoppingLayoutEntity(key, value)) }
+
             backupDao.clearRecipeIngredients()
             backupDao.clearInventory()
             backupDao.clearConsumption()
@@ -450,6 +487,7 @@ class PantryFeaturesRepository(
             backupDao.insertMeals(payload.meals.map { it.toEntity() })
             backupDao.insertPriceHistory(payload.priceHistory.map { it.toEntity() })
             backupDao.insertWeeklyBudgets(payload.weeklyBudgets.map { it.toEntity() })
+            payload.shoppingLayout.orEmpty().forEach { (key, value) -> database.shoppingSyncDao().putLayout(com.example.pantrypal.data.entity.ShoppingLayoutEntity(key, value)) }
         }
         val restored = payload.preferences
         preferences.edit()

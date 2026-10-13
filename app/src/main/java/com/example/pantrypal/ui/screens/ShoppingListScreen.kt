@@ -534,7 +534,8 @@ fun ShoppingListScreen(
         )
     }
 
-    buildPreview?.let { preview ->
+    val reviewOpen by viewModel.shoppingReviewOpen.collectAsState()
+    buildPreview?.takeIf { reviewOpen }?.let { preview ->
         ShoppingPreparationDialog(viewModel, preview, mealWeeks.firstOrNull { it.weekId == preview.weekId }?.displayName ?: "Week ${preview.weekId}")
     }
 

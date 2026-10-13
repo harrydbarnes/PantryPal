@@ -36,5 +36,27 @@ object ShoppingSyncSchema {
                 """.trimIndent())
             }
         }
+        // Separate field records let quantity edits and ticks converge independently.
+        for (field in listOf("name", "quantity", "unit", "isChecked", "sectionId", "weekId", "frequency")) {
+            val wireField = if (field == "sectionId") "sectionSyncId" else field
+            val value = if (field == "sectionId") "COALESCE((SELECT syncId FROM shopping_sections WHERE sectionId = NEW.sectionId), 'the_rest')"
+                else "COALESCE(CAST(NEW.$field AS TEXT), '')"
+            db.execSQL("DROP TRIGGER IF EXISTS shopping_field_$field")
+            db.execSQL("""
+                CREATE TRIGGER shopping_field_$field AFTER UPDATE OF $field ON shopping_list
+                WHEN OLD.$field IS NOT NEW.$field
+                BEGIN
+                    INSERT OR REPLACE INTO shopping_layout(layoutKey, value)
+                    VALUES ('item-field:' || NEW.syncId || ':$wireField', $value);
+                END
+            """.trimIndent())
+        }
+        db.execSQL("""
+            CREATE TRIGGER IF NOT EXISTS shopping_fields_delete AFTER DELETE ON shopping_list
+            BEGIN
+                DELETE FROM shopping_layout
+                WHERE substr(layoutKey, 1, length('item-field:' || OLD.syncId || ':')) = 'item-field:' || OLD.syncId || ':';
+            END
+        """.trimIndent())
     }
 }

@@ -87,7 +87,21 @@ class KitchenRepository(
         val completedAt = System.currentTimeMillis()
         checked.groupBy { locations[it.syncId] ?: defaultLocation }.forEach { (location, items) ->
             require(location in InventoryEntity.STORAGE_LOCATIONS) { "Choose a valid storage location." }
-            if (updatePantry) putAwayShoppingItems(items, location)
+            val purchases = requireNotNull(database).purchaseRecordDao()
+            items.forEach { item ->
+                val previous = purchases.pending(item.syncId)
+                if (previous != null) {
+                    val converted = com.example.pantrypal.util.convertShoppingQuantity(item.quantity, item.unit, previous.unit)
+                    require(converted != null && kotlin.math.abs(converted - previous.quantity) < 0.000001) {
+                        "${item.name} changed after receipt import. Match its purchased quantity before finishing."
+                    }
+                }
+                if (updatePantry && previous?.stockRecorded != true) putAwayShoppingItems(listOf(item), location)
+                purchases.put((previous ?: com.example.pantrypal.data.entity.PurchaseRecordEntity(
+                    shoppingSyncId = item.syncId, name = item.name, quantity = item.quantity, unit = item.unit,
+                    stockRecorded = false, completed = false
+                )).copy(stockRecorded = previous?.stockRecorded == true || updatePantry, completed = true))
+            }
             completeShoppingTrip(items, sections, weekId, if (updatePantry) location else null, tripId, completedAt)
         }
         checked.size
@@ -290,6 +304,14 @@ class KitchenRepository(
                 shoppingDao.insertShoppingItem(item)
             }
         }
+    }
+
+    suspend fun editShoppingItem(syncId: String, edit: (ShoppingItemEntity) -> ShoppingItemEntity) = shoppingTransaction {
+        val current = shoppingDao.getAllShoppingItemsSnapshot().firstOrNull { it.syncId == syncId }
+            ?: error("This item was removed. Refresh your list.")
+        val updated = edit(current)
+        requireValidShoppingItem(updated)
+        shoppingDao.updateShoppingItem(updated)
     }
 
     suspend fun updateShoppingItem(item: ShoppingItemEntity) {

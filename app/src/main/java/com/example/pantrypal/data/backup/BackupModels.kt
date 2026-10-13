@@ -33,7 +33,9 @@ data class BackupPayload(
     val weeklyBudgets: List<BackupWeeklyBudget> = emptyList(),
     val shoppingLocations: List<BackupShoppingLocation> = emptyList(),
     val preferences: BackupPreferences = BackupPreferences(),
-    val shoppingLayout: Map<String, String>? = null
+    val shoppingLayout: Map<String, String>? = null,
+    val purchaseRecords: List<com.example.pantrypal.data.entity.PurchaseRecordEntity>? = null,
+    val receiptImports: List<com.example.pantrypal.data.entity.ReceiptImportEntity>? = null
 )
 
 data class BackupItem(
