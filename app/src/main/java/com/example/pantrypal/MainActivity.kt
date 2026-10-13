@@ -445,11 +445,11 @@ fun KitchenApp(
                     parsed, request.source, viewModel.shoppingWeek.value, request.operationId)
             }
             onShoppingIncomingConsumed()
-            snackbarHostState.showSnackbar("$count item${if (count == 1) "" else "s"} imported into your shopping list")
+            scope.launch { snackbarHostState.showSnackbar("$count item${if (count == 1) "" else "s"} imported into your shopping list") }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (error: Exception) {
             onShoppingIncomingConsumed()
-            snackbarHostState.showSnackbar(error.message ?: "Shopping items could not be imported. Try sending the list again.")
+            scope.launch { snackbarHostState.showSnackbar(error.message ?: "Shopping items could not be imported. Try sending the list again.") }
         }
     }
 
