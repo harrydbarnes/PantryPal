@@ -301,7 +301,7 @@ class PantryFeaturesViewModel(
     ) {
         viewModelScope.launch {
             runCatching {
-                repository.addMissingIngredientsToShopping(ingredients, weekId)
+                repository.addMissingIngredientsToShopping(recipe.ingredients, weekId)
             }.onSuccess { count ->
                 _recipeState.update { state ->
                     state.copy(
@@ -325,7 +325,19 @@ class PantryFeaturesViewModel(
                 val parsed = withContext(Dispatchers.Default) {
                     ReceiptParser.parse(text)
                 }
-                _receiptResult.value = parsed
+                val options = repository.receiptPurchaseOptions()
+                _receiptPurchaseOptions.value = options
+                val suggestions = parsed.candidates.map { candidate ->
+                    options.filter { option ->
+                        com.example.pantrypal.util.normalizeShoppingName(option.name) == com.example.pantrypal.util.normalizeShoppingName(candidate.name) &&
+                        com.example.pantrypal.util.convertShoppingQuantity(candidate.quantity, candidate.unit, option.unit)?.let {
+                            kotlin.math.abs(it - option.quantity) < 0.000001
+                        } == true
+                    }.singleOrNull()?.key
+                }
+                _receiptResult.value = parsed.copy(candidates = parsed.candidates.mapIndexed { index, candidate ->
+                    candidate.copy(purchaseLink = suggestions[index]?.takeIf { link -> suggestions.count { it == link } == 1 })
+                })
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -345,6 +357,9 @@ class PantryFeaturesViewModel(
         }
     }
 
+    private val _receiptPurchaseOptions = MutableStateFlow<List<com.example.pantrypal.domain.receipt.ReceiptPurchaseOption>>(emptyList())
+    val receiptPurchaseOptions = _receiptPurchaseOptions.asStateFlow()
+
     fun updateReceiptCandidate(candidate: ReceiptReviewCandidate) {
         _receiptResult.update { result ->
             result?.copy(
@@ -357,20 +372,28 @@ class PantryFeaturesViewModel(
         }
     }
 
-    fun importReceipt(candidates: List<ReceiptReviewCandidate>) {
+    fun useAsDifferentReceipt() {
+        _receiptResult.update { result -> result?.copy(receiptId = java.util.UUID.randomUUID().toString(),
+            candidates = result.candidates.map { it.copy(purchaseLink = null) }) }
+        _receiptError.value = null
+    }
+
+    fun importReceipt(candidates: List<ReceiptReviewCandidate>, onSuccess: () -> Unit = {}) {
+        val receiptId = _receiptResult.value?.receiptId ?: return
         _receiptProcessing.value = true
         _receiptError.value = null
         viewModelScope.launch {
-            runCatching { repository.importReceiptPurchases(candidates) }
+            runCatching { repository.importReceiptPurchases(candidates, receiptId = receiptId) }
                 .onSuccess { count ->
                     _receiptProcessing.value = false
                     _receiptResult.value = null
                     _shoppingMessage.value =
-                        "$count purchase${if (count == 1) "" else "s"} added to your pantry and price history."
+                        "$count receipt purchase${if (count == 1) "" else "s"} saved. Linked pantry stock was counted once."
+                    onSuccess()
                 }
                 .onFailure { error ->
                     _receiptProcessing.value = false
-                    _shoppingMessage.value = error.userMessage("Receipt import failed")
+                    _receiptError.value = error.userMessage("Receipt import failed")
                 }
         }
     }

@@ -33,6 +33,12 @@ object BackupValidator {
         checkUniqueIds("consumption event", payload.consumption.map(BackupConsumption::eventId), errors)
         checkUniqueIds("shopping section", payload.shoppingSections.map(BackupShoppingSection::sectionId), errors)
         checkUniqueIds("shopping item", payload.shoppingItems.map(BackupShoppingItem::shoppingId), errors)
+        checkUniqueStrings("purchase ID", payload.purchaseRecords.orEmpty().map { it.purchaseId }, errors)
+        checkUniqueStrings("receipt ID", payload.receiptImports.orEmpty().map { it.receiptId }, errors)
+        payload.purchaseRecords.orEmpty().forEach {
+            if (it.name.isBlank() || !it.quantity.isFinite() || it.quantity <= 0 || it.unit.isBlank() || it.purchasedAt < 0)
+                errors += "Invalid purchase record."
+        }
         checkUniqueStrings("shopping sync ID", payload.shoppingItems.mapNotNull { it.syncId }, errors)
         checkUniqueStrings("section sync ID", payload.shoppingSections.mapNotNull { it.syncId }, errors)
         if (payload.shoppingLayout.orEmpty().any { (key, value) -> key.length > 300 || value.length > 10000 }) {

@@ -90,7 +90,9 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         rotatingWeek(savedWeek, savedAnchorMonday, LocalDate.now())
     )
     val currentWeek: StateFlow<String> = _currentWeek.asStateFlow()
-    private val _shoppingWeek = MutableStateFlow(_currentWeek.value)
+    private val _shoppingWeek = MutableStateFlow(prefs.getString("active_shopping_week", null) ?: _currentWeek.value).also {
+        prefs.edit().putString("active_shopping_week", it.value).apply()
+    }
     val shoppingWeek: StateFlow<String> = _shoppingWeek.asStateFlow()
 
     private val _mealPlanStyle = MutableStateFlow(prefs.getString("meal_plan_style", null))
@@ -146,6 +148,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun setShoppingWeek(week: String) {
         _shoppingWeek.value = week
+        prefs.edit().putString("active_shopping_week", week).apply()
     }
 
     fun completeOnboarding() {
@@ -286,7 +289,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun moveShoppingItem(item: ShoppingItemEntity, section: ShoppingSectionEntity) {
         shoppingAction {
-            repository.updateShoppingItem(item.copy(sectionId = section.sectionId, weekId = if (section.recursEveryWeek) null else _shoppingWeek.value))
+            repository.editShoppingItem(item.syncId) { it.copy(sectionId = section.sectionId, weekId = if (section.recursEveryWeek) null else _shoppingWeek.value) }
             markShoppingChanged()
         }
     }
@@ -409,7 +412,44 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             initialValue = emptyList()
         )
 
-    private val _shoppingBuildPreview = MutableStateFlow<ShoppingBuildPreview?>(null)
+    private val _shoppingBuildPreview = MutableStateFlow(
+        runCatching { prefs.getString("shopping_preparation_draft", null)?.let {
+            com.google.gson.Gson().fromJson(it, ShoppingBuildPreview::class.java).takeIf { draft ->
+                draft.draftId.isNotBlank() && draft.quantities.size == draft.lines.size &&
+                    draft.decisions.size == draft.lines.size && draft.explicit.size == draft.lines.size
+            }
+        } }.getOrNull()
+    )
+    private val _shoppingReviewOpen = MutableStateFlow(_shoppingBuildPreview.value != null)
+    val shoppingReviewOpen = _shoppingReviewOpen.asStateFlow()
+    fun pauseShoppingReview() { _shoppingReviewOpen.value = false }
+    fun resumeShoppingReview() {
+        _shoppingBuildPreview.value?.let { setShoppingWeek(it.weekId) }
+        _shoppingReviewOpen.value = true
+    }
+
+    private val shoppingDraftLock = Any()
+    private fun saveShoppingDraft(draft: ShoppingBuildPreview?) = synchronized(shoppingDraftLock) {
+        val editor = prefs.edit()
+        if (draft == null) editor.remove("shopping_preparation_draft")
+        else editor.putString("shopping_preparation_draft", com.google.gson.Gson().toJson(draft))
+        // Persist before publishing: a UI edit can follow the emission immediately.
+        // Otherwise the initial background save can overwrite that newer edit.
+        editor.apply()
+        _shoppingBuildPreview.value = draft
+    }
+    fun editShoppingDraft(index: Int, quantity: String? = null, decision: String? = null) {
+        val draft = _shoppingBuildPreview.value ?: return
+        if (index !in draft.lines.indices) return
+        saveShoppingDraft(draft.copy(
+            quantities = draft.quantities.toMutableList().apply { quantity?.let { set(index, it) } },
+            decisions = draft.decisions.toMutableList().apply { decision?.let { set(index, it) } },
+            explicit = draft.explicit.toMutableList().apply { set(index, true) }
+        ))
+    }
+    fun replaceShoppingDraftEdits(value: Boolean) {
+        _shoppingBuildPreview.value?.let { saveShoppingDraft(it.copy(replaceEdited = value)) }
+    }
     val shoppingBuildPreview: StateFlow<ShoppingBuildPreview?> = _shoppingBuildPreview.asStateFlow()
 
     val mealsState: StateFlow<List<MealEntity>> = observe(repository.allMeals, "meals")
@@ -514,22 +554,27 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun buildShoppingListForWeek(week: String) = previewShoppingListForWeek(week)
 
-    fun previewShoppingListForWeek(week: String) {
-        _shoppingWeek.value = week
+    fun previewShoppingListForWeek(week: String, refresh: Boolean = false) {
+        if (!refresh && _shoppingBuildPreview.value != null) { resumeShoppingReview(); return }
+        _shoppingReviewOpen.value = true
+        setShoppingWeek(week)
         action {
             repository.transaction {
-                _shoppingBuildPreview.value = ShoppingBuildPreview(
+                saveShoppingDraft(ShoppingBuildPreview(
                     weekId = week,
                     lines = reconcileShoppingIngredients(mealsForShopping(repository.allMeals.first(), week), repository.currentInventory.first()),
                     existingItems = repository.shoppingList.first(),
                     sections = repository.shoppingSections.first(),
-                    layout = repository.shoppingLayoutSnapshot()
-                )
+                    layout = repository.shoppingLayoutSnapshot(),
+                    inventory = repository.currentInventory.first(),
+                    meals = repository.allMeals.first(),
+                    recordedPurchaseIds = repository.stockRecordedShoppingIds()
+                ))
             }
         }
     }
 
-    fun dismissShoppingBuildPreview() { _shoppingBuildPreview.value = null }
+    fun dismissShoppingBuildPreview() { saveShoppingDraft(null) }
 
     fun commitShoppingBuildPreview(
         lines: List<ShoppingReconciliationLine>,
@@ -541,10 +586,13 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             repository.transaction {
                 require(repository.shoppingList.first().toSet() == preview.existingItems.toSet() &&
                     repository.shoppingSections.first().toSet() == preview.sections.toSet() &&
-                    repository.shoppingLayoutSnapshot() == preview.layout) {
-                    "Your shared list changed during review. Close this preview and review it again."
+                    repository.shoppingLayoutSnapshot() == preview.layout &&
+                    repository.currentInventory.first().toSet() == preview.inventory.toSet() &&
+                    repository.allMeals.first().toSet() == preview.meals.toSet() &&
+                    repository.stockRecordedShoppingIds() == preview.recordedPurchaseIds) {
+                    "Your list, stock or meal plan changed. Refresh this saved review before applying it."
                 }
-                planShoppingUpdate(lines, preview.existingItems, preview.sections, preview.weekId, preview.layout, replaceEdited)
+                planShoppingUpdate(lines, preview.existingItems, preview.sections, preview.weekId, preview.layout, replaceEdited, preview.recordedPurchaseIds)
                     .forEach { change ->
                         when (change.kind) {
                             ShoppingChangeKind.ADD -> repository.insertReviewedShoppingItem(change.item)
@@ -569,7 +617,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     }
                 markShoppingChanged()
             }
-            _shoppingBuildPreview.value = null
+            saveShoppingDraft(null)
         }
     }
 
@@ -732,9 +780,13 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     fun updateShoppingItem(item: ShoppingItemEntity, name: String, quantity: Double, unit: String) {
         shoppingAction {
             val trimmedName = name.trim()
-            repository.updateShoppingItem(
-                item.copy(name = trimmedName, quantity = quantity, unit = unit.trim().ifEmpty { "pcs" })
-            )
+            repository.editShoppingItem(item.syncId) { current ->
+                current.copy(
+                    name = if (trimmedName != item.name) trimmedName else current.name,
+                    quantity = if (quantity != item.quantity) quantity else current.quantity,
+                    unit = if (unit.trim() != item.unit) unit.trim().ifEmpty { "pcs" } else current.unit
+                )
+            }
             repository.rememberShoppingItem(trimmedName)
             markShoppingChanged()
         }
@@ -774,7 +826,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun toggleShoppingItem(item: ShoppingItemEntity) {
         shoppingAction {
-            repository.updateShoppingItem(item.copy(isChecked = !item.isChecked))
+            repository.editShoppingItem(item.syncId) { it.copy(isChecked = !item.isChecked) }
             if (item.isChecked) repository.deleteShoppingMetadata(ShoppingMetadata.completed(item.syncId))
             markShoppingChanged()
         }
@@ -882,7 +934,19 @@ data class ShoppingBuildPreview(
     val lines: List<ShoppingReconciliationLine>,
     val existingItems: List<ShoppingItemEntity>,
     val sections: List<ShoppingSectionEntity>,
-    val layout: Map<String, String>
+    val layout: Map<String, String>,
+    val inventory: List<InventoryWithItemMap>,
+    val meals: List<MealEntity>,
+    val recordedPurchaseIds: Set<String> = emptySet(),
+    val draftId: String = java.util.UUID.randomUUID().toString(),
+    val quantities: List<String> = lines.map { if (it.buyQuantity % 1.0 == 0.0) it.buyQuantity.toLong().toString() else it.buyQuantity.toString() },
+    val decisions: List<String> = lines.map { when(it.status) {
+        ShoppingNeedStatus.ALREADY_AT_HOME -> "have"
+        ShoppingNeedStatus.CHECK_STOCK -> "check"
+        ShoppingNeedStatus.NEED_TO_BUY -> "need"
+    } },
+    val explicit: List<Boolean> = lines.map { false },
+    val replaceEdited: Boolean = false
 )
 
 class MainViewModelFactory(private val repository: KitchenRepository, private val application: Application) : ViewModelProvider.Factory {

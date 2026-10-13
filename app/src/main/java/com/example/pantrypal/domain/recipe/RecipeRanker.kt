@@ -1,6 +1,7 @@
 package com.example.pantrypal.domain.recipe
 
 import kotlin.math.max
+import com.example.pantrypal.util.*
 
 object RecipeRanker {
     private const val DAY_MILLIS = 24L * 60L * 60L * 1_000L
@@ -11,21 +12,24 @@ object RecipeRanker {
         now: Long = System.currentTimeMillis(),
         useSoonWindowMillis: Long = 3 * DAY_MILLIS
     ): RecipeMatch {
-        val stocked = pantry.filter { it.quantity > 0 }
         val essential = recipe.ingredients.filterNot { it.isOptional }
-        val matched = essential.mapNotNull { ingredient ->
-            stocked.firstOrNull { pantryItem -> ingredient.matches(pantryItem) }
-                ?.let { ingredient to it }
+        val stock = pantry.map { ShoppingStock(it.name, it.quantity, it.unit, it.expirationDate, it.itemId) }
+        val reconciliation = reconcileRecipeShopping(essential, stock, now)
+        val lines = reconciliation.lines
+        val missing = lines.filter { it.status != ShoppingNeedStatus.ALREADY_AT_HOME }.map { line ->
+            essential.first { normalizeShoppingName(reconciliation.ingredientNames.getValue(it)) == line.normalizedName }.copy(
+                quantity = line.buyQuantity, unit = line.unit
+            )
         }
-        val matchedIngredients = matched.map { it.first }.toSet()
-        val missing = essential.filterNot(matchedIngredients::contains)
+        val matched = essential.filter { ingredient ->
+            lines.filter { it.normalizedName == normalizeShoppingName(reconciliation.ingredientNames.getValue(ingredient)) }
+                .all { it.status == ShoppingNeedStatus.ALREADY_AT_HOME }
+        }
         val soonCutoff = now + useSoonWindowMillis
-        val expiring = matched
-            .filter { (_, pantryItem) ->
-                pantryItem.expirationDate?.let { it in now..soonCutoff } == true
-            }
-            .map { it.first }
-            .distinctBy { it.normalizedName }
+        val expiring = matched.filter { ingredient -> stock.any {
+            normalizeShoppingName(it.name) == normalizeShoppingName(reconciliation.ingredientNames.getValue(ingredient)) &&
+                it.expirationDate?.let { date -> date in now..soonCutoff } == true
+        } }.distinctBy { it.normalizedName }
 
         val coverage = if (essential.isEmpty()) 0.0 else matched.size.toDouble() / essential.size
         val favouriteBoost = if (recipe.isFavourite) 0.08 else 0.0
@@ -82,19 +86,4 @@ object RecipeRanker {
         )
     }
 
-    private fun RecipeIngredient.matches(pantryItem: RecipePantryIngredient): Boolean {
-        if (linkedPantryItemId != null && linkedPantryItemId == pantryItem.itemId) return true
-        val ingredientName = normalizedName.ifBlank {
-            RecipeIngredientNormalizer.normalizeName(name)
-        }
-        val pantryName = RecipeIngredientNormalizer.normalizeName(pantryItem.name)
-        if (ingredientName.isBlank() || pantryName.isBlank()) return false
-        if (ingredientName == pantryName) return true
-
-        val ingredientTokens = ingredientName.split(' ')
-        val pantryTokens = pantryName.split(' ')
-        return ingredientTokens.size > 1 &&
-            pantryTokens.size > 1 &&
-            (ingredientTokens.containsAll(pantryTokens) || pantryTokens.containsAll(ingredientTokens))
-    }
 }

@@ -260,7 +260,7 @@ fun KitchenApp(
 
     var currentScreen by rememberSaveable(stateSaver = androidx.compose.runtime.saveable.Saver<AppScreen, Int>(
         save = { it.titleResId }, restore = { id -> listOf(AppScreen.Dashboard, AppScreen.Inventory, AppScreen.ShoppingList, AppScreen.AddManual, AppScreen.ScanIn, AppScreen.ScanOut, AppScreen.Settings, AppScreen.PastItems, AppScreen.MealPlan, AppScreen.Recipes, AppScreen.Receipt, AppScreen.ShoppingTools, AppScreen.DataManagement, AppScreen.Household).firstOrNull { it.titleResId == id } ?: AppScreen.Dashboard }
-    )) { mutableStateOf<AppScreen>(AppScreen.Dashboard) }
+    )) { mutableStateOf<AppScreen>(if (viewModel.shoppingBuildPreview.value != null) AppScreen.ShoppingList else AppScreen.Dashboard) }
     var showOnboarding by rememberSaveable {
         mutableStateOf(!hasCompletedOnboarding)
     }
@@ -893,8 +893,11 @@ fun KitchenApp(
                             val isProcessing by
                                 featuresViewModel.receiptProcessing.collectAsState()
                             val receiptError by featuresViewModel.receiptError.collectAsState()
+                            val purchaseOptions by featuresViewModel.receiptPurchaseOptions.collectAsState()
                             ReceiptReviewScreen(
                                 result = result,
+                                purchaseOptions = purchaseOptions,
+                                onUseAsDifferentReceipt = featuresViewModel::useAsDifferentReceipt,
                                 isProcessing = isProcessing,
                                 errorMessage = receiptError,
                                 onCaptureReceipt = {
@@ -906,8 +909,7 @@ fun KitchenApp(
                                 onCandidateChange =
                                     featuresViewModel::updateReceiptCandidate,
                                 onImportSelected = { candidates ->
-                                    featuresViewModel.importReceipt(candidates)
-                                    currentScreen = AppScreen.ShoppingTools
+                                    featuresViewModel.importReceipt(candidates) { currentScreen = AppScreen.ShoppingTools }
                                 }
                             )
                         }

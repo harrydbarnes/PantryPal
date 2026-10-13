@@ -104,7 +104,8 @@ fun MealPlanScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    buildPreview?.let { preview ->
+    val reviewOpen by viewModel.shoppingReviewOpen.collectAsState()
+    buildPreview?.takeIf { reviewOpen }?.let { preview ->
         ShoppingPreparationDialog(viewModel, preview, weeks.firstOrNull { it.weekId == preview.weekId }?.displayName ?: "Week ${preview.weekId}")
     }
 

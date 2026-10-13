@@ -100,4 +100,34 @@ class ShoppingSyncStoreTest {
         store.accept(ShoppingWireState(records = store.changes(first)), first)
         assertEquals(100, store.changes(store.batch("home")!!).size)
     }
+    @Test fun concurrentQuantityAndTickConvergeIncludingEditDuringRequest() = runBlocking {
+        val item = ShoppingItemEntity(name = "Milk", sectionId = 3)
+        val id = db.shoppingDao().insertShoppingItem(item)
+        val initial = store.batch("home")!!
+        var remote = ShoppingRecordProtocol.commit(ShoppingWireState(), "a", initial.batchId, store.changes(initial))
+        store.accept(remote, initial)
+        db.shoppingDao().updateShoppingItem(item.copy(shoppingId = id, quantity = 3.0))
+        val quantityBatch = store.batch("home")!!
+        // The partner ticks a stale copy while this device changes quantity.
+        val gson = com.google.gson.Gson()
+        val tick = gson.toJsonTree(item.copy(isChecked = true)).asJsonObject
+        tick.addProperty("sectionSyncId", "THE_REST")
+        remote = ShoppingRecordProtocol.commit(remote, "a", quantityBatch.batchId, store.changes(quantityBatch))
+        remote = ShoppingRecordProtocol.commit(remote, "b", "tick", mapOf(
+            "item:" + item.syncId to ShoppingRecord("tick", tick.toString()),
+            "layout:item-field:" + item.syncId + ":isChecked" to ShoppingRecord("tick", "1")
+        ))
+        store.accept(remote, quantityBatch)
+        val merged = db.shoppingSyncDao().item(item.syncId)!!
+        assertEquals(3.0, merged.quantity, 0.0)
+        assertTrue(merged.isChecked)
+        assertTrue(db.shoppingSyncDao().pending().isEmpty())
+        // A newer offline edit survives accepting the older quantity response.
+        db.shoppingDao().updateShoppingItem(merged.copy(quantity = 4.0))
+        val request = store.batch("home")!!
+        db.shoppingDao().updateShoppingItem(merged.copy(quantity = 5.0))
+        store.accept(ShoppingRecordProtocol.commit(remote, "a", request.batchId, store.changes(request)), request)
+        assertEquals(5.0, db.shoppingSyncDao().item(item.syncId)!!.quantity, 0.0)
+        assertTrue(db.shoppingSyncDao().pending().any { it.recordKey.endsWith(":quantity") })
+    }
 }

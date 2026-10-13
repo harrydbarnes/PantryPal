@@ -48,13 +48,41 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
         val incoming = if (authoritative) {
             (current.keys - remote.records.keys - pending).associateWith { ShoppingRecord(data = null) } + remote.records
         } else remote.records
-        // Parents before children. Section IDs are local; only sync IDs cross devices.
-        incoming.entries.sortedBy { if (it.key.startsWith("section:")) 0 else 1 }.forEach { (key, record) ->
-            if (key in pending || current[key] == record.data) return@forEach
-            apply(key, record.data)
-            // Suppress only this remote write, in this transaction. Never drop user edits.
-            dao.pending().firstOrNull { it.recordKey == key }?.let { dao.acknowledge(key, it.token) }
+        val fieldPrefix = "layout:item-field:"
+        val fields = current.filterKeys { it.startsWith(fieldPrefix) }.toMutableMap()
+        incoming.filterKeys { it.startsWith(fieldPrefix) }.forEach { (key, record) ->
+            if (key !in pending) {
+                if (record.data == null) fields.remove(key) else fields[key] = record.data
+            }
         }
+        // Base records establish existence. Field records overlay only fields actually edited.
+        incoming.entries.filterNot { it.key.startsWith(fieldPrefix) }
+            .sortedBy { if (it.key.startsWith("section:")) 0 else 1 }.forEach { (key, record) ->
+                if (key !in pending && current[key] != record.data) apply(key, record.data)
+            }
+        // Base-row triggers may have emitted stale values. Restore the merged field records.
+        dao.layout().filter { it.layoutKey.startsWith("item-field:") }.forEach {
+            if ("layout:" + it.layoutKey !in fields) dao.deleteLayout(it.layoutKey)
+        }
+        fields.forEach { (key, value) -> dao.putLayout(ShoppingLayoutEntity(key.removePrefix("layout:"), value)) }
+        fields.entries.groupBy { it.key.removePrefix(fieldPrefix).substringBeforeLast(':') }.forEach { (id, entries) ->
+            val row = dao.item(id) ?: return@forEach // A field edit must never resurrect a deletion.
+            val values = entries.associate { it.key.substringAfterLast(':') to it.value }
+            val section = values["sectionSyncId"]?.let { dao.section(it) }
+            val updated = row.copy(
+                name = values["name"] ?: row.name,
+                quantity = values["quantity"]?.toDoubleOrNull() ?: row.quantity,
+                unit = values["unit"] ?: row.unit,
+                isChecked = values["isChecked"]?.let { it == "1" } ?: row.isChecked,
+                sectionId = section?.sectionId ?: row.sectionId,
+                weekId = if ("weekId" in values) values["weekId"]?.ifEmpty { null } else row.weekId,
+                frequency = values["frequency"] ?: row.frequency
+            )
+            require(updated.name.isNotBlank() && updated.quantity.isFinite() && updated.quantity >= 0 && updated.unit.isNotBlank())
+            if (updated != row) db.shoppingDao().updateShoppingItem(updated)
+        }
+        // Suppress generated remote writes while retaining every edit pending before acceptance.
+        dao.pending().filter { it.recordKey !in pending }.forEach { dao.acknowledge(it.recordKey, it.token) }
         // A partner may delete a section while this device adds an item to it.
         // Keep the surviving item visible and journal the fallback assignment.
         val sections = dao.sections()

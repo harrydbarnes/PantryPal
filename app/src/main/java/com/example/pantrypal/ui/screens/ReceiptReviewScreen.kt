@@ -28,7 +28,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -56,6 +59,8 @@ fun ReceiptReviewScreen(
     onPasteReceiptText: () -> Unit,
     onCandidateChange: (ReceiptReviewCandidate) -> Unit,
     onImportSelected: (List<ReceiptReviewCandidate>) -> Unit,
+    purchaseOptions: List<com.example.pantrypal.domain.receipt.ReceiptPurchaseOption> = emptyList(),
+    onUseAsDifferentReceipt: () -> Unit = {},
     errorMessage: String? = null,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
@@ -203,11 +208,16 @@ fun ReceiptReviewScreen(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         )
                     ) {
+                        Column {
                         Text(
                             errorMessage,
                             modifier = Modifier.padding(PantryPalSpacing.md),
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
+                        if (errorMessage.startsWith("This receipt has already been imported")) {
+                            TextButton(onClick = onUseAsDifferentReceipt) { Text("This is a different receipt: add new purchases") }
+                        }
+                        }
                     }
                 }
             }
@@ -237,6 +247,7 @@ fun ReceiptReviewScreen(
             items(candidates, key = ReceiptReviewCandidate::candidateId) { candidate ->
                 ReceiptCandidateCard(
                     candidate = candidate,
+                    purchaseOptions = purchaseOptions,
                     onCandidateChange = onCandidateChange
                 )
             }
@@ -290,6 +301,7 @@ private fun SummaryRow(label: String, value: String) {
 @Composable
 private fun ReceiptCandidateCard(
     candidate: ReceiptReviewCandidate,
+    purchaseOptions: List<com.example.pantrypal.domain.receipt.ReceiptPurchaseOption>,
     onCandidateChange: (ReceiptReviewCandidate) -> Unit
 ) {
     Card(
@@ -331,6 +343,27 @@ private fun ReceiptCandidateCard(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
+            var choosingPurchase by remember { mutableStateOf(false) }
+            val linked = purchaseOptions.firstOrNull { it.key == candidate.purchaseLink }
+            androidx.compose.foundation.layout.Box {
+                TextButton(enabled = candidate.isIncluded, onClick = { choosingPurchase = true }) {
+                    Text(linked?.let { "Linked: ${it.name} (${it.quantity} ${it.unit})" } ?: "New purchase")
+                }
+                DropdownMenu(expanded = choosingPurchase, onDismissRequest = { choosingPurchase = false }) {
+                    DropdownMenuItem(text = { Text("New purchase") }, onClick = {
+                        onCandidateChange(candidate.copy(purchaseLink = null)); choosingPurchase = false
+                    })
+                    purchaseOptions.forEach { option ->
+                        DropdownMenuItem(text = { Text("${option.name} · ${option.quantity} ${option.unit} · ${java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT).format(java.util.Date(option.purchasedAt))}" + if (option.alreadyInPantry) " · already put away" else " · ticked on list") }, onClick = {
+                            onCandidateChange(candidate.copy(purchaseLink = option.key)); choosingPurchase = false
+                        })
+                    }
+                }
+            }
+            Text(if (linked?.alreadyInPantry == true) "This receipt will add prices without adding this stock again."
+                else if (linked != null) "Adds stock now; Finish shop will keep the same purchase."
+                else "Adds new stock. Link a ticked or recently finished purchase to avoid counting it twice.",
+                style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(
                 value = candidate.name,
                 onValueChange = { value ->

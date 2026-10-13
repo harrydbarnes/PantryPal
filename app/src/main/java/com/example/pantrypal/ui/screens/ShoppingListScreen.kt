@@ -307,7 +307,7 @@ fun ShoppingListScreen(
                     ) {
                         Icon(Icons.Default.RestaurantMenu, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Review meal-plan shopping")
+                        Text(if (buildPreview != null) "Resume saved shopping review" else "Review meal-plan shopping")
                     }
                 }
             }
@@ -534,7 +534,8 @@ fun ShoppingListScreen(
         )
     }
 
-    buildPreview?.let { preview ->
+    val reviewOpen by viewModel.shoppingReviewOpen.collectAsState()
+    buildPreview?.takeIf { reviewOpen }?.let { preview ->
         ShoppingPreparationDialog(viewModel, preview, mealWeeks.firstOrNull { it.weekId == preview.weekId }?.displayName ?: "Week ${preview.weekId}")
     }
 

@@ -53,9 +53,11 @@ import com.google.gson.Gson
         RecipeIngredientEntity::class,
         com.example.pantrypal.data.entity.ShoppingLayoutEntity::class,
         com.example.pantrypal.data.entity.ShoppingSyncQueueEntity::class,
-        com.example.pantrypal.data.entity.ShoppingSyncBatchEntity::class
+        com.example.pantrypal.data.entity.ShoppingSyncBatchEntity::class,
+        com.example.pantrypal.data.entity.PurchaseRecordEntity::class,
+        com.example.pantrypal.data.entity.ReceiptImportEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -73,6 +75,8 @@ abstract class KitchenDatabase : RoomDatabase() {
     abstract fun recipeDao(): RecipeDao
     abstract fun backupDao(): BackupDao
     abstract fun shoppingSyncDao(): com.example.pantrypal.data.dao.ShoppingSyncDao
+
+    abstract fun purchaseRecordDao(): com.example.pantrypal.data.dao.PurchaseRecordDao
 
     companion object {
         @Volatile
@@ -191,6 +195,13 @@ abstract class KitchenDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) = ShoppingSyncSchema.migrate(db)
         }
 
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS purchase_records (purchaseId TEXT NOT NULL PRIMARY KEY, shoppingSyncId TEXT, receiptId TEXT, name TEXT NOT NULL, quantity REAL NOT NULL, unit TEXT NOT NULL, stockRecorded INTEGER NOT NULL, completed INTEGER NOT NULL, storageLocation TEXT, purchasedAt INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS receipt_imports (receiptId TEXT NOT NULL PRIMARY KEY, importedAt INTEGER NOT NULL)")
+            }
+        }
+
         fun getDatabase(context: Context): KitchenDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -205,7 +216,8 @@ abstract class KitchenDatabase : RoomDatabase() {
                     MIGRATION_4_5,
                     MIGRATION_5_6,
                     MIGRATION_6_7,
-                    MIGRATION_7_8
+                    MIGRATION_7_8,
+                    MIGRATION_8_9
                 )
                 .addCallback(object : Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {

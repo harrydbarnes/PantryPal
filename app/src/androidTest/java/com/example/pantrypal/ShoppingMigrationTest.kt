@@ -16,10 +16,10 @@ class ShoppingMigrationTest {
         fun helper(version: Int) = FrameworkSQLiteOpenHelperFactory().create(SupportSQLiteOpenHelper.Configuration.builder(context).name(name)
             .callback(object : SupportSQLiteOpenHelper.Callback(version) {
                 override fun onCreate(db: SupportSQLiteDatabase) {
-                    db.execSQL("CREATE TABLE shopping_list (shoppingId INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+                    db.execSQL("CREATE TABLE shopping_list (shoppingId INTEGER PRIMARY KEY, name TEXT NOT NULL, quantity REAL NOT NULL DEFAULT 1, unit TEXT NOT NULL DEFAULT 'pcs', isChecked INTEGER NOT NULL DEFAULT 0, sectionId INTEGER NOT NULL DEFAULT 3, weekId TEXT, frequency TEXT NOT NULL DEFAULT 'ONE_OFF')")
                     db.execSQL("CREATE TABLE shopping_sections (sectionId INTEGER PRIMARY KEY, name TEXT NOT NULL, systemKey TEXT)")
                     db.execSQL("CREATE TABLE meal_weeks (weekId TEXT PRIMARY KEY)")
-                    db.execSQL("INSERT INTO shopping_list VALUES (11, 'Existing milk'), (12, 'Existing eggs')")
+                    db.execSQL("INSERT INTO shopping_list(shoppingId, name) VALUES (11, 'Existing milk'), (12, 'Existing eggs')")
                     db.execSQL("INSERT INTO shopping_sections VALUES (7, 'My section', NULL), (3, 'The rest', 'THE_REST')")
                 }
                 override fun onUpgrade(db: SupportSQLiteDatabase, old: Int, new: Int) { ShoppingSyncSchema.migrate(db) }
@@ -35,8 +35,29 @@ class ShoppingMigrationTest {
                 }
                 db.execSQL("UPDATE OR ABORT shopping_list SET name = 'Changed' WHERE shoppingId = 11")
                 db.execSQL("UPDATE OR ABORT shopping_list SET name = 'Changed again' WHERE shoppingId = 11")
-                db.query("SELECT recordKey FROM shopping_sync_queue").use { assertTrue(it.moveToFirst()); assertEquals("item:legacy-item-11", it.getString(0)); assertEquals(1, it.count) }
+                db.query("SELECT recordKey FROM shopping_sync_queue").use { assertTrue(it.moveToFirst()); assertTrue(it.getString(0) in setOf("item:legacy-item-11", "layout:item-field:legacy-item-11:name")); assertEquals(2, it.count) }
             }
         } finally { context.deleteDatabase(name) }
+    }
+    @Test fun roomUpgradeFromEightKeepsShoppingAndCreatesLocalLedger() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val name = "ledger-migration-${java.util.UUID.randomUUID()}.db"
+        val original = androidx.room.Room.databaseBuilder(context, com.example.pantrypal.data.database.KitchenDatabase::class.java, name).build()
+        try {
+            original.shoppingDao().insertShoppingItem(com.example.pantrypal.data.entity.ShoppingItemEntity(name = "Milk", quantity = 2.0))
+            original.openHelper.writableDatabase.apply {
+                execSQL("DROP TABLE purchase_records")
+                execSQL("DROP TABLE receipt_imports")
+                execSQL("PRAGMA user_version = 8")
+            }
+            original.close()
+            val upgraded = androidx.room.Room.databaseBuilder(context, com.example.pantrypal.data.database.KitchenDatabase::class.java, name)
+                .addMigrations(com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_8_9).build()
+            try {
+                assertEquals("Milk", upgraded.shoppingDao().getAllShoppingItemsSnapshot().single().name)
+                assertTrue(upgraded.purchaseRecordDao().records().isEmpty())
+                assertTrue(upgraded.purchaseRecordDao().imports().isEmpty())
+            } finally { upgraded.close() }
+        } finally { original.close(); context.deleteDatabase(name) }
     }
 }

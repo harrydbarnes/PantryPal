@@ -90,4 +90,56 @@ class ShoppingCompletionTest {
         repo.undoQuickAdd(change)
         assertEquals(1.0, db.shoppingDao().getAllShoppingItemsSnapshot().single().quantity, 0.0)
     }
+    private fun features() = com.example.pantrypal.data.repository.PantryFeaturesRepository(
+        ApplicationProvider.getApplicationContext(), db, repo)
+    private fun receipt() = com.example.pantrypal.domain.receipt.ReceiptParser.parse("2 x Milk 3.00\nTOTAL 3.00")
+
+    @Test fun receiptThenFinishAddsStockAndPricesOnce() = runBlocking {
+        val milk = ShoppingItemEntity(name = "Milk", quantity = 2.0, unit = "pcs", isChecked = true, sectionId = 3, weekId = "A")
+        db.shoppingDao().insertShoppingItem(milk)
+        val receipt = receipt()
+        val candidate = receipt.candidates.single().copy(purchaseLink = "shopping:" + milk.syncId)
+        features().importReceiptPurchases(listOf(candidate), storageLocation = "Fridge", receiptId = receipt.receiptId)
+        repo.finishShopping("A", emptyMap(), "Pantry", true)
+        assertEquals(2.0, db.inventoryDao().getAllInventorySnapshot().single().quantity, 0.0)
+        try { features().importReceiptPurchases(listOf(candidate), receiptId = receipt.receiptId); fail("Expected duplicate receipt rejection") }
+        catch (_: IllegalArgumentException) {}
+        assertEquals(1, db.backupDao().priceHistory().size)
+        assertEquals(1, db.purchaseRecordDao().records().size)
+        assertEquals("Fridge", db.shoppingDao().getShoppingArchiveSnapshot().single().storageLocation)
+        val backup = features().exportBackupJson()
+        db.purchaseRecordDao().clearRecords(); db.purchaseRecordDao().clearImports()
+        features().restoreBackupJson(backup)
+        assertEquals(1, db.purchaseRecordDao().records().size)
+        assertTrue(db.purchaseRecordDao().imported(receipt.receiptId))
+    }
+    @Test fun finishThenReceiptLinksToCompletedPurchaseWithoutAddingStockAgain() = runBlocking {
+        db.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = "Milk", quantity = 2.0, isChecked = true, sectionId = 3, weekId = "A"))
+        repo.finishShopping("A", emptyMap(), "Pantry", true)
+        val option = features().receiptPurchaseOptions().single()
+        val receipt = receipt()
+        features().importReceiptPurchases(listOf(receipt.candidates.single().copy(purchaseLink = option.key)), receiptId = receipt.receiptId)
+        assertEquals(2.0, db.inventoryDao().getAllInventorySnapshot().single().quantity, 0.0)
+        assertEquals(1, db.purchaseRecordDao().records().size)
+    }
+    @Test fun invalidReceiptLinkRollsBackEntireImport() = runBlocking {
+        db.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = "Milk", quantity = 1.0, isChecked = true, sectionId = 3))
+        val option = features().receiptPurchaseOptions().single()
+        val receipt = receipt()
+        try { features().importReceiptPurchases(listOf(receipt.candidates.single().copy(purchaseLink = option.key)), receiptId = receipt.receiptId); fail("Expected quantity mismatch") }
+        catch (_: IllegalArgumentException) {}
+        assertTrue(db.inventoryDao().getAllInventorySnapshot().isEmpty())
+        assertTrue(db.purchaseRecordDao().imports().isEmpty())
+        assertTrue(db.backupDao().priceHistory().isEmpty())
+    }
+    @Test fun recipeAdditionUsesStockCompatibleListCoverageAndSelectedWeek() = runBlocking {
+        val itemId = db.itemDao().insertItem(ItemEntity(name = "Pasta", defaultUnit = "g", category = "General"))
+        db.inventoryDao().insertInventory(InventoryEntity(itemId = itemId, quantity = 100.0, unit = "g"))
+        db.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = "Pasta", quantity = 0.1, unit = "kg", sectionId = 3, weekId = "A"))
+        db.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = "Pasta", quantity = 1.0, unit = "kg", sectionId = 3, weekId = "B"))
+        val ingredients = listOf(com.example.pantrypal.domain.recipe.RecipeIngredientNormalizer.parse("500 g pasta"))
+        assertEquals(1, features().addMissingIngredientsToShopping(ingredients, "A"))
+        assertEquals(0, features().addMissingIngredientsToShopping(ingredients, "A"))
+        assertEquals(300.0, db.shoppingDao().getAllShoppingItemsSnapshot().first { it.sectionId == ShoppingSectionEntity.ID_MEAL_PLAN }.quantity, 0.0)
+    }
 }
