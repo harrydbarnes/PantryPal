@@ -18,11 +18,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.ExperimentalFoundationApi
+import com.example.pantrypal.data.entity.StoreTag
 import androidx.compose.animation.animateContentSize
 import com.example.pantrypal.util.ShoppingAisles
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CheckCircle
@@ -95,7 +98,7 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ShoppingListScreen(
     viewModel: MainViewModel,
@@ -145,11 +148,17 @@ fun ShoppingListScreen(
     var showShoppingArchive by rememberSaveable { mutableStateOf(false) }
     var finishedCount by rememberSaveable { mutableStateOf<Int?>(null) }
 
+    val lowStaples by viewModel.likelyRunningLowStaples.collectAsState()
+    var selectedStoreName by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedStore = selectedStoreName?.let(StoreTag::valueOf)
+    var showTicked by rememberSaveable { mutableStateOf(false) }
+    var showShopMenu by remember { mutableStateOf(false) }
     val currentWeekDetails = mealWeeks.firstOrNull { it.weekId == selectedWeek }
-    val visibleItems = remember(shoppingList, sections, selectedWeek) {
+    val visibleItems = remember(shoppingList, sections, selectedWeek, selectedStore) {
         val recurringIds = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
         shoppingList.filter { item ->
-            item.sectionId in recurringIds || item.weekId == null || item.weekId == selectedWeek
+            (item.sectionId in recurringIds || item.weekId == null || item.weekId == selectedWeek) &&
+                (selectedStore == null || item.storeTag == selectedStore || item.storeTag == StoreTag.EITHER)
         }
     }
 
@@ -201,9 +210,26 @@ fun ShoppingListScreen(
                             Text("${currentWeekDetails?.displayName ?: "Week $selectedWeek"} · ${visibleItems.count { !it.isChecked }} left", style = MaterialTheme.typography.titleMedium)
                             Text(dates, style = MaterialTheme.typography.bodySmall)
                         }
-                        if (unfinishedPurchases.isNotEmpty()) TextButton(enabled = !saving, onClick = { showPutAwayDialog = true; viewModel.dismissActionError() }) { Text("Finish shop") }
+                        if (unfinishedPurchases.isNotEmpty()) androidx.compose.foundation.layout.Box {
+                            IconButton(onClick = { showShopMenu = true }) { Icon(androidx.compose.material.icons.Icons.Default.MoreVert, contentDescription = "Shopping actions") }
+                            DropdownMenu(expanded = showShopMenu, onDismissRequest = { showShopMenu = false }) {
+                                DropdownMenuItem(text = { Text("Remove Ticked Only") }, enabled = !saving, onClick = {
+                                    showShopMenu = false
+                                    viewModel.completeShopAndRestock(selectedStore, removeOnly = true) { count ->
+                                        scope.launch { snackbarHostState.showSnackbar("$count ticked items removed; pantry stock unchanged") }
+                                    }
+                                })
+                                DropdownMenuItem(text = { Text("Choose put-away locations") }, onClick = { showShopMenu = false; showPutAwayDialog = true })
+                            }
+                        }
                         else if (hasFinishedRegulars) TextButton(enabled = !saving, onClick = { viewModel.prepareNextShop() }) { Text("Prepare next shop") }
                     }
+                    if (unfinishedPurchases.isNotEmpty()) Button(
+                        enabled = !saving,
+                        onClick = { viewModel.completeShopAndRestock(selectedStore) { count ->
+                            scope.launch { snackbarHostState.showSnackbar("$count purchases completed and restocked") }
+                        } }, modifier = Modifier.fillMaxWidth()
+                    ) { Text("Complete Shop & Restock (${unfinishedPurchases.size})") }
                     TextButton(onClick = onOpenHousehold, contentPadding = PaddingValues(0.dp)) {
                         Icon(Icons.Outlined.Group, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
@@ -221,6 +247,23 @@ fun ShoppingListScreen(
             if (loading) item { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
             shoppingError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
             actionError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+            if (lowStaples.isNotEmpty()) item {
+                Text("Likely Running Low", style = MaterialTheme.typography.titleMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(lowStaples, key = { it.first.itemId }) { (product, batch) ->
+                        AssistChip(enabled = !saving, onClick = { viewModel.addLowStaple(product, batch) }, label = { Text(product.name) },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) })
+                    }
+                }
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { FilterChip(selected = selectedStore == null, onClick = { selectedStoreName = null }, label = { Text("All Stores") }) }
+                    items(listOf(StoreTag.TESCO, StoreTag.ALDI)) { store ->
+                        FilterChip(selected = selectedStore == store, onClick = { selectedStoreName = store.name }, label = { Text(store.label) })
+                    }
+                }
+            }
             item {
                 QuickAddShoppingItem(
                     value = quickAddName,
@@ -361,36 +404,57 @@ fun ShoppingListScreen(
                 }
             }
             if (aisleMode) {
-                val groups = visibleItems.groupBy { ShoppingAisles.aisleFor(it.name, aisles, layout, inventory.firstOrNull { stock -> normalizeShoppingName(stock.name) == normalizeShoppingName(it.name) }?.category, inventory.firstOrNull { stock -> normalizeShoppingName(stock.name) == normalizeShoppingName(it.name) }?.storageLocation, profile) }
+                val groups = visibleItems.filterNot { it.isChecked }.groupBy { ShoppingAisles.aisleFor(it.name, aisles, layout, inventory.firstOrNull { stock -> normalizeShoppingName(stock.name) == normalizeShoppingName(it.name) }?.category, inventory.firstOrNull { stock -> normalizeShoppingName(stock.name) == normalizeShoppingName(it.name) }?.storageLocation, profile) }
                 (aisles + ShoppingAisles.UNASSIGNED).forEach { aisle ->
                     val rows = groups[aisle].orEmpty().sortedBy { it.isChecked }
                     if (rows.isNotEmpty()) {
-                        item(key = "aisle-$aisle") { Text(aisle, style = MaterialTheme.typography.titleLarge) }
+                        stickyHeader(key = "aisle-$aisle") { Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer) { Text(aisle, Modifier.padding(12.dp), style = MaterialTheme.typography.titleLarge) } }
                         items(rows, key = { "item-${it.syncId}" }) { row ->
                             Card(Modifier.fillMaxWidth().animateItem()) {
                                 ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) })
-                                TextButton(onClick = { movingItem = row }) { Text("Aisle / section") }
+                                TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
+                            TextButton(onClick = { movingItem = row }) { Text("Aisle / section") }
                             }
                         }
                     }
                 }
             } else {
                 sections.forEach { section ->
-                    val sectionItems = shoppingItemsForSection(visibleItems, section.sectionId)
+                    val sectionItems = shoppingItemsForSection(visibleItems.filterNot { it.isChecked }, section.sectionId)
                     item(key = "section-${section.syncId}") {
                         ShoppingSectionHeader(section, sectionItems.isEmpty(),
                             onAdd = { editingItem = null; itemEditorSection = section },
                             onEditSection = if (section.systemKey == null) { { editingSection = section; showSectionEditor = true } } else null)
                     }
-                    items(sectionItems, key = { "item-${it.syncId}" }) { row ->
+                    sectionItems.groupBy { it.category.takeUnless { category -> category == "Uncategorised" } ?: com.example.pantrypal.domain.shopping.AisleCategoryMapper.categoryFor(it.name) }.toSortedMap().forEach { (category, rows) ->
+                        stickyHeader(key = "category-${section.syncId}-$category") {
+                            Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer) {
+                                Text(category, Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                    items(rows, key = { "item-${it.syncId}" }) { row ->
                         Card(Modifier.fillMaxWidth().animateItem()) {
                             ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = section }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) })
+                            TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
                             TextButton(onClick = { movingItem = row }) { Text("Move section / assign aisle") }
                         }
+                    }
                     }
                 }
             }
 
+            val tickedRows = visibleItems.filter { it.isChecked }
+            if (tickedRows.isNotEmpty()) {
+                item { TextButton(onClick = { showTicked = !showTicked }) {
+                    Text(if (showTicked) "Hide Ticked (${tickedRows.size})" else "Show Ticked (${tickedRows.size})")
+                } }
+                if (showTicked) items(tickedRows, key = { "ticked-${it.syncId}" }) { row ->
+                    Card(Modifier.fillMaxWidth().animateItem(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                        ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) })
+                        TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
+                    }
+                }
+            }
             if (!loading && visibleItems.none { !it.isChecked }) {
                 item {
                     Text(
@@ -903,7 +967,7 @@ fun ShoppingListItemRow(
             )
         }
         IconButton(onClick = { actionsExpanded = true }) {
-            Icon(Icons.Default.MoreVert, contentDescription = "More options for ${item.name}")
+            Icon(androidx.compose.material.icons.Icons.Default.MoreVert, contentDescription = "More options for ${item.name}")
         }
         DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
             if (needsStockCheck) DropdownMenuItem(text = { Text("Stock checked") }, onClick = { actionsExpanded = false; onConfirmStock() })

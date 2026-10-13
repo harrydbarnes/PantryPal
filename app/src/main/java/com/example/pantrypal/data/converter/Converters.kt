@@ -6,6 +6,10 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 class Converters {
+    @TypeConverter fun fromStoreTag(value: com.example.pantrypal.data.entity.StoreTag): String = value.name
+    @TypeConverter fun toStoreTag(value: String): com.example.pantrypal.data.entity.StoreTag =
+        runCatching { com.example.pantrypal.data.entity.StoreTag.valueOf(value) }.getOrDefault(com.example.pantrypal.data.entity.StoreTag.EITHER)
+
     @TypeConverter
     fun fromConsumptionType(value: ConsumptionType): String {
         return value.name

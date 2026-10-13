@@ -4,6 +4,8 @@ import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -109,6 +111,7 @@ private val PantryPalShapes = Shapes(
     extraLarge = RoundedCornerShape(36.dp)
 )
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PantryPalTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -134,7 +137,7 @@ fun PantryPalTheme(
         }
     }
 
-    MaterialTheme(
+    MaterialExpressiveTheme(
         colorScheme = colorScheme,
         typography = PantryPalTypography,
         shapes = PantryPalShapes,

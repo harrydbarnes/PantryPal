@@ -26,6 +26,7 @@ import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.util.ExpiryStatus
 import com.example.pantrypal.util.InventorySort
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -37,9 +38,13 @@ fun InventoryScreen(
     onAdjustQuantity: (Long, Double) -> Unit,
     onToggleOpened: (InventoryUiModel) -> Unit,
     onSaveDetails: (InventoryUiModel, Boolean, Double?, String, () -> Unit) -> Unit,
+    onMarkEmpty: (InventoryUiModel, (com.example.pantrypal.data.dao.ShoppingListDao.EmptyChange) -> Unit) -> Unit = { _, _ -> },
+    onUndoEmpty: (com.example.pantrypal.data.dao.ShoppingListDao.EmptyChange) -> Unit = {},
     saving: Boolean = false,
     error: String? = null
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var location by rememberSaveable { mutableStateOf<String?>(null) }
@@ -76,7 +81,8 @@ fun InventoryScreen(
         }
     }
 
-    LazyColumn(
+    Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0), snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    LazyColumn(modifier = Modifier.padding(padding),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -198,6 +204,18 @@ fun InventoryScreen(
             }
         }
         items(filteredItems, key = { it.inventoryId }) { item ->
+            val dismiss = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
+                if (value == SwipeToDismissBoxValue.EndToStart && !saving) onMarkEmpty(item) { change ->
+                    scope.launch {
+                        if (snackbarHostState.showSnackbar("Marked empty & added to Shopping List", "Undo") == SnackbarResult.ActionPerformed) onUndoEmpty(change)
+                    }
+                }
+                false
+            })
+            SwipeToDismissBox(state = dismiss, enableDismissFromStartToEnd = false, enableDismissFromEndToStart = !saving,
+                backgroundContent = { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.large) {
+                    Box(Modifier.padding(16.dp), contentAlignment = Alignment.CenterEnd) { Text("Mark empty & add to shopping") }
+                } }) {
             InventoryItemRow(
                 item = item,
                 onConsume = onConsume,
@@ -206,6 +224,9 @@ fun InventoryScreen(
                 onEditStockSettings = { editingStockItem = item }
             )
         }
+            }
+    }
+
     }
 
     editingStockItem?.let { item ->

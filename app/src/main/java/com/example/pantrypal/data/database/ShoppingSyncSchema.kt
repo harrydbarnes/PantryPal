@@ -39,7 +39,7 @@ object ShoppingSyncSchema {
         // Separate field records let quantity edits and ticks converge independently.
         // Explicit delete/insert survives Room UPDATE OR ABORT, whose conflict policy
         // otherwise overrides an INSERT OR REPLACE inside this trigger.
-        for (field in listOf("name", "quantity", "unit", "isChecked", "sectionId", "weekId", "frequency")) {
+        for (field in listOf("name", "quantity", "unit", "isChecked", "sectionId", "weekId", "frequency", "category", "storeTag", "source")) {
             val wireField = if (field == "sectionId") "sectionSyncId" else field
             val value = if (field == "sectionId") "COALESCE((SELECT syncId FROM shopping_sections WHERE sectionId = NEW.sectionId), 'THE_REST')"
                 else "COALESCE(CAST(NEW.$field AS TEXT), '')"

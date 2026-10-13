@@ -17,8 +17,7 @@ class StockOperations(private val db: KitchenDatabase) {
             val amount = minOf(use.quantity, stock.quantity)
             if (amount <= 0) return@forEach
             db.consumptionDao().insertConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = amount, type = type, wasteReason = reason))
-            if (amount == stock.quantity) db.inventoryDao().deleteInventory(stock)
-            else db.inventoryDao().updateInventory(stock.copy(quantity = stock.quantity - amount))
+            db.inventoryDao().updateInventory(stock.copy(quantity = stock.quantity - amount))
             if (type == ConsumptionType.FINISHED) {
                 val item = db.itemDao().getItemById(stock.itemId)
                 if (item != null && item.isUsual && db.inventoryDao().totalQuantity(item.itemId) <= (item.lowStockThreshold ?: 0.0)) restock(item, week)
@@ -30,9 +29,8 @@ class StockOperations(private val db: KitchenDatabase) {
         val listed = db.shoppingDao().getAllShoppingItemsSnapshot().any {
             !it.isChecked && normalizeShoppingName(it.name) == normalizeShoppingName(item.name) && (it.weekId == null || it.weekId == week)
         }
-        if (!listed) db.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = item.name,
-            quantity = (item.lowStockThreshold ?: 1.0).coerceAtLeast(1.0), unit = item.defaultUnit,
-            sectionId = ShoppingSectionEntity.ID_THE_REST, weekId = week))
+        if (!listed) db.shoppingListDao().upsertShoppingItem(item.name,
+            (item.lowStockThreshold ?: 1.0).coerceAtLeast(1.0), "RESTOCK", week, unit = item.defaultUnit)
     }
 
     suspend fun edit(inventoryId: Long, transform: (InventoryEntity) -> InventoryEntity) = db.withTransaction {

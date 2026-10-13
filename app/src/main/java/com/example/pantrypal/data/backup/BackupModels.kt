@@ -35,7 +35,8 @@ data class BackupPayload(
     val preferences: BackupPreferences = BackupPreferences(),
     val shoppingLayout: Map<String, String>? = null,
     val purchaseRecords: List<com.example.pantrypal.data.entity.PurchaseRecordEntity>? = null,
-    val receiptImports: List<com.example.pantrypal.data.entity.ReceiptImportEntity>? = null
+    val receiptImports: List<com.example.pantrypal.data.entity.ReceiptImportEntity>? = null,
+    val shoppingIngestStates: List<com.example.pantrypal.data.entity.ShoppingIngestEntity>? = null
 )
 
 data class BackupItem(
@@ -49,7 +50,8 @@ data class BackupItem(
     val isUsual: Boolean = false,
     val lowStockThreshold: Double? = null,
     val imageUrl: String? = null,
-    val createdAt: Long = 0
+    val createdAt: Long = 0,
+    val preferredStore: String? = null
 )
 
 data class BackupInventory(
@@ -60,7 +62,8 @@ data class BackupInventory(
     val addedDate: Long = 0,
     val expirationDate: Long? = null,
     val storageLocation: String = "Pantry",
-    val isOpened: Boolean = false
+    val isOpened: Boolean = false,
+    val preferredStore: String? = null
 )
 
 data class BackupConsumption(
@@ -91,7 +94,11 @@ data class BackupShoppingItem(
     val frequency: String = "One-Off",
     val sectionId: Long = 0,
     val weekId: String? = null,
-    val syncId: String? = null
+    val syncId: String? = null,
+    val inventoryId: Long? = null,
+    val category: String? = null,
+    val storeTag: String? = null,
+    val source: String? = null
 )
 
 data class BackupShoppingArchive(

@@ -49,9 +49,11 @@
         </provider>
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.PantryPal">
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -63,6 +65,14 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <service android:name=".integration.PantryPalAgentService"
+            android:permission="android.permission.BIND_APP_FUNCTION_SERVICE" android:exported="true"
+            android:enabled="@bool/app_functions_supported" tools:targetApi="36">
+            <property android:name="android.app.appfunctions.schema" android:value="app_functions_schema.xsd" />
+            <property android:name="android.app.appfunctions.v2" android:value="pantry_pal_voice_functions.xml" />
+            <intent-filter><action android:name="android.app.appfunctions.AppFunctionService" /></intent-filter>
+        </service>
+        <property android:name="android.app.appfunctions.app_metadata" android:resource="@xml/app_metadata" />
         <activity
             android:name=".widget.WidgetQuickAddActivity"
             android:exported="false"

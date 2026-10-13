@@ -14,18 +14,20 @@ data class ItemEntity(
     val name: String,
     val barcode: String? = null,
     val defaultUnit: String, // e.g., "pcs", "L", "kg"
-    val category: String, // e.g., "Dairy", "Produce"
+    val category: String, // e.g., "Dairy & Fridge", "Fruit & Veg"
     val isVegetarian: Boolean = false,
     val isGlutenFree: Boolean = false,
     val isUsual: Boolean = false,
     @ColumnInfo(defaultValue = "NULL")
     val lowStockThreshold: Double? = null,
     val imageUrl: String? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "'EITHER'") val preferredStore: StoreTag = StoreTag.EITHER
 ) {
     companion object {
         const val TEMP_ID = 0L
         val CATEGORIES = listOf(
+            "Dairy & Fridge", "Bakery", "Cupboard Staples", "Tinned Goods", "Household & Baby", "Uncategorised",
             "Fruit & Veg", "Fish", "Dairy", "Fresh Snacks", "Fresh Meals",
             "Snacks", "Juice & Drinks", "Baby", "Household", "Bread & Eggs", "Frozen", "General"
         )

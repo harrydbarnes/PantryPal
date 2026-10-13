@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AppFunctionAppMetadata xmlns:appfn="http://schemas.android.com/apk/androidx.appfunctions"
+    appfn:description="PantryPal manages weekly groceries and household shopping. Use addShoppingItems to add grocery names with optional quantities to the active week. Store can be Tesco, Aldi or Either. Product names cannot be blank. This function does not purchase goods or delete stock."
+    appfn:displayDescription="@string/voice_shopping_description" />

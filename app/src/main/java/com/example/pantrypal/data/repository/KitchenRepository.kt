@@ -109,6 +109,9 @@ class KitchenRepository(
         checked.size
     }
 
+    val shoppingItemsDao get() = requireNotNull(database).shoppingListDao()
+    val likelyRunningLowStaples get() = shoppingItemsDao.getLikelyRunningLowStaples(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
+
     suspend fun stockRecordedShoppingIds(): Set<String> = database?.purchaseRecordDao()?.records().orEmpty()
         .filter { it.stockRecorded && !it.completed }.mapNotNull { it.shoppingSyncId }.toSet()
 
@@ -146,7 +149,8 @@ class KitchenRepository(
                 normalizeShoppingName(it.name) == normalizeShoppingName(item.name) &&
                 com.example.pantrypal.util.convertShoppingQuantity(item.quantity, item.unit, it.unit) != null
         }
-        val saved = if (existing != null) {
+        val saved = if (database != null) database.shoppingListDao().upsertShoppingItem(item.name, item.quantity, item.source,
+            weekId, unit = item.unit) else if (existing != null) {
             val quantity = existing.quantity + com.example.pantrypal.util.convertShoppingQuantity(item.quantity, item.unit, existing.unit)!!
             existing.copy(quantity = quantity).also { requireValidShoppingItem(it); shoppingDao.updateShoppingItem(it) }
         } else item.copy(shoppingId = shoppingDao.insertShoppingItem(item))
@@ -450,7 +454,8 @@ class KitchenRepository(
                 ?: ItemEntity(
                     name = shoppingItem.name.trim(),
                     defaultUnit = shoppingItem.unit,
-                    category = if (storageLocation == InventoryEntity.LOCATION_HOUSEHOLD) "Household" else "General"
+                    category = if (storageLocation == InventoryEntity.LOCATION_HOUSEHOLD) "Household & Baby" else shoppingItem.category,
+                    preferredStore = shoppingItem.storeTag
                 ).let { newItem ->
                     val id = itemDao.insertItem(newItem)
                     newItem.copy(itemId = id).also(knownItems::add)
@@ -463,12 +468,13 @@ class KitchenRepository(
                     it.expirationDate == null
             }
             if (existingBatch != null) {
-                val updated = existingBatch.copy(quantity = existingBatch.quantity + shoppingItem.quantity)
+                val updated = existingBatch.copy(quantity = existingBatch.quantity + shoppingItem.quantity, preferredStore = shoppingItem.storeTag)
                 inventoryDao.updateInventory(updated)
                 inventory[inventory.indexOf(existingBatch)] = updated
             } else {
                 val newInventory = InventoryEntity(
                     itemId = item.itemId,
+                    preferredStore = shoppingItem.storeTag,
                     quantity = shoppingItem.quantity,
                     unit = shoppingItem.unit,
                     storageLocation = storageLocation

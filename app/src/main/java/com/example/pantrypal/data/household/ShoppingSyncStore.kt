@@ -76,10 +76,17 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
                 isChecked = values["isChecked"]?.let { it == "1" } ?: row.isChecked,
                 sectionId = section?.sectionId ?: row.sectionId,
                 weekId = if ("weekId" in values) values["weekId"]?.ifEmpty { null } else row.weekId,
-                frequency = values["frequency"] ?: row.frequency
+                frequency = values["frequency"] ?: row.frequency,
+                category = values["category"] ?: row.category,
+                storeTag = values["storeTag"]?.let { runCatching { StoreTag.valueOf(it) }.getOrDefault(StoreTag.EITHER) } ?: row.storeTag,
+                source = values["source"] ?: row.source
             )
             require(updated.name.isNotBlank() && updated.quantity.isFinite() && updated.quantity >= 0 && updated.unit.isNotBlank())
             if (updated != row) db.shoppingDao().updateShoppingItem(updated)
+            if ("storeTag" in values) db.shoppingListDao().product(updated.name)?.let {
+                db.shoppingListDao().rememberProductStore(it.itemId, updated.storeTag)
+                db.shoppingListDao().rememberStockStore(it.itemId, updated.storeTag)
+            }
         }
         // Suppress generated remote writes while retaining every edit pending before acceptance.
         dao.pending().filter { it.recordKey !in pending }.forEach { dao.acknowledge(it.recordKey, it.token) }
@@ -109,7 +116,7 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
         val result = mutableMapOf<String, String>()
         sections.forEach { result["section:" + it.syncId] = gson.toJson(it.copy(sectionId = 0)) }
         db.shoppingDao().getAllShoppingItemsSnapshot().forEach {
-            val json = gson.toJsonTree(it.copy(shoppingId = 0, sectionId = 0)).asJsonObject
+            val json = gson.toJsonTree(it.copy(shoppingId = 0, sectionId = 0, inventoryId = null)).asJsonObject
             json.addProperty("sectionSyncId", ids[it.sectionId] ?: ShoppingSectionEntity.KEY_THE_REST)
             result["item:" + it.syncId] = json.toString()
         }
@@ -136,7 +143,13 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
                     ?: dao.section(ShoppingSectionEntity.KEY_THE_REST)
                     ?: error("Shopping section missing; retry the household update.")
                 val existing = dao.item(id)
-                val value = row.copy(shoppingId = existing?.shoppingId ?: 0, sectionId = section.sectionId, syncId = id)
+                val localProduct = db.shoppingListDao().product(row.name)
+                val localStock = localProduct?.let { db.shoppingListDao().stock(it.itemId).firstOrNull() }
+                val value = row.copy(shoppingId = existing?.shoppingId ?: 0, sectionId = section.sectionId, syncId = id,
+                    inventoryId = localStock?.inventoryId,
+                    category = json.get("category")?.takeUnless { it.isJsonNull }?.asString ?: "Uncategorised",
+                    storeTag = json.get("storeTag")?.takeUnless { it.isJsonNull }?.asString?.let { runCatching { StoreTag.valueOf(it) }.getOrDefault(StoreTag.EITHER) } ?: StoreTag.EITHER,
+                    source = json.get("source")?.takeUnless { it.isJsonNull }?.asString ?: "MANUAL")
                 if (existing == null) db.shoppingDao().insertShoppingItem(value) else db.shoppingDao().updateShoppingItem(value)
             }
             key.startsWith("week:") -> if (data != null) {
