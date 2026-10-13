@@ -69,7 +69,7 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
             val row = dao.item(id) ?: return@forEach // A field edit must never resurrect a deletion.
             val values = entries.associate { it.key.substringAfterLast(':') to it.value }
             val section = values["sectionSyncId"]?.let { dao.section(it) }
-            val updated = row.copy(
+            var updated = row.copy(
                 name = values["name"] ?: row.name,
                 quantity = values["quantity"]?.toDoubleOrNull() ?: row.quantity,
                 unit = values["unit"] ?: row.unit,
@@ -81,6 +81,11 @@ class ShoppingSyncStore(private val db: KitchenDatabase) {
                 storeTag = values["storeTag"]?.let { runCatching { StoreTag.valueOf(it) }.getOrDefault(StoreTag.EITHER) } ?: row.storeTag,
                 source = values["source"] ?: row.source
             )
+            if (!updated.name.equals(row.name, true)) {
+                val product = db.shoppingListDao().product(updated.name)
+                val stock = product?.let { db.shoppingListDao().stock(it.itemId).firstOrNull() }
+                updated = updated.copy(inventoryId = stock?.inventoryId)
+            }
             require(updated.name.isNotBlank() && updated.quantity.isFinite() && updated.quantity >= 0 && updated.unit.isNotBlank())
             if (updated != row) db.shoppingDao().updateShoppingItem(updated)
             if ("storeTag" in values) db.shoppingListDao().product(updated.name)?.let {

@@ -37,6 +37,6 @@ class StockOperations(private val db: KitchenDatabase) {
         val current = db.inventoryDao().getById(inventoryId) ?: return@withTransaction
         val next = transform(current)
         require(next.quantity.isFinite()) { "Quantity must be a finite number." }
-        if (next.quantity <= 0) db.inventoryDao().deleteInventory(current) else db.inventoryDao().updateInventory(next)
+        db.inventoryDao().updateInventory(next.copy(quantity = next.quantity.coerceAtLeast(0.0)))
     }
 }

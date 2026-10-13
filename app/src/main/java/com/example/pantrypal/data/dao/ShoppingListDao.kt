@@ -166,8 +166,9 @@ abstract class ShoppingListDao {
         val stock = batch(inventoryId) ?: error("This stock item changed. Refresh the pantry.")
         require(stock.quantity > 0) { "This item is already empty." }
         val item = productById(stock.itemId) ?: error("This item is no longer available.")
+        val recurring = sections().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
         val before = snapshot().firstOrNull { !it.isChecked && it.name.equals(item.name, true) &&
-            (it.weekId == null || it.weekId == weekId) && convertShoppingQuantity(1.0, stock.unit, it.unit) != null }
+            (it.weekId == null || it.weekId == weekId || it.sectionId in recurring) && convertShoppingQuantity(1.0, stock.unit, it.unit) != null }
         val event = logConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = stock.quantity, type = ConsumptionType.FINISHED))
         val after = stock.copy(quantity = 0.0)
         updateStock(after)
