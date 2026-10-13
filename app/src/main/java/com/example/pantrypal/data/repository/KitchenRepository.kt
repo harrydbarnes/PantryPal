@@ -109,6 +109,9 @@ class KitchenRepository(
         checked.size
     }
 
+    suspend fun stockRecordedShoppingIds(): Set<String> = database?.purchaseRecordDao()?.records().orEmpty()
+        .filter { it.stockRecorded && !it.completed }.mapNotNull { it.shoppingSyncId }.toSet()
+
     suspend fun shoppingLayoutSnapshot(): Map<String, String> =
         database?.shoppingSyncDao()?.layout()?.associate { it.layoutKey to it.value } ?: emptyMap()
 

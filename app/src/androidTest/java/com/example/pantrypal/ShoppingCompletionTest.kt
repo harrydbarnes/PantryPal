@@ -99,13 +99,19 @@ class ShoppingCompletionTest {
         db.shoppingDao().insertShoppingItem(milk)
         val receipt = receipt()
         val candidate = receipt.candidates.single().copy(purchaseLink = "shopping:" + milk.syncId)
-        features().importReceiptPurchases(listOf(candidate), receiptId = receipt.receiptId)
+        features().importReceiptPurchases(listOf(candidate), storageLocation = "Fridge", receiptId = receipt.receiptId)
         repo.finishShopping("A", emptyMap(), "Pantry", true)
         assertEquals(2.0, db.inventoryDao().getAllInventorySnapshot().single().quantity, 0.0)
         try { features().importReceiptPurchases(listOf(candidate), receiptId = receipt.receiptId); fail("Expected duplicate receipt rejection") }
         catch (_: IllegalArgumentException) {}
         assertEquals(1, db.backupDao().priceHistory().size)
         assertEquals(1, db.purchaseRecordDao().records().size)
+        assertEquals("Fridge", db.shoppingDao().getShoppingArchiveSnapshot().single().storageLocation)
+        val backup = features().exportBackupJson()
+        db.purchaseRecordDao().clearRecords(); db.purchaseRecordDao().clearImports()
+        features().restoreBackupJson(backup)
+        assertEquals(1, db.purchaseRecordDao().records().size)
+        assertTrue(db.purchaseRecordDao().imported(receipt.receiptId))
     }
     @Test fun finishThenReceiptLinksToCompletedPurchaseWithoutAddingStockAgain() = runBlocking {
         db.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = "Milk", quantity = 2.0, isChecked = true, sectionId = 3, weekId = "A"))

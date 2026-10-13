@@ -88,4 +88,11 @@ class ShoppingPlanUpdateTest {
         assertEquals(200.0, changes.first { it.item.syncId == manual.syncId }.item.quantity, 0.0)
         assertEquals(bought, changes.first { it.item.syncId == bought.syncId }.item)
     }
+    @Test fun `receipt stock is not also subtracted as checked list coverage`() {
+        val bought = item(100.0, true)
+        val changes = planShoppingUpdate(listOf(line(400.0)), listOf(bought), emptyList(), "A", emptyMap(),
+            recordedPurchaseIds = setOf(bought.syncId))
+        assertEquals(400.0, changes.single { it.kind == ShoppingChangeKind.ADD }.item.quantity, 0.0)
+        assertEquals(bought, changes.single { it.kind == ShoppingChangeKind.KEEP }.item)
+    }
 }

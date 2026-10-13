@@ -26,7 +26,8 @@ fun planShoppingUpdate(
     sections: List<ShoppingSectionEntity>,
     week: String,
     layout: Map<String, String>,
-    replaceEdited: Boolean = false
+    replaceEdited: Boolean = false,
+    recordedPurchaseIds: Set<String> = emptySet()
 ): List<ShoppingPlanChange> {
     val recurringIds = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
     val visible = existing.filter { it.weekId == week || it.weekId == null || it.sectionId in recurringIds }
@@ -38,10 +39,10 @@ fun planShoppingUpdate(
             normalizeShoppingName(it.name) == line.normalizedName &&
                 convertShoppingQuantity(it.quantity, it.unit, line.unit) != null
         }
-        val otherCoverage = visible.filter { it !in mealItems &&
+        val otherCoverage = visible.filter { it !in mealItems && it.syncId !in recordedPurchaseIds &&
             layout[ShoppingMetadata.completed(it.syncId)] != "true" && normalizeShoppingName(it.name) == line.normalizedName }
             .sumOf { convertShoppingQuantity(it.quantity, it.unit, line.unit) ?: 0.0 }
-        val boughtCoverage = matches.filter { it.isChecked }.sumOf {
+        val boughtCoverage = matches.filter { it.isChecked && it.syncId !in recordedPurchaseIds }.sumOf {
             convertShoppingQuantity(it.quantity, it.unit, line.unit) ?: 0.0
         }
         val desired = (line.buyQuantity - otherCoverage - boughtCoverage).coerceAtLeast(0.0)

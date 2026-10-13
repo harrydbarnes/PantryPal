@@ -179,7 +179,9 @@ class PantryFeaturesRepository(
             val sections = kitchenRepository.shoppingSections.first()
             val recurring = sections.filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
             val layout = kitchenRepository.shoppingLayoutSnapshot()
+            val recorded = kitchenRepository.stockRecordedShoppingIds()
             val existing = kitchenRepository.shoppingList.first().filter {
+                it.syncId !in recorded &&
                 (it.weekId == weekId || it.weekId == null || it.sectionId in recurring) &&
                     layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] != "true"
             }
@@ -213,15 +215,18 @@ class PantryFeaturesRepository(
         val ledger = database.purchaseRecordDao()
         val records = ledger.records()
         val layout = kitchenRepository.shoppingLayoutSnapshot()
+        val activeWeek = preferences.getString("active_shopping_week", null) ?: preferences.getString("current_week", "A")
+        val recurring = kitchenRepository.shoppingSections.first().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
         val active = database.shoppingDao().getAllShoppingItemsSnapshot().filter {
-            it.isChecked && layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] != "true"
+            it.isChecked && (it.weekId == null || it.weekId == activeWeek || it.sectionId in recurring) &&
+                layout[com.example.pantrypal.util.ShoppingMetadata.completed(it.syncId)] != "true"
         }.map { item ->
             com.example.pantrypal.domain.receipt.ReceiptPurchaseOption("shopping:" + item.syncId, item.name, item.quantity, item.unit,
-                records.any { it.shoppingSyncId == item.syncId && !it.completed && it.stockRecorded })
+                records.any { it.shoppingSyncId == item.syncId && !it.completed && it.stockRecorded }, item.addedAt)
         }
         val recent = records.filter { it.completed && it.receiptId == null &&
             it.purchasedAt > System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000 }.map {
-            com.example.pantrypal.domain.receipt.ReceiptPurchaseOption("purchase:" + it.purchaseId, it.name, it.quantity, it.unit, it.stockRecorded)
+            com.example.pantrypal.domain.receipt.ReceiptPurchaseOption("purchase:" + it.purchaseId, it.name, it.quantity, it.unit, it.stockRecorded, it.purchasedAt)
         }
         return active + recent
     }

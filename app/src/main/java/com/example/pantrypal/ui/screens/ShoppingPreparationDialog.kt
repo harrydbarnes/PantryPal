@@ -31,7 +31,7 @@ fun ShoppingPreparationDialog(viewModel: MainViewModel, preview: ShoppingBuildPr
             explicitDecision = preview.explicit[index]
         )
     }
-    val changes = planShoppingUpdate(selected, preview.existingItems, preview.sections, preview.weekId, preview.layout, replaceEdited)
+    val changes = planShoppingUpdate(selected, preview.existingItems, preview.sections, preview.weekId, preview.layout, replaceEdited, preview.recordedPurchaseIds)
     AlertDialog(
         onDismissRequest = { if (!saving) viewModel.pauseShoppingReview() },
         title = { Text("Prepare $weekName") },

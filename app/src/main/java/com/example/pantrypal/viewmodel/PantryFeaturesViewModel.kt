@@ -372,6 +372,12 @@ class PantryFeaturesViewModel(
         }
     }
 
+    fun useAsDifferentReceipt() {
+        _receiptResult.update { result -> result?.copy(receiptId = java.util.UUID.randomUUID().toString(),
+            candidates = result.candidates.map { it.copy(purchaseLink = null) }) }
+        _receiptError.value = null
+    }
+
     fun importReceipt(candidates: List<ReceiptReviewCandidate>, onSuccess: () -> Unit = {}) {
         val receiptId = _receiptResult.value?.receiptId ?: return
         _receiptProcessing.value = true

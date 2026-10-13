@@ -21,7 +21,7 @@ data class ReceiptReviewCandidate(
     val purchaseLink: String? = null
 )
 
-data class ReceiptPurchaseOption(val key: String, val name: String, val quantity: Double, val unit: String, val alreadyInPantry: Boolean)
+data class ReceiptPurchaseOption(val key: String, val name: String, val quantity: Double, val unit: String, val alreadyInPantry: Boolean, val purchasedAt: Long = 0)
 
 data class ReceiptRejectedLine(
     val lineNumber: Int,

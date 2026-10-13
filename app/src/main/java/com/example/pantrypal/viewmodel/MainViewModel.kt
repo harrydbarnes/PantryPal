@@ -562,7 +562,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     sections = repository.shoppingSections.first(),
                     layout = repository.shoppingLayoutSnapshot(),
                     inventory = repository.currentInventory.first(),
-                    meals = repository.allMeals.first()
+                    meals = repository.allMeals.first(),
+                    recordedPurchaseIds = repository.stockRecordedShoppingIds()
                 ))
             }
         }
@@ -582,10 +583,11 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     repository.shoppingSections.first().toSet() == preview.sections.toSet() &&
                     repository.shoppingLayoutSnapshot() == preview.layout &&
                     repository.currentInventory.first().toSet() == preview.inventory.toSet() &&
-                    repository.allMeals.first().toSet() == preview.meals.toSet()) {
+                    repository.allMeals.first().toSet() == preview.meals.toSet() &&
+                    repository.stockRecordedShoppingIds() == preview.recordedPurchaseIds) {
                     "Your list, stock or meal plan changed. Refresh this saved review before applying it."
                 }
-                planShoppingUpdate(lines, preview.existingItems, preview.sections, preview.weekId, preview.layout, replaceEdited)
+                planShoppingUpdate(lines, preview.existingItems, preview.sections, preview.weekId, preview.layout, replaceEdited, preview.recordedPurchaseIds)
                     .forEach { change ->
                         when (change.kind) {
                             ShoppingChangeKind.ADD -> repository.insertReviewedShoppingItem(change.item)
@@ -930,6 +932,7 @@ data class ShoppingBuildPreview(
     val layout: Map<String, String>,
     val inventory: List<InventoryWithItemMap>,
     val meals: List<MealEntity>,
+    val recordedPurchaseIds: Set<String> = emptySet(),
     val draftId: String = java.util.UUID.randomUUID().toString(),
     val quantities: List<String> = lines.map { if (it.buyQuantity % 1.0 == 0.0) it.buyQuantity.toLong().toString() else it.buyQuantity.toString() },
     val decisions: List<String> = lines.map { when(it.status) {

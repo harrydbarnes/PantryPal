@@ -60,6 +60,7 @@ fun ReceiptReviewScreen(
     onCandidateChange: (ReceiptReviewCandidate) -> Unit,
     onImportSelected: (List<ReceiptReviewCandidate>) -> Unit,
     purchaseOptions: List<com.example.pantrypal.domain.receipt.ReceiptPurchaseOption> = emptyList(),
+    onUseAsDifferentReceipt: () -> Unit = {},
     errorMessage: String? = null,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
@@ -207,11 +208,16 @@ fun ReceiptReviewScreen(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         )
                     ) {
+                        Column {
                         Text(
                             errorMessage,
                             modifier = Modifier.padding(PantryPalSpacing.md),
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
+                        if (errorMessage.startsWith("This receipt has already been imported")) {
+                            TextButton(onClick = onUseAsDifferentReceipt) { Text("This is a different receipt: add new purchases") }
+                        }
+                        }
                     }
                 }
             }
@@ -348,7 +354,7 @@ private fun ReceiptCandidateCard(
                         onCandidateChange(candidate.copy(purchaseLink = null)); choosingPurchase = false
                     })
                     purchaseOptions.forEach { option ->
-                        DropdownMenuItem(text = { Text("${option.name} · ${option.quantity} ${option.unit}" + if (option.alreadyInPantry) " · already put away" else " · ticked on list") }, onClick = {
+                        DropdownMenuItem(text = { Text("${option.name} · ${option.quantity} ${option.unit} · ${java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT).format(java.util.Date(option.purchasedAt))}" + if (option.alreadyInPantry) " · already put away" else " · ticked on list") }, onClick = {
                             onCandidateChange(candidate.copy(purchaseLink = option.key)); choosingPurchase = false
                         })
                     }

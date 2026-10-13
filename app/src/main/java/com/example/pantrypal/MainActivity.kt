@@ -897,6 +897,7 @@ fun KitchenApp(
                             ReceiptReviewScreen(
                                 result = result,
                                 purchaseOptions = purchaseOptions,
+                                onUseAsDifferentReceipt = featuresViewModel::useAsDifferentReceipt,
                                 isProcessing = isProcessing,
                                 errorMessage = receiptError,
                                 onCaptureReceipt = {
