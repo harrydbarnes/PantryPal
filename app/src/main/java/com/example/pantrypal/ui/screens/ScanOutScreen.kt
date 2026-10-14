@@ -121,7 +121,7 @@ fun ScanOutScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().imePadding()) {
         // Scanner taking up most space
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             BarcodeScanner(onBarcodeDetected = { code ->

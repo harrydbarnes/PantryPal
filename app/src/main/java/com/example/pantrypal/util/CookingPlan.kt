@@ -36,7 +36,7 @@ fun planCooking(recipe: Recipe, stock: List<InventoryWithItemMap>, multiplier: D
                     notes += "${ingredient.name}: ${batch.unit} cannot be converted to $unit; review manually."
                 } else if (remaining > 0 && available > 0) {
                     val used = minOf(remaining, converted)
-                    amounts[batch.inventoryId] = (amounts[batch.inventoryId] ?: 0.0) + convertShoppingQuantity(used, unit, batch.unit)!!
+                    amounts[batch.inventoryId] = minOf(batch.quantity, (amounts[batch.inventoryId] ?: 0.0) + convertShoppingQuantity(used, unit, batch.unit)!!)
                     remaining -= used
                 }
             }

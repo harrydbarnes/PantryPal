@@ -388,11 +388,15 @@ class PantryFeaturesRepository(
         )
     }
 
-    suspend fun importHouseholdSnapshot(json: String): Result<Int> {
+    suspend fun importHouseholdSnapshot(json: String): Result<Int> =
+        com.example.pantrypal.data.household.HouseholdMutationGate.mutex.withLock {
+        if (context.getSharedPreferences("firebase_household", Context.MODE_PRIVATE).getString("household_id", null) != null) {
+            return@withLock Result.failure(IllegalStateException("Disconnect this device from its shopping household before importing a kitchen snapshot."))
+        }
         val result = withContext(Dispatchers.Default) {
             householdCodec.decode(json)
         }
-        return when (result) {
+        when (result) {
             is HouseholdSnapshotDecodeResult.Failure ->
                 Result.failure(IllegalArgumentException(result.errors.joinToString("\n")))
 

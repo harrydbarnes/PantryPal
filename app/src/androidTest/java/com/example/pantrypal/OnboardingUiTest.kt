@@ -43,6 +43,7 @@ class OnboardingUiTest {
         compose.onNodeWithText("A dinner you plan to make").performTextInput("Rice bowl")
         compose.onNodeWithText("Continue").assertIsNotEnabled()
         compose.onNodeWithText("Shopping ingredients").performScrollTo().performTextInput("300 g rice, 2 peppers")
+        captureReviewScreen(compose, "onboarding-dinner")
         repeat(2) { compose.onNodeWithText("Continue").performClick() }
         compose.onNodeWithText("Save and open meal plan").performClick()
         compose.runOnIdle { assertEquals(listOf("300 g rice", "2 peppers"), savedMeals.single().ingredients) }

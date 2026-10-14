@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -99,7 +100,7 @@ fun OnboardingScreen(
     var stockExpiry by rememberSaveable { mutableStateOf("") }
     val expiry = runCatching { LocalDate.parse(stockExpiry).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
     val stockValid = stockName.isBlank() || (stockAmount.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true && stockUnit.isNotBlank() && (stockExpiry.isBlank() || expiry != null))
-    val mealsValid = listOf(firstMeal to firstIngredients, secondMeal to secondIngredients, thirdMeal to thirdIngredients).all { (name, ingredients) -> name.isBlank() || ingredients.isNotBlank() }
+    val mealsValid = listOf(firstMeal to firstIngredients, secondMeal to secondIngredients, thirdMeal to thirdIngredients).all { (name, ingredients) -> name.isBlank() || onboardingRegulars(ingredients).isNotEmpty() }
     fun meals() = onboardingMeals(listOf(OnboardingMeal(firstMeal, firstMealDay, onboardingRegulars(firstIngredients)), OnboardingMeal(secondMeal, secondMealDay, onboardingRegulars(secondIngredients)), OnboardingMeal(thirdMeal, thirdMealDay, onboardingRegulars(thirdIngredients))))
     val step = setupSteps[stepIndex]
     val reminderTiming = ShoppingReminderTiming.fromStoredValue(reminderTimingName)
@@ -133,7 +134,7 @@ fun OnboardingScreen(
     }
 
     BackHandler(enabled = !saving && (stepIndex > 0 || isReplay)) { if (stepIndex > 0) stepIndex -= 1 else onSkip() }
-    Column(modifier = modifier.fillMaxSize().systemBarsPadding().padding(horizontal = PantryPalSpacing.sm, vertical = PantryPalSpacing.xs)) {
+    Column(modifier = modifier.fillMaxSize().systemBarsPadding().imePadding().padding(horizontal = PantryPalSpacing.sm, vertical = PantryPalSpacing.xs)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) { Icon(Icons.Default.Eco, contentDescription = null, modifier = Modifier.padding(10.dp)) }
             Text("PantryPal", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = PantryPalSpacing.xs).weight(1f))

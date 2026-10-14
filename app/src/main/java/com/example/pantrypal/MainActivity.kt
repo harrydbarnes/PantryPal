@@ -1,5 +1,6 @@
 package com.example.pantrypal
 
+import com.example.pantrypal.ui.screens.CookingReviewDialog
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 
@@ -1164,7 +1165,7 @@ fun KitchenApp(
             confirmButton = {
                 Button(
                     onClick = {
-                        featuresViewModel.restoreBackupJson(json)
+                        featuresViewModel.restoreBackupJson(json) { viewModel.reloadRestoredPreferences() }
                         pendingBackupRestore = null
                     }
                 ) {
@@ -1191,7 +1192,7 @@ fun KitchenApp(
             confirmButton = {
                 Button(
                     onClick = {
-                        featuresViewModel.restoreHouseholdJson(json)
+                        featuresViewModel.restoreHouseholdJson(json) { viewModel.reloadRestoredPreferences() }
                         pendingHouseholdRestore = null
                     }
                 ) {

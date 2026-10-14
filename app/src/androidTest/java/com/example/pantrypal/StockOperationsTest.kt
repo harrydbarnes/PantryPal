@@ -116,7 +116,8 @@ class StockOperationsTest {
         catch (_: IllegalStateException) { }
         assertEquals(200.0, db.inventoryDao().getById(batch)!!.quantity, 0.0)
         val backup = features.exportBackupJson()
-        features.restoreBackupJson(backup)
+        assertTrue(features.restoreBackupJson(backup) is com.example.pantrypal.data.backup.BackupDecodeResult.Success)
+        assertEquals("g", db.consumptionDao().getAllHistory().single().unit)
         assertNotNull(db.mealDao().getAllMealsSnapshot().single().lastCookedAt)
     }
 

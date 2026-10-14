@@ -133,6 +133,22 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         prefs.edit().putLong(AppPreferences.KEY_LAST_SHOPPING_CHANGE, changedAt).apply()
     }
 
+    fun reloadRestoredPreferences() {
+        val context = getApplication<Application>()
+        _appSettings.value = AppPreferences.readSettings(context)
+        _addItemDefaults.value = AppPreferences.readAddItemDefaults(context)
+        _shoppingLocations.value = ShoppingLocationStore.read(context)
+        _hasCompletedOnboarding.value = prefs.getBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, false)
+        _hasSeenMealPlanIntro.value = prefs.getBoolean(AppPreferences.KEY_MEAL_PLAN_INTRO_SEEN, false)
+        _hasSeenSettingsIntro.value = prefs.getBoolean(AppPreferences.KEY_SETTINGS_INTRO_SEEN, false)
+        _mealPlanStyle.value = prefs.getString("meal_plan_style", null)
+        setCurrentWeek(prefs.getString("current_week", MealEntity.WEEK_A) ?: MealEntity.WEEK_A)
+        setShoppingWeek(_currentWeek.value)
+        dismissShoppingBuildPreview()
+        _manualProductChoice.value = null
+        markShoppingChanged()
+    }
+
     fun setCurrentWeek(week: String) {
         _currentWeek.value = week
         prefs.edit()
@@ -594,7 +610,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     it.name.equals(meal.name, ignoreCase = true)
             }
             if (!alreadyExists) {
-                repository.insertMeal(meal.copy(mealId = 0, week = targetWeek))
+                repository.insertMeal(meal.copy(mealId = 0, week = targetWeek, lastCookedAt = null))
             }
         }
     }
@@ -611,7 +627,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                 .forEach { meal ->
                 val key = Triple(meal.name.lowercase(), meal.dayOfWeek, meal.mealSlot)
                 if (key !in targetKeys) {
-                    repository.insertMeal(meal.copy(mealId = 0, week = targetWeek))
+                    repository.insertMeal(meal.copy(mealId = 0, week = targetWeek, lastCookedAt = null))
                 }
             }
           }

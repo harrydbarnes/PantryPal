@@ -460,15 +460,17 @@ class PantryFeaturesViewModel(
             else error.userMessage("Backup file could not be written"))
     }
 
-    fun restoreBackupJson(json: String) {
+    fun restoreBackupJson(json: String, onRestored: () -> Unit = {}) {
         _dataState.update { it.copy(isWorking = true, message = null) }
         viewModelScope.launch {
             runCatching { repository.restoreBackupJson(json) }
                 .onSuccess { result ->
                     _dataState.value = when (result) {
-                        is BackupDecodeResult.Success -> DataManagementUiState(
-                            message = "Backup restored. Reopen PantryPal to apply restored display preferences."
-                        )
+                        is BackupDecodeResult.Success -> {
+                            onRestored()
+                            _cookingReview.value = null
+                            DataManagementUiState(message = "Backup restored. Preferences and reminder schedules updated.")
+                        }
 
                         is BackupDecodeResult.Failure -> DataManagementUiState(
                             message = result.errors.joinToString("\n")
@@ -504,11 +506,13 @@ class PantryFeaturesViewModel(
             }
     }
 
-    fun restoreHouseholdJson(json: String) {
+    fun restoreHouseholdJson(json: String, onRestored: () -> Unit = {}) {
         _householdState.update { it.copy(isWorking = true, message = null) }
         viewModelScope.launch {
             repository.importHouseholdSnapshot(json)
                 .onSuccess { warningCount ->
+                    onRestored()
+                    _cookingReview.value = null
                     _householdState.update {
                         it.copy(
                             isWorking = false,

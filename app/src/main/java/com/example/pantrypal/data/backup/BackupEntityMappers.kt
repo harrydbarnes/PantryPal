@@ -76,7 +76,8 @@ fun ConsumptionEntity.toBackupConsumption(): BackupConsumption = BackupConsumpti
     date = date,
     quantity = quantity,
     type = type.name,
-    wasteReason = wasteReason
+    wasteReason = wasteReason,
+    unit = unit
 )
 
 fun BackupConsumption.toEntity(): ConsumptionEntity = ConsumptionEntity(
@@ -85,7 +86,8 @@ fun BackupConsumption.toEntity(): ConsumptionEntity = ConsumptionEntity(
     date = date,
     quantity = quantity,
     type = ConsumptionType.valueOf(type),
-    wasteReason = wasteReason
+    wasteReason = wasteReason,
+    unit = unit
 )
 
 fun ShoppingSectionEntity.toBackupShoppingSection(): BackupShoppingSection =

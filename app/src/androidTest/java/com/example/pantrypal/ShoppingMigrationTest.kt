@@ -63,6 +63,7 @@ class ShoppingMigrationTest {
     }
     private fun revertShoppingSchemaToNine(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE meals DROP COLUMN lastCookedAt")
+        db.execSQL("ALTER TABLE consumption_history DROP COLUMN unit")
         db.execSQL("DROP TABLE shopping_ingest_state")
         db.execSQL("ALTER TABLE inventory DROP COLUMN preferredStore")
         db.execSQL("ALTER TABLE items DROP COLUMN preferredStore")

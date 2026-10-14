@@ -23,7 +23,8 @@ data class ConsumptionEntity(
     val date: Long = System.currentTimeMillis(),
     val quantity: Double,
     val type: ConsumptionType, // "FINISHED" or "WASTED"
-    val wasteReason: String? = null
+    val wasteReason: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "NULL") val unit: String? = null
 )
 
 enum class ConsumptionType {

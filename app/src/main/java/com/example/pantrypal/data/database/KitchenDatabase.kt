@@ -224,6 +224,7 @@ abstract class KitchenDatabase : RoomDatabase() {
         val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE meals ADD COLUMN lastCookedAt INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE consumption_history ADD COLUMN unit TEXT DEFAULT NULL")
             }
         }
 

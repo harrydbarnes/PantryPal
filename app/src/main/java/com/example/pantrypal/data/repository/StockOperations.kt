@@ -16,7 +16,7 @@ class StockOperations(private val db: KitchenDatabase) {
             require(stock.itemId == use.itemId) { "The stock item has changed. Refresh and try again." }
             val amount = minOf(use.quantity, stock.quantity)
             if (amount <= 0) return@forEach
-            db.consumptionDao().insertConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = amount, type = type, wasteReason = reason))
+            db.consumptionDao().insertConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = amount, type = type, wasteReason = reason, unit = stock.unit))
             db.inventoryDao().updateInventory(stock.copy(quantity = stock.quantity - amount))
             if (type == ConsumptionType.FINISHED) {
                 val item = db.itemDao().getItemById(stock.itemId)
