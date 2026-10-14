@@ -47,6 +47,13 @@ fun ScanOutScreen(
         save = { entries -> entries.flatMap { listOf(it.key.toString(), it.value) } },
         restore = { entries -> mutableStateMapOf<Long, String>().apply { entries.chunked(2).forEach { put(it[0].toLong(), it[1]) } } }
     )) { mutableStateMapOf<Long, String>() }
+    fun queueBatch(batch: InventoryWithItemMap) {
+        if (scanQueue.none { it.inventoryId == batch.inventoryId }) scanQueue.add(batch)
+        val counted = com.example.pantrypal.util.canonicalShoppingUnit(batch.unit) in setOf("pcs", "pack", "tin", "bottle")
+        scanAmounts[batch.inventoryId] = if (counted)
+            ((scanAmounts[batch.inventoryId]?.toDoubleOrNull() ?: 0.0) + 1.0).coerceAtMost(batch.quantity).toString()
+        else scanAmounts[batch.inventoryId].orEmpty()
+    }
     // State to show selection dialog for duplicate batches
     var duplicateBatches by remember { mutableStateOf<List<InventoryWithItemMap>?>(null) }
 
@@ -64,9 +71,7 @@ fun ScanOutScreen(
                  if (inv.isNotEmpty()) {
                      // If only one batch, add to queue immediately
                      if (inv.size == 1) {
-                         if (scanQueue.none { it.inventoryId == inv[0].inventoryId }) scanQueue.add(inv[0])
-                         scanAmounts[inv[0].inventoryId] =
-                             ((scanAmounts[inv[0].inventoryId]?.toDoubleOrNull() ?: 0.0) + 1.0).coerceAtMost(inv[0].quantity).toString()
+                         queueBatch(inv[0])
                      } else {
                          // Multiple batches found, let user select
                          duplicateBatches = inv
@@ -97,9 +102,7 @@ fun ScanOutScreen(
                                      .fillMaxWidth()
                                      .padding(vertical = 4.dp)
                                      .clickable {
-                                         if (scanQueue.none { it.inventoryId == item.inventoryId }) scanQueue.add(item)
-                                         scanAmounts[item.inventoryId] =
-                                             ((scanAmounts[item.inventoryId]?.toDoubleOrNull() ?: 0.0) + 1.0).coerceAtMost(item.quantity).toString()
+                                         queueBatch(item)
                                          duplicateBatches = null
                                      },
                                  shape = MaterialTheme.shapes.large,
@@ -175,7 +178,7 @@ fun ScanOutScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Ready to check out", style = MaterialTheme.typography.titleLarge)
+                    Text("Review food used", style = MaterialTheme.typography.titleLarge)
                     Text(
                         "${scanQueue.size} item${if (scanQueue.size == 1) "" else "s"} queued",
                         style = MaterialTheme.typography.bodyMedium,
@@ -219,7 +222,7 @@ fun ScanOutScreen(
                                  onDismiss()
                              }
                          }) {
-                             Text(if (saving) "Saving…" else "Finish all")
+                             Text(if (saving) "Saving…" else "Save usage")
                          }
                          OutlinedButton(enabled = !saving, onClick = {
                              scanQueue.clear()

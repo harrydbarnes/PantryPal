@@ -53,6 +53,10 @@ fun scaleMealIngredients(ingredients: List<String>, factor: Double): List<String
     require(factor.isFinite() && factor > 0)
     return ingredients.map { raw ->
         val ingredient = com.example.pantrypal.domain.recipe.RecipeIngredientNormalizer.parse(raw)
-        ingredient.quantity?.let { shoppingIngredientText(ingredient.name, it * factor, ingredient.unit ?: "pcs") } ?: raw
+        ingredient.quantity?.let {
+            val quantity = it * factor
+            require(quantity.isFinite()) { "The scaled ingredient amount is too large. Review servings." }
+            shoppingIngredientText(ingredient.name, quantity, ingredient.unit ?: "pcs")
+        } ?: raw
     }
 }

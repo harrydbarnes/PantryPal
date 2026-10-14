@@ -154,7 +154,7 @@ class PantryFeaturesRepository(
     }
 
     suspend fun recordCooking(review: com.example.pantrypal.util.CookingReview,
-        uses: List<Pair<com.example.pantrypal.data.dao.InventoryWithItemMap, Double>>, logOnly: Boolean): Long = database.withTransaction {
+        uses: List<Pair<com.example.pantrypal.data.dao.InventoryWithItemMap, Double>>, logOnly: Boolean): com.example.pantrypal.util.CookingRecord = database.withTransaction {
         val meal = review.meal
         if (meal != null) check(database.mealDao().getAllMealsSnapshot().firstOrNull { it.mealId == meal.mealId } == meal) {
             "This meal changed. Close the review and open it again."
@@ -179,7 +179,7 @@ class PantryFeaturesRepository(
         val recipeId = if (meal == null && review.recipe.id == 0L) saveRecipe(review.recipe.copy(lastCookedAt = now)) else review.recipe.id
         if (recipeId > 0) recipeDao.getRecipeEntity(recipeId)?.let { recipeDao.updateRecipe(it.copy(lastCookedAt = now, updatedAt = now)) }
         if (meal != null) database.mealDao().updateMeal(meal.copy(lastCookedAt = now))
-        now
+        com.example.pantrypal.util.CookingRecord(now, if (recipeId > 0) recipeDao.getRecipe(recipeId)?.toDomain() else null)
     }
 
     suspend fun addRecipeToPlan(recipe: Recipe, weekId: String): MealEntity {

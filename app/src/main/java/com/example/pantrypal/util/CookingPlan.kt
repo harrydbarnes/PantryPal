@@ -7,6 +7,7 @@ import com.example.pantrypal.domain.recipe.Recipe
 data class CookingReview(val recipe: Recipe, val stock: List<InventoryWithItemMap>, val week: String,
     val initialServings: Double = recipe.servings ?: 1.0, val meal: MealEntity? = null,
     val recipeSnapshot: Recipe? = recipe.takeIf { it.id > 0 })
+data class CookingRecord(val cookedAt: Long, val recipe: Recipe?)
 data class CookingLine(val stock: InventoryWithItemMap, val suggestedQuantity: Double)
 data class CookingPlan(val lines: List<CookingLine>, val notes: List<String>)
 
@@ -29,6 +30,10 @@ fun planCooking(recipe: Recipe, stock: List<InventoryWithItemMap>, multiplier: D
         } else {
             val unit = ingredient.unit ?: "pcs"
             var remaining = quantity * multiplier
+            if (!remaining.isFinite()) {
+                notes += "${ingredient.name}: scaled amount is too large; review portions."
+                return@forEach
+            }
             matches.forEach { batch ->
                 val available = batch.quantity - (amounts[batch.inventoryId] ?: 0.0)
                 val converted = convertShoppingQuantity(available, batch.unit, unit)

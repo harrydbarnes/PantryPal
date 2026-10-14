@@ -19,14 +19,14 @@ fun CookingReviewDialog(review: CookingReview, saving: Boolean, error: String?, 
     onSave: (List<Pair<InventoryWithItemMap, Double>>, Boolean) -> Unit) {
     var portions by rememberSaveable(review.recipe.id, review.meal?.mealId) { mutableStateOf(review.initialServings.toString()) }
     val amount = portions.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
-    val multiplier = amount?.div(review.recipe.servings ?: 1.0)
+    val multiplier = amount?.div(review.recipe.servings ?: 1.0)?.takeIf { it.isFinite() && it > 0 }
     val plan = remember(review, multiplier) { multiplier?.let { planCooking(review.recipe, review.stock, it) } }
     // Changing portions deliberately resets proposed deductions; each amount remains editable afterwards.
     var edits by rememberSaveable(review.recipe.id, review.meal?.mealId, portions) { mutableStateOf(hashMapOf<String, String>()) }
     val uses = plan?.lines?.map { line ->
         line.stock to (edits[line.stock.inventoryId.toString()]?.toDoubleOrNull() ?: if (edits.containsKey(line.stock.inventoryId.toString())) Double.NaN else line.suggestedQuantity)
     }.orEmpty()
-    val valid = amount != null && uses.all { (stock, used) -> used.isFinite() && used >= 0 && used <= stock.quantity }
+    val valid = multiplier != null && uses.all { (stock, used) -> used.isFinite() && used >= 0 && used <= stock.quantity }
     AlertDialog(onDismissRequest = { if (!saving) onDismiss() }, title = { Text("Cook ${review.recipe.title}") },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Review what you used. Only confirmed amounts change pantry stock. Optional ingredients are left for manual pantry usage.")

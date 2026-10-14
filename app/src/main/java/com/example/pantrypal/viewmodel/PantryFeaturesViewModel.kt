@@ -294,8 +294,8 @@ class PantryFeaturesViewModel(
         _cookingError.value = null
         viewModelScope.launch {
             try {
-                val now = repository.recordCooking(review, uses, logOnly)
-                _recipeState.update { it.copy(selectedRecipe = it.selectedRecipe?.let { selected -> if (selected.id == review.recipe.id) selected.copy(lastCookedAt = now) else selected },
+                val result = repository.recordCooking(review, uses, logOnly)
+                _recipeState.update { it.copy(selectedRecipe = it.selectedRecipe?.let { selected -> if (selected.id == review.recipe.id && (selected.id > 0 || selected.title == review.recipe.title)) result.recipe ?: selected else selected },
                     message = if (logOnly) "${review.recipe.title} recorded as cooked. Pantry stock unchanged." else "${review.recipe.title} cooked; confirmed pantry usage saved.") }
                 _cookingReview.value = null
             } catch (cancelled: CancellationException) { throw cancelled }

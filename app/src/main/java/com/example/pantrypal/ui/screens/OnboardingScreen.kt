@@ -175,7 +175,7 @@ fun OnboardingScreen(
                     Text("Near-store reminders can be set up later in Settings while you are at the shop.")
                 }
                 else -> {
-                    SetupSummary(shoppingDay, shoppingTime, reminderTiming, shoppingRemindersEnabled, onboardingRegulars(regularsText).size, meals().size, false)
+                    SetupSummary(shoppingDay, shoppingTime, reminderTiming, shoppingRemindersEnabled, onboardingRegulars(regularsText).size, meals().size)
                     SetupCard("Your pantry", if (stockName.isBlank()) "No stock added yet. Open Pantry to add or scan your first item; recipe suggestions improve as you add stock." else "$stockName will be added${if (expiry == null) " without an expiry date" else " with its expiry date"}.")
                     if (meals().isEmpty()) SetupCard("Next: your first meal", "No dinners added yet. In Plan, add a dinner and its ingredients before reviewing shopping.")
                 }
@@ -217,12 +217,11 @@ private fun ShoppingRoutineSetup(day: Int, onDayChange: (Int) -> Unit, time: Int
     }
 }
 
-@Composable private fun SetupSummary(shoppingDay: Int, shoppingTime: Int, timing: ShoppingReminderTiming, remindersEnabled: Boolean, regularsCount: Int, mealCount: Int, savingStoreSpot: Boolean) {
+@Composable private fun SetupSummary(shoppingDay: Int, shoppingTime: Int, timing: ShoppingReminderTiming, remindersEnabled: Boolean, regularsCount: Int, mealCount: Int) {
     val timingLabel = when (timing) { ShoppingReminderTiming.NIGHT_BEFORE -> "the night before"; ShoppingReminderTiming.MORNING_OF -> "the morning of"; ShoppingReminderTiming.HOUR_BEFORE -> "one hour before" }
     SetupCard("Your weekly routine", if (remindersEnabled) "We'll nudge you $timingLabel your ${DayOfWeek.of(shoppingDay).name.lowercase().replaceFirstChar(Char::titlecase)} shop around ${ShoppingReminderSchedule.formatShoppingTime(shoppingTime)}." else "Your usual shop day is ${DayOfWeek.of(shoppingDay).name.lowercase().replaceFirstChar(Char::titlecase)}. You can turn reminders on later in Settings.")
     if (regularsCount > 0) SetupCard("Every week", "$regularsCount regular ${if (regularsCount == 1) "item" else "items"} will be added to your shopping list.")
     if (mealCount > 0) SetupCard("This week's dinners", "$mealCount ${if (mealCount == 1) "meal is" else "meals are"} ready in your meal plan.")
-    if (savingStoreSpot) SetupCard("Near-store reminder", "We'll ask for location so the shopping-list nudge can work when you are nearby.")
 }
 
 @Composable private fun SetupCard(title: String, text: String) { Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(modifier = Modifier.padding(PantryPalSpacing.sm), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }

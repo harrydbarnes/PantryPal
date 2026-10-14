@@ -81,6 +81,7 @@ class StockOperationsTest {
             db.itemDao().insertItem(ItemEntity(name = "Keep me", defaultUnit = "pcs", category = "General"))
             try { features.restoreBackupJson("{}"); fail("Connected restore must be rejected") }
             catch (error: IllegalStateException) { assertTrue(error.message!!.contains("Disconnect")) }
+            assertTrue(features.importHouseholdSnapshot("{}").isFailure)
             assertEquals("Keep me", db.itemDao().getAllItemsSnapshot().single().name)
         } finally { prefs.edit().clear().commit() }
     }

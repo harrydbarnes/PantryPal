@@ -27,8 +27,10 @@ class StockOperations(private val db: KitchenDatabase) {
     }
 
     suspend fun restock(item: ItemEntity, week: String) = db.withTransaction {
+        val recurring = db.shoppingListDao().sections().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
         val listed = db.shoppingDao().getAllShoppingItemsSnapshot().any {
-            !it.isChecked && normalizeShoppingName(it.name) == normalizeShoppingName(item.name) && (it.weekId == null || it.weekId == week)
+            !it.isChecked && normalizeShoppingName(it.name) == normalizeShoppingName(item.name) && (it.weekId == null || it.weekId == week || it.sectionId in recurring) &&
+                com.example.pantrypal.util.convertShoppingQuantity(1.0, item.defaultUnit, it.unit) != null
         }
         if (!listed) db.shoppingListDao().upsertShoppingItem(item.name,
             (item.lowStockThreshold ?: 1.0).coerceAtLeast(1.0), "RESTOCK", week, unit = item.defaultUnit)
