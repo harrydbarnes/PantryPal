@@ -38,7 +38,13 @@ class ShoppingUiTest {
             val list = compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange))
             list.performScrollToNode(hasContentDescription("More options for QA first item"))
             compose.onNodeWithText("QA first item").performClick()
-            compose.onNodeWithText("Complete Shop & Restock (", substring = true).assertIsDisplayed()
+            // Room updates and the bottom-bar entrance finish independently of the tap.
+            compose.waitUntil(10000) {
+                runCatching {
+                    compose.onNodeWithText("Complete Shop & Restock (", substring = true).assertIsDisplayed()
+                    true
+                }.getOrDefault(false)
+            }
             list.performScrollToNode(hasText("Ticked Items (", substring = true))
             compose.onNodeWithText("QA first item").assertDoesNotExist()
             compose.onNodeWithText("Ticked Items (", substring = true).performClick()
