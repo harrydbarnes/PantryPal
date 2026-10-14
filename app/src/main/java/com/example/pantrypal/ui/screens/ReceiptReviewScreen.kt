@@ -1,5 +1,8 @@
 package com.example.pantrypal.ui.screens
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddAPhoto
@@ -136,7 +138,7 @@ fun ReceiptReviewScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm)
         ) {
-            item {
+            expressiveItem {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -202,7 +204,7 @@ fun ReceiptReviewScreen(
             }
 
             if (!errorMessage.isNullOrBlank()) {
-                item {
+                expressiveItem {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
@@ -223,13 +225,13 @@ fun ReceiptReviewScreen(
             }
 
             if (result != null) {
-                item {
+                expressiveItem {
                     ReceiptTotalsCard(result)
                 }
             }
 
             if (result != null && candidates.isEmpty()) {
-                item {
+                expressiveItem {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer
@@ -244,7 +246,7 @@ fun ReceiptReviewScreen(
                 }
             }
 
-            items(candidates, key = ReceiptReviewCandidate::candidateId) { candidate ->
+            expressiveItems(candidates, key = ReceiptReviewCandidate::candidateId) { candidate ->
                 ReceiptCandidateCard(
                     candidate = candidate,
                     purchaseOptions = purchaseOptions,

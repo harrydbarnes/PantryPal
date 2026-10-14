@@ -17,9 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.ExperimentalFoundationApi
 import com.example.pantrypal.data.entity.StoreTag
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.animation.animateContentSize
 import com.example.pantrypal.util.ShoppingAisles
 import androidx.compose.foundation.lazy.LazyColumn
@@ -78,6 +79,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
+import com.example.pantrypal.ui.components.shoppingMotion
+import com.example.pantrypal.ui.components.shoppingSegmentShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.input.ImeAction
@@ -166,6 +174,7 @@ fun ShoppingListScreen(
     var quickAddName by rememberSaveable { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     val unfinishedPurchases = visibleItems.filter { it.isChecked && layout[ShoppingMetadata.completed(it.syncId)] != "true" }
     val hasFinishedRegulars = visibleItems.any { layout[ShoppingMetadata.completed(it.syncId)] == "true" }
     val weekOrder = mealWeeks.sortedBy { it.sortOrder }.map { it.weekId }
@@ -202,6 +211,23 @@ fun ShoppingListScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            AnimatedVisibility(visible = unfinishedPurchases.isNotEmpty()) {
+                Surface {
+                    ExtendedFloatingActionButton(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        onClick = {
+                            if (!saving) viewModel.completeShopAndRestock(selectedStore) { count ->
+                                if (count > 0) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                scope.launch { snackbarHostState.showSnackbar("$count purchases completed and restocked") }
+                            }
+                        },
+                        icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+                        text = { Text(if (saving) "Restocking…" else "Complete Shop & Restock (${unfinishedPurchases.size})") }
+                    )
+                }
+            }
+        },
         topBar = {
             Surface {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -224,12 +250,6 @@ fun ShoppingListScreen(
                         }
                         else if (hasFinishedRegulars) TextButton(enabled = !saving, onClick = { viewModel.prepareNextShop() }) { Text("Prepare next shop") }
                     }
-                    if (unfinishedPurchases.isNotEmpty()) Button(
-                        enabled = !saving,
-                        onClick = { viewModel.completeShopAndRestock(selectedStore) { count ->
-                            scope.launch { snackbarHostState.showSnackbar("$count purchases completed and restocked") }
-                        } }, modifier = Modifier.fillMaxWidth()
-                    ) { Text("Complete Shop & Restock (${unfinishedPurchases.size})") }
                     TextButton(onClick = onOpenHousehold, contentPadding = PaddingValues(0.dp)) {
                         Icon(Icons.Outlined.Group, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
@@ -242,29 +262,29 @@ fun ShoppingListScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            if (loading) item { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            shoppingError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
-            actionError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
-            if (lowStaples.isNotEmpty()) item {
+            if (loading) expressiveItem { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            shoppingError?.let { message -> expressiveItem { Text(message, color = MaterialTheme.colorScheme.error) } }
+            actionError?.let { message -> expressiveItem { Text(message, color = MaterialTheme.colorScheme.error) } }
+            if (lowStaples.isNotEmpty()) expressiveItem {
                 Text("Likely Running Low", style = MaterialTheme.typography.titleMedium)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(lowStaples, key = { it.first.itemId }) { (product, batch) ->
+                    expressiveItems(lowStaples, key = { it.first.itemId }) { (product, batch) ->
                         AssistChip(enabled = !saving, onClick = { viewModel.addLowStaple(product, batch) }, label = { Text(product.name) },
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) })
                     }
                 }
             }
-            item {
+            expressiveItem {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { FilterChip(selected = selectedStore == null, onClick = { selectedStoreName = null }, label = { Text("All Stores") }) }
-                    items(listOf(StoreTag.TESCO, StoreTag.ALDI)) { store ->
+                    expressiveItem { FilterChip(selected = selectedStore == null, onClick = { selectedStoreName = null }, label = { Text("All Stores") }) }
+                    expressiveItems(listOf(StoreTag.TESCO, StoreTag.ALDI), key = { it.name }) { store ->
                         FilterChip(selected = selectedStore == store, onClick = { selectedStoreName = store.name }, label = { Text(store.label) })
                     }
                 }
             }
-            item {
+            expressiveItem {
                 QuickAddShoppingItem(
                     value = quickAddName,
                     onValueChange = { quickAddName = it },
@@ -276,7 +296,7 @@ fun ShoppingListScreen(
                 )
             }
 
-            item {
+            expressiveItem {
                 OutlinedButton(
                     onClick = { showPlanningControls = !showPlanningControls },
                     modifier = Modifier.fillMaxWidth()
@@ -286,7 +306,7 @@ fun ShoppingListScreen(
             }
 
             if (showPlanningControls) {
-            item {
+            expressiveItem {
                 ExpressiveHero(
                     eyebrow = currentWeekDetails?.displayName ?: "Week $selectedWeek",
                     title = if (visibleItems.all { it.isChecked } && visibleItems.isNotEmpty()) {
@@ -305,7 +325,7 @@ fun ShoppingListScreen(
                 )
             }
 
-            item {
+            expressiveItem {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -329,7 +349,7 @@ fun ShoppingListScreen(
                 }
             }
 
-            item {
+            expressiveItem {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Shopping week", style = MaterialTheme.typography.titleMedium)
                     FlowRow(
@@ -355,7 +375,7 @@ fun ShoppingListScreen(
                 }
             }
 
-            item {
+            expressiveItem {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -386,14 +406,14 @@ fun ShoppingListScreen(
 
             }
 
-            item {
+            expressiveItem {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Shop by aisle · $profileName", modifier = Modifier.weight(1f))
                     Switch(checked = aisleMode, onCheckedChange = viewModel::setAisleMode)
                 }
                 if (aisleMode) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(profileNames.entries.toList(), key = { it.key }) { entry ->
+                        expressiveItems(profileNames.entries.toList(), key = { it.key }) { entry ->
                             FilterChip(selected = profile == entry.key, onClick = { viewModel.selectShoppingProfile(entry.key) }, label = { Text(entry.value) })
                         }
                     }
@@ -408,9 +428,9 @@ fun ShoppingListScreen(
                 (aisles + ShoppingAisles.UNASSIGNED).forEach { aisle ->
                     val rows = groups[aisle].orEmpty().sortedBy { it.isChecked }
                     if (rows.isNotEmpty()) {
-                        stickyHeader(key = "aisle-$aisle") { Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer) { Text(aisle, Modifier.padding(12.dp), style = MaterialTheme.typography.titleLarge) } }
-                        items(rows, key = { "item-${it.syncId}" }) { row ->
-                            Card(Modifier.fillMaxWidth().animateItem()) {
+                        stickyHeader(key = "aisle-$aisle") { Surface(Modifier.fillMaxWidth().then(shoppingMotion()), color = MaterialTheme.colorScheme.surfaceContainer) { Text(aisle, Modifier.padding(12.dp), style = MaterialTheme.typography.titleLarge) } }
+                        expressiveItemsIndexed(rows, key = { _, row -> "item-${row.syncId}" }) { index, row ->
+                            Card(Modifier.fillMaxWidth(), shape = shoppingSegmentShape(index, rows.size)) {
                                 ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) })
                                 TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
                             TextButton(onClick = { movingItem = row }) { Text("Aisle / section") }
@@ -421,19 +441,19 @@ fun ShoppingListScreen(
             } else {
                 sections.forEach { section ->
                     val sectionItems = shoppingItemsForSection(visibleItems.filterNot { it.isChecked }, section.sectionId)
-                    item(key = "section-${section.syncId}") {
+                    expressiveItem(key = "section-${section.syncId}") {
                         ShoppingSectionHeader(section, sectionItems.isEmpty(),
                             onAdd = { editingItem = null; itemEditorSection = section },
                             onEditSection = if (section.systemKey == null) { { editingSection = section; showSectionEditor = true } } else null)
                     }
                     sectionItems.groupBy { it.category.takeUnless { category -> category == "Uncategorised" } ?: com.example.pantrypal.domain.shopping.AisleCategoryMapper.categoryFor(it.name) }.toSortedMap().forEach { (category, rows) ->
                         stickyHeader(key = "category-${section.syncId}-$category") {
-                            Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer) {
+                            Surface(Modifier.fillMaxWidth().then(shoppingMotion()), color = MaterialTheme.colorScheme.surfaceContainer) {
                                 Text(category, Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
                             }
                         }
-                    items(rows, key = { "item-${it.syncId}" }) { row ->
-                        Card(Modifier.fillMaxWidth().animateItem()) {
+                    expressiveItemsIndexed(rows, key = { _, row -> "item-${row.syncId}" }) { index, row ->
+                        Card(Modifier.fillMaxWidth(), shape = shoppingSegmentShape(index, rows.size)) {
                             ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = section }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) })
                             TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
                             TextButton(onClick = { movingItem = row }) { Text("Move section / assign aisle") }
@@ -445,18 +465,32 @@ fun ShoppingListScreen(
 
             val tickedRows = visibleItems.filter { it.isChecked }
             if (tickedRows.isNotEmpty()) {
-                item { TextButton(onClick = { showTicked = !showTicked }) {
-                    Text(if (showTicked) "Hide Ticked (${tickedRows.size})" else "Show Ticked (${tickedRows.size})")
-                } }
-                if (showTicked) items(tickedRows, key = { "ticked-${it.syncId}" }) { row ->
-                    Card(Modifier.fillMaxWidth().animateItem(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                        ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) })
-                        TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
+                expressiveItem(key = "ticked-heading") {
+                    TextButton(onClick = { showTicked = !showTicked }) {
+                        Text("Ticked Items (${tickedRows.size})")
+                        Icon(if (showTicked) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (showTicked) "Collapse ticked items" else "Expand ticked items")
+                    }
+                }
+                expressiveItem(key = "ticked-content") {
+                    AnimatedVisibility(visible = showTicked) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            tickedRows.forEachIndexed { index, row ->
+                                androidx.compose.runtime.key(row.syncId) {
+                                    Card(Modifier.fillMaxWidth(), shape = shoppingSegmentShape(index, tickedRows.size),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                                        ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) })
+                                        TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
+
             if (!loading && visibleItems.none { !it.isChecked }) {
-                item {
+                expressiveItem {
                     Text(
                         if (visibleItems.isEmpty()) "No items yet. Add something above or prepare your next list." else "Everything is ticked off. Add something above or prepare your next list.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -466,7 +500,7 @@ fun ShoppingListScreen(
             }
 
             if (shoppingArchive.isNotEmpty()) {
-                item {
+                expressiveItem {
                     OutlinedButton(
                         onClick = { showShoppingArchive = !showShoppingArchive },
                         modifier = Modifier.fillMaxWidth()
@@ -475,7 +509,7 @@ fun ShoppingListScreen(
                     }
                 }
                 if (showShoppingArchive) {
-                    item {
+                    expressiveItem {
                         Card(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -512,7 +546,7 @@ fun ShoppingListScreen(
                 }
             }
 
-            item {
+            expressiveItem {
                 OutlinedButton(
                     onClick = {
                         editingSection = null
@@ -567,12 +601,12 @@ fun ShoppingListScreen(
         AlertDialog(onDismissRequest = { movingItem = null }, title = { Text("Place ${row.name}") },
             text = {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { Text("$profileName aisle", style = MaterialTheme.typography.titleMedium) }
-                    items(aisles + ShoppingAisles.UNASSIGNED) { aisle ->
+                    expressiveItem { Text("$profileName aisle", style = MaterialTheme.typography.titleMedium) }
+                    expressiveItems(aisles + ShoppingAisles.UNASSIGNED, key = { it }) { aisle ->
                         TextButton(onClick = { viewModel.assignAisle(row.name, aisle); movingItem = null }) { Text(aisle) }
                     }
-                    item { Text("Planning section", style = MaterialTheme.typography.titleMedium) }
-                    items(sections) { section ->
+                    expressiveItem { Text("Planning section", style = MaterialTheme.typography.titleMedium) }
+                    expressiveItems(sections, key = { it.syncId }) { section ->
                         TextButton(onClick = { viewModel.moveShoppingItem(row, section); movingItem = null }) { Text(section.name) }
                     }
                 }
@@ -673,7 +707,7 @@ private fun QuickAddShoppingItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(end = 4.dp)
                 ) {
-                    items(visibleSuggestions, key = { it.lowercase() }) { suggestion ->
+                    expressiveItems(visibleSuggestions, key = { it.lowercase() }) { suggestion ->
                         AssistChip(
                             onClick = { onAddSuggestion(suggestion) },
                             label = { Text(if (normalizeShoppingName(suggestion) in listedNames) "$suggestion · On your list" else suggestion) },
@@ -733,7 +767,7 @@ private fun PutAwayDialog(
         title = { Text("Finish this shop") },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
+                expressiveItem {
                     Text("${items.size} purchases will be saved to your shop history.")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = updatePantry, enabled = !saving, onCheckedChange = { updatePantry = it })
@@ -742,7 +776,7 @@ private fun PutAwayDialog(
                     Text("If a receipt has already added these purchases to your pantry, switch this off to avoid adding them twice.", style = MaterialTheme.typography.bodySmall)
                 }
                 if (updatePantry) {
-                    item {
+                    expressiveItem {
                         Text("Set all locations", style = MaterialTheme.typography.titleSmall)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             InventoryEntity.STORAGE_LOCATIONS.forEach { option ->
@@ -751,7 +785,7 @@ private fun PutAwayDialog(
                             }
                         }
                     }
-                    items(items.indices.toList(), key = { items[it].syncId }) { index ->
+                    expressiveItems(items.indices.toList(), key = { items[it].syncId }) { index ->
                         Column {
                             Text(items[index].name, style = MaterialTheme.typography.titleMedium)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -763,7 +797,7 @@ private fun PutAwayDialog(
                         }
                     }
                 }
-                error?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+                error?.let { message -> expressiveItem { Text(message, color = MaterialTheme.colorScheme.error) } }
             }
         },
         confirmButton = { Button(enabled = !saving && items.isNotEmpty(), onClick = {
@@ -940,13 +974,18 @@ fun ShoppingListItemRow(
     needsStockCheck: Boolean = false,
     onConfirmStock: () -> Unit = {}
 ) {
+    val haptics = LocalHapticFeedback.current
+    val toggleWithFeedback = {
+        if (!item.isChecked) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        onToggle()
+    }
     var actionsExpanded by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = item.quantity > 0 || item.isChecked, onClick = onToggle)
+        modifier = Modifier.fillMaxWidth().clickable(enabled = item.quantity > 0 || item.isChecked, onClick = toggleWithFeedback)
             .padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(checked = item.isChecked, enabled = item.quantity > 0 || item.isChecked, onCheckedChange = { onToggle() })
+        Checkbox(checked = item.isChecked, enabled = item.quantity > 0 || item.isChecked, onCheckedChange = { toggleWithFeedback() })
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -1000,8 +1039,8 @@ private fun AisleOrderDialog(initial: List<String>, shopName: String, onDismiss:
     AlertDialog(onDismissRequest = onDismiss, title = { Text("$shopName aisle order") },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { Text("This is an editable example. Put aisles in the order you walk through $shopName. Removed aisles move their items to Unassigned.") }
-                items(order, key = { it }) { aisle ->
+                expressiveItem { Text("This is an editable example. Put aisles in the order you walk through $shopName. Removed aisles move their items to Unassigned.") }
+                expressiveItems(order, key = { it }) { aisle ->
                     val index = order.indexOf(aisle)
                     Column {
                         Text(aisle, style = MaterialTheme.typography.titleMedium)
@@ -1012,7 +1051,7 @@ private fun AisleOrderDialog(initial: List<String>, shopName: String, onDismiss:
                         }
                     }
                 }
-                item {
+                expressiveItem {
                     OutlinedTextField(newName, { newName = it }, label = { Text("New aisle") }, modifier = Modifier.fillMaxWidth())
                     TextButton(enabled = newName.trim().isNotEmpty() && newName.trim() !in order && newName.trim() != ShoppingAisles.UNASSIGNED,
                         onClick = { order = order + newName.trim(); newName = "" }) { Text("Add aisle") }

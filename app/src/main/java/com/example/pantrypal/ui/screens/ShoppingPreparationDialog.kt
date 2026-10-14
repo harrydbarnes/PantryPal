@@ -1,8 +1,10 @@
 package com.example.pantrypal.ui.screens
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,11 +39,11 @@ fun ShoppingPreparationDialog(viewModel: MainViewModel, preview: ShoppingBuildPr
         title = { Text("Prepare $weekName") },
         text = {
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
+                expressiveItem {
                     Text("${changes.count { it.kind == ShoppingChangeKind.ADD }} added · ${changes.count { it.kind == ShoppingChangeKind.UPDATE }} changed · ${changes.count { it.kind == ShoppingChangeKind.REMOVE }} removed")
                     Text("Purchased items stay ticked. Your explicit stock choices apply to this ingredient; other saved edits are kept. This review is saved while you work.", style = MaterialTheme.typography.bodySmall)
                 }
-                itemsIndexed(preview.lines) { index, line ->
+                expressiveItemsIndexed(preview.lines) { index, line ->
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(line.name, style = MaterialTheme.typography.titleMedium)
                         Text("${line.requiredQuantity.readable()} ${line.unit} needed · ${line.availableQuantity.readable()} ${line.unit} at home", style = MaterialTheme.typography.bodySmall)
@@ -68,16 +70,16 @@ fun ShoppingPreparationDialog(viewModel: MainViewModel, preview: ShoppingBuildPr
                         HorizontalDivider()
                     }
                 }
-                item {
+                expressiveItem {
                     Row {
                         Checkbox(checked = replaceEdited, enabled = !saving, onCheckedChange = viewModel::replaceShoppingDraftEdits)
                         Text("Replace my unpurchased meal-list edits with these quantities", Modifier.padding(top = 12.dp))
                     }
                 }
-                itemsIndexed(changes) { _, change ->
+                expressiveItemsIndexed(changes) { _, change ->
                     Text("${change.kind.name.lowercase().replaceFirstChar { it.uppercase() }} · ${change.item.name} · ${change.item.quantity.readable()} ${change.item.unit}\n${change.explanation}", style = MaterialTheme.typography.bodySmall)
                 }
-                error?.let { message -> item {
+                error?.let { message -> expressiveItem {
                     Text(message, color = MaterialTheme.colorScheme.error)
                     TextButton(enabled = !saving, onClick = { viewModel.previewShoppingListForWeek(preview.weekId, refresh = true) }) { Text("Refresh review") }
                 } }

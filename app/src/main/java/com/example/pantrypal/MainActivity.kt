@@ -1,5 +1,8 @@
 package com.example.pantrypal
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import android.os.Bundle
 import android.Manifest
 import android.content.Context
@@ -18,7 +21,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -1304,7 +1306,7 @@ fun DashboardScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm)
     ) {
-        item {
+        expressiveItem {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1330,7 +1332,7 @@ fun DashboardScreen(
             }
         }
 
-        item {
+        expressiveItem {
             SectionHeading(
                 title = "Use these next",
                 supportingText = "A small nudge to keep good food out of the bin."
@@ -1338,7 +1340,7 @@ fun DashboardScreen(
         }
 
         if (expiringItems.isEmpty()) {
-            item {
+            expressiveItem {
                 FriendlyEmptyState(
                     title = "Nothing racing the clock",
                     supportingText = "Your cupboard is comfortably in date. Nicely done.",
@@ -1346,7 +1348,7 @@ fun DashboardScreen(
                 )
             }
         } else {
-            item {
+            expressiveItem {
                  FlowRow(
                      modifier = Modifier.fillMaxWidth(),
                      horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1387,7 +1389,7 @@ fun DashboardScreen(
             }
         }
 
-        item {
+        expressiveItem {
             SectionHeading(
                 title = "Restock radar",
                 supportingText = "Things you usually keep around but may have run out of."
@@ -1395,7 +1397,7 @@ fun DashboardScreen(
         }
 
         if (restockSuggestions.isEmpty()) {
-            item {
+            expressiveItem {
                 FriendlyEmptyState(
                     title = "No gaps spotted yet",
                     supportingText = "PantryPal will learn what you reach for as you use the app.",
@@ -1403,7 +1405,7 @@ fun DashboardScreen(
                 )
             }
         } else {
-            items(restockSuggestions) { item ->
+            expressiveItems(restockSuggestions) { item ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
@@ -1445,7 +1447,7 @@ fun DashboardScreen(
             }
         }
 
-        item {
+        expressiveItem {
             Button(
                 onClick = onOpenInventory,
                 modifier = Modifier.fillMaxWidth().height(72.dp),

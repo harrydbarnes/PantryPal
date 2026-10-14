@@ -35,6 +35,16 @@ class ShoppingUiTest {
             compose.onNodeWithText("Shopping List").assertIsDisplayed()
             compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToNode(hasText("Shop by aisle · My Aldi"))
             compose.onNodeWithText("Shop by aisle · My Aldi").assertIsDisplayed()
+            val list = compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange))
+            list.performScrollToNode(hasContentDescription("More options for QA first item"))
+            compose.onNodeWithText("QA first item").performClick()
+            compose.onNodeWithText("Complete Shop & Restock (", substring = true).assertIsDisplayed()
+            list.performScrollToNode(hasText("Ticked Items (", substring = true))
+            compose.onNodeWithText("QA first item").assertDoesNotExist()
+            compose.onNodeWithText("Ticked Items (", substring = true).performClick()
+            list.performScrollToNode(hasContentDescription("More options for QA first item"))
+            compose.onNodeWithContentDescription("More options for QA first item").assertIsDisplayed()
+            compose.onNodeWithText("QA first item").performClick()
         }
     }
     @Test fun tabletMealDaysUseMoreThanOneColumn() {

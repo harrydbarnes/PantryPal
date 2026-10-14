@@ -1,5 +1,8 @@
 package com.example.pantrypal.ui.screens
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import android.Manifest
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
@@ -89,24 +92,24 @@ fun HouseholdCollaborationScreen(
         })
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding).imePadding(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            item {
+            expressiveItem {
                 Text("My shopping household", style = MaterialTheme.typography.headlineSmall)
                 Text(state.syncLabel, style = MaterialTheme.typography.titleMedium)
                 Text("Live sync shares shopping items, sections, week names and My Aldi aisle settings. Pantry, recipes, meal plans and device settings remain on each device.")
             }
-            item {
+            expressiveItem {
                 if (state.liveWorking || state.isWorking || state.liveSyncing) LinearProgressIndicator(Modifier.fillMaxWidth())
                 state.message?.let { Text(it, color = if (state.liveFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
                 cameraMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (state.liveFailed && state.liveHouseholdId != null) TextButton(onClick = onRetry) { Text("Retry sync") }
             }
             if (!state.signedIn) {
-                item { Button(onClick = onGoogleSignIn, enabled = !state.liveWorking, modifier = Modifier.fillMaxWidth()) { Text("Sign in with Google") } }
+                expressiveItem { Button(onClick = onGoogleSignIn, enabled = !state.liveWorking, modifier = Modifier.fillMaxWidth()) { Text("Sign in with Google") } }
             } else {
-                item { Text("Signed in as ${state.accountName ?: "Google account"}") }
+                expressiveItem { Text("Signed in as ${state.accountName ?: "Google account"}") }
                 if (state.liveHouseholdId == null) {
-                    item { Button(onClick = onCreateLiveHousehold, enabled = !state.liveWorking, modifier = Modifier.fillMaxWidth()) { Text("Create a shopping household") } }
-                    item {
+                    expressiveItem { Button(onClick = onCreateLiveHousehold, enabled = !state.liveWorking, modifier = Modifier.fillMaxWidth()) { Text("Create a shopping household") } }
+                    expressiveItem {
                         Text("Or join your partner", style = MaterialTheme.typography.titleMedium)
                         OutlinedButton(onClick = { permission.launch(Manifest.permission.CAMERA) }, enabled = !state.liveWorking) { Text("Scan household QR") }
                         OutlinedTextField(invite, { invite = it }, label = { Text("Complete household invite") }, supportingText = { Text("Paste the full invite beginning PANTRYPAL-LIVE|. The six words alone are not enough.") }, modifier = Modifier.fillMaxWidth())
@@ -114,7 +117,7 @@ fun HouseholdCollaborationScreen(
                     }
                 } else {
                     state.liveInvite?.let { code ->
-                        item {
+                        expressiveItem {
                             OutlinedButton(onClick = { showQr = !showQr }, modifier = Modifier.fillMaxWidth()) { Text(if (showQr) "Hide invite" else "Share household invite") }
                             if (showQr) {
                                 PairingQrCode("PANTRYPAL-LIVE|$code")
@@ -123,11 +126,11 @@ fun HouseholdCollaborationScreen(
                             }
                         }
                     }
-                    item { OutlinedButton(onClick = { confirmDisconnect = true }, enabled = !state.liveWorking) { Text("Disconnect this device") } }
+                    expressiveItem { OutlinedButton(onClick = { confirmDisconnect = true }, enabled = !state.liveWorking) { Text("Disconnect this device") } }
                 }
-                item { TextButton(onClick = onSignOut, enabled = !state.liveWorking && state.liveHouseholdId == null) { Text("Sign out") } }
+                expressiveItem { TextButton(onClick = onSignOut, enabled = !state.liveWorking && state.liveHouseholdId == null) { Text("Sign out") } }
             }
-            item {
+            expressiveItem {
                 HorizontalDivider()
                 Text("One-off kitchen copy", style = MaterialTheme.typography.titleMedium)
                 TextButton(onClick = onExportSafetyBackup) { Text("Export backup saved before joining") }

@@ -1,5 +1,8 @@
 package com.example.pantrypal.ui.screens
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
@@ -71,7 +73,7 @@ fun ShoppingToolsScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
     ) {
-        item {
+        expressiveItem {
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -162,7 +164,7 @@ fun ShoppingToolsScreen(
         }
 
         state.message?.let { message ->
-            item {
+            expressiveItem {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer
@@ -178,7 +180,7 @@ fun ShoppingToolsScreen(
         }
 
         if (state.priceSummaries.isNotEmpty()) {
-            item {
+            expressiveItem {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm),
                     verticalAlignment = Alignment.CenterVertically
@@ -187,7 +189,7 @@ fun ShoppingToolsScreen(
                     Text("Price changes", style = MaterialTheme.typography.titleLarge)
                 }
             }
-            items(
+            expressiveItems(
                 state.priceSummaries,
                 key = { "${it.normalizedItemName}-${it.unit}-${it.currencyCode}" }
             ) { price ->
@@ -195,7 +197,7 @@ fun ShoppingToolsScreen(
             }
         }
 
-        item {
+        expressiveItem {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm),
                 verticalAlignment = Alignment.CenterVertically
@@ -205,7 +207,7 @@ fun ShoppingToolsScreen(
             }
         }
         if (state.recentPrices.isEmpty()) {
-            item {
+            expressiveItem {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -218,7 +220,7 @@ fun ShoppingToolsScreen(
                 }
             }
         } else {
-            items(state.recentPrices, key = PriceHistoryEntity::priceId) { price ->
+            expressiveItems(state.recentPrices, key = PriceHistoryEntity::priceId) { price ->
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow

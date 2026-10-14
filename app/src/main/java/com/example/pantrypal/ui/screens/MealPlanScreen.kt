@@ -1,5 +1,8 @@
 package com.example.pantrypal.ui.screens
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -20,7 +23,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -223,7 +225,7 @@ fun MealPlanScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(end = 8.dp)
                 ) {
-                    items(weeks, key = { it.weekId }) { week ->
+                    expressiveItems(weeks, key = { it.weekId }) { week ->
                         FilterChip(
                             selected = displayedWeek == week.weekId,
                             onClick = { displayedWeek = week.weekId },
@@ -709,7 +711,7 @@ private fun MealEditorDialog(
                 modifier = Modifier.heightIn(max = 520.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                item {
+                expressiveItem {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -724,7 +726,7 @@ private fun MealEditorDialog(
                         icon = { Icon(Icons.Default.Restaurant, contentDescription = null, modifier = Modifier.size(18.dp)) }
                     )
                 }
-                item {
+                expressiveItem {
                     Text("Day", style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         (1..7).forEach { option ->
@@ -736,7 +738,7 @@ private fun MealEditorDialog(
                         }
                     }
                 }
-                item {
+                expressiveItem {
                     Text("Meal", style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         MealEntity.SLOTS.forEach { option ->
@@ -748,7 +750,7 @@ private fun MealEditorDialog(
                         }
                     }
                 }
-                item {
+                expressiveItem {
                     Text("Shopping ingredients", style = MaterialTheme.typography.labelLarge)
                     Text(
                         "Tap ingredients to include them. Add something new with +.",

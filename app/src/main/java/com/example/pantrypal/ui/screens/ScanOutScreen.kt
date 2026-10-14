@@ -1,8 +1,10 @@
 package com.example.pantrypal.ui.screens
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.material.icons.filled.Close
@@ -80,7 +82,7 @@ fun ScanOutScreen(
 
                  duplicateBatches?.let { batches ->
                      LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-                         items(batches) { item ->
+                         expressiveItems(batches) { item ->
                              Card(
                                  modifier = Modifier
                                      .fillMaxWidth()
@@ -171,7 +173,7 @@ fun ScanOutScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     LazyColumn(modifier = Modifier.weight(1f)) {
-                        items(scanQueue) { item ->
+                        expressiveItems(scanQueue) { item ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
