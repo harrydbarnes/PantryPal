@@ -538,9 +538,8 @@ fun KitchenApp(
                                     .write(json)
                             }
                         }
-                    }.onFailure {
-                        snackbarHostState.showSnackbar("Backup file could not be written.")
-                    }
+                    }.onSuccess { featuresViewModel.backupFileWritten() }
+                     .onFailure { featuresViewModel.backupFileWritten(it) }
                 }
             }
         }

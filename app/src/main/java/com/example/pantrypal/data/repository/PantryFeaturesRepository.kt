@@ -306,14 +306,18 @@ class PantryFeaturesRepository(
         )
     }
 
-    suspend fun restoreBackupJson(json: String): BackupDecodeResult {
+    suspend fun restoreBackupJson(json: String): BackupDecodeResult =
+        com.example.pantrypal.data.household.HouseholdMutationGate.mutex.withLock {
+        check(context.getSharedPreferences("firebase_household", Context.MODE_PRIVATE).getString("household_id", null) == null) {
+            "Disconnect this device from its shopping household before restoring a full backup. Your partner’s list will stay unchanged."
+        }
         val result = withContext(Dispatchers.Default) {
             backupCodec.decode(json)
         }
         if (result is BackupDecodeResult.Success) {
             restore(result.document.payload)
         }
-        return result
+        result
     }
 
     suspend fun exportHouseholdSnapshot(): String = withContext(Dispatchers.Default) {

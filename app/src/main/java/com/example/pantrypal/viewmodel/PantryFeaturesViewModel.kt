@@ -424,14 +424,16 @@ class PantryFeaturesViewModel(
     suspend fun createBackupJson(): Result<String> {
         _dataState.update { it.copy(isWorking = true, message = null) }
         return runCatching { repository.exportBackupJson() }
-            .onSuccess {
-                _dataState.value =
-                    DataManagementUiState(message = "Complete backup created.")
-            }
+
             .onFailure {
                 _dataState.value =
                     DataManagementUiState(message = it.userMessage("Backup failed"))
             }
+    }
+
+    fun backupFileWritten(error: Throwable? = null) {
+        _dataState.value = DataManagementUiState(message = if (error == null) "Complete backup saved."
+            else error.userMessage("Backup file could not be written"))
     }
 
     fun restoreBackupJson(json: String) {

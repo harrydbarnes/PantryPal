@@ -20,7 +20,8 @@ class StockOperations(private val db: KitchenDatabase) {
             db.inventoryDao().updateInventory(stock.copy(quantity = stock.quantity - amount))
             if (type == ConsumptionType.FINISHED) {
                 val item = db.itemDao().getItemById(stock.itemId)
-                if (item != null && item.isUsual && db.inventoryDao().totalQuantity(item.itemId) <= (item.lowStockThreshold ?: 0.0)) restock(item, week)
+                if (item != null && item.isUsual && com.example.pantrypal.util.stockQuantityInUnit(db.inventoryDao().getBatchesForItem(item.itemId), item.defaultUnit)
+                        ?.let { it <= (item.lowStockThreshold ?: 0.0) } == true) restock(item, week)
             }
         }
     }

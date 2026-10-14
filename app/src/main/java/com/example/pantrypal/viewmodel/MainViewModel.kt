@@ -389,8 +389,10 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     // UI State for Inventory
     val inventoryState: StateFlow<List<InventoryUiModel>> = observe(repository.currentInventory, "inventory")
         .map { list ->
-            val totals = list.groupBy { it.itemId }.mapValues { (_, batches) -> batches.sumOf { it.quantity } }
-            list.filter { it.quantity > 0 }.map { it.toUiModel(totalQuantity = totals[it.itemId] ?: it.quantity) }
+            val totals = list.groupBy { it.itemId }.mapValues { (_, batches) -> com.example.pantrypal.util.stockQuantityInUnit(batches.map { batch ->
+                InventoryEntity(inventoryId = batch.inventoryId, itemId = batch.itemId, quantity = batch.quantity, unit = batch.unit, expirationDate = batch.expirationDate)
+            }, batches.first().defaultUnit) }
+            list.filter { it.quantity > 0 }.map { it.toUiModel(totalQuantity = totals[it.itemId]) }
         }.flowOn(Dispatchers.Default)
         .stateIn(
             scope = viewModelScope,
@@ -953,16 +955,18 @@ data class InventoryUiModel(
     val isOpened: Boolean,
     val isUsual: Boolean,
     val lowStockThreshold: Double?,
+    val stockUnit: String = unit,
     val tags: List<String>,
     val imageUrl: String? = null,
     val isRestockNeeded: Boolean = false,
     val addedDate: Long
 )
 
-fun InventoryWithItemMap.toUiModel(totalQuantity: Double = quantity): InventoryUiModel {
+fun InventoryWithItemMap.toUiModel(totalQuantity: Double? = com.example.pantrypal.util.convertShoppingQuantity(quantity, unit, defaultUnit)): InventoryUiModel {
     val tags = mutableListOf<String>()
     if (isVegetarian) tags.add("Veg")
     if (isGlutenFree) tags.add("GF")
+    if (totalQuantity == null) tags.add("Check stock units")
 
     val status = classifyExpiry(expirationDate)
     return InventoryUiModel(
@@ -980,9 +984,10 @@ fun InventoryWithItemMap.toUiModel(totalQuantity: Double = quantity): InventoryU
         isOpened = isOpened,
         isUsual = isUsual,
         lowStockThreshold = lowStockThreshold,
+        stockUnit = defaultUnit,
         tags = tags,
         imageUrl = imageUrl,
-        isRestockNeeded = lowStockThreshold?.let { totalQuantity <= it } == true,
+        isRestockNeeded = lowStockThreshold?.let { threshold -> totalQuantity?.let { it <= threshold } } == true,
         addedDate = addedDate
     )
 }

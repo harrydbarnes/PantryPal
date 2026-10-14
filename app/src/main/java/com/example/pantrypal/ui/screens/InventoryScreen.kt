@@ -405,7 +405,7 @@ fun InventoryItemRow(
                     )
                     AssistChip(
                         onClick = { onEditStockSettings(item) },
-                        label = { Text(if (item.isUsual) "Restock at ${item.lowStockThreshold ?: 0}" else "Restock settings") }
+                        label = { Text(if (item.isUsual) "Restock at ${item.lowStockThreshold ?: 0} ${item.stockUnit}" else "Restock settings") }
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
