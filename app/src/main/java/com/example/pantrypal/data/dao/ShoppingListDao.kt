@@ -123,7 +123,9 @@ abstract class ShoppingListDao {
                     result = result.copy(added = result.added + 1)
                 } else {
                     val quantity = convertShoppingQuantity(item.quantity, item.unit!!, existing.unit)!!
-                    if (quantity > existing.quantity) {
+                    if (!quantity.isFinite() || quantity > 100_000) {
+                        result = result.copy(skipped = result.skipped + 1)
+                    } else if (quantity > existing.quantity) {
                         update(existing.copy(quantity = quantity)) // Preserve manual metadata and associations.
                         result = result.copy(increased = result.increased + 1)
                     } else result = result.copy(unchanged = result.unchanged + 1)
@@ -141,9 +143,8 @@ abstract class ShoppingListDao {
         val targetUnit = item.unit ?: linked?.unit ?: product(item.name)?.defaultUnit ?: "pcs"
         val previousQuantity = if (previous == null || previous.quantity == 0.0) 0.0 else {
             val previousUnit = previous.unit.ifEmpty { linked?.unit ?: targetUnit }
-            requireNotNull(convertShoppingQuantity(previous.quantity, previousUnit, targetUnit)) {
-                "This Keep entry changed to an incompatible unit. Review it before importing again."
-            }
+            convertShoppingQuantity(previous.quantity, previousUnit, targetUnit)
+                ?: throw KeepImportUnitConflict()
         }
         val delta = (item.quantity - previousQuantity).coerceAtLeast(0.0)
         if (previous != null && delta <= 0) return false

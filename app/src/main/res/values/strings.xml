@@ -119,4 +119,10 @@
     <plurals name="shopping_trolley"><item quantity="one">In trolley (%d)</item><item quantity="other">In trolley (%d)</item></plurals>
     <plurals name="shopping_complete_action"><item quantity="one">Complete shop &amp; restock (%d)</item><item quantity="other">Complete shop &amp; restock (%d)</item></plurals>
     <plurals name="shopping_completed"><item quantity="one">%d purchase completed and restocked</item><item quantity="other">%d purchases completed and restocked</item></plurals>
+    <string name="keep_unit_conflict">A Keep entry changed to an incompatible unit. Review its units in Keep, then retry importing.</string>
+    <string name="stock_empty_other_batches">Batch marked empty. Other stock remains.</string>
+    <string name="stock_empty_already_requested">Marked empty. Replacement already on your list.</string>
+    <string name="stock_empty_added">Marked empty and added to shopping.</string>
+    <string name="stock_empty_action">Mark empty; replace if needed</string>
+    <string name="action_undo">Undo</string>
 </resources>

@@ -33,6 +33,8 @@ class ShoppingHapticTest {
                 }
             }
         }
+        compose.onAllNodes(isToggleable()).assertCountEquals(1)
+        compose.onNodeWithContentDescription("More options for Courgettes").assertHasClickAction()
         compose.onNodeWithText("Courgettes").performClick()
         compose.onNode(isToggleable()).assertIsOn()
         compose.runOnIdle { assertEquals(listOf(HapticFeedbackType.LongPress), pulses) }

@@ -706,7 +706,11 @@ private fun QuickAddShoppingItem(
     }
     Column {
         matching.forEach { name ->
-            TextButton(enabled = enabled, onClick = { onAddSuggestion(name) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            TextButton(enabled = enabled, onClick = {
+                val entry = parseQuickShoppingEntry(value)
+                onAddSuggestion(if (entry != null && (entry.quantity != 1.0 || entry.unit != "pcs"))
+                    "${formatQuantity(entry.quantity)} ${entry.unit} $name" else name)
+            }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text(name, modifier = Modifier.weight(1f))
                 val normalised = normalizeShoppingName(name)
                 Text(if (normalised in listedNames) stringResource(R.string.shopping_already_listed)

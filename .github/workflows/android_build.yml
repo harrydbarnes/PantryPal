@@ -57,7 +57,7 @@ jobs:
       uses: gradle/actions/setup-gradle@v6
 
     - name: Test and build debug APK
-      run: bash .github/scripts/gradle-with-bounded-retry.sh ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --build-cache --configuration-cache --stacktrace
+      run: bash .github/scripts/gradle-with-bounded-retry.sh ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintDebug --build-cache --configuration-cache --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v7
