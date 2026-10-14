@@ -51,9 +51,12 @@ class ShoppingUiTest {
                     }.getOrDefault(false)
                 }
             } catch (failure: Throwable) {
-                println(compose.onRoot(useUnmergedTree = true).printToString())
-                println("SHOPPING_DB=" + kotlinx.coroutines.runBlocking { app.database.shoppingListDao().snapshot() })
-                throw failure
+                val output = java.io.File(context.getExternalFilesDir(null), "review-profile").apply { mkdirs() }
+                java.io.File(output, "shopping-bottom-action.png").outputStream().use { stream ->
+                    androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                        .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                }
+                throw AssertionError("Bottom action layout:\n" + compose.onRoot(useUnmergedTree = true).printToString(), failure)
             }
             list.performScrollToNode(hasText("Ticked Items (", substring = true))
             compose.onNodeWithText("QA first item").assertDoesNotExist()
