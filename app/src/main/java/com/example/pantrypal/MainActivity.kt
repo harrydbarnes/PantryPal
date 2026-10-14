@@ -442,12 +442,18 @@ fun KitchenApp(
         if (request.source == "OPEN") { onShoppingIncomingConsumed(); return@LaunchedEffect }
         try {
             val parsed = com.example.pantrypal.domain.shopping.ShoppingListIngestParser.parseKeepSharedText(request.text)
-            val count = withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 (context.applicationContext as PantryPalApplication).database.shoppingListDao().importItems(
                     parsed, request.source, viewModel.shoppingWeek.value, request.operationId)
             }
             onShoppingIncomingConsumed()
-            scope.launch { snackbarHostState.showSnackbar("$count item${if (count == 1) "" else "s"} imported into your shopping list") }
+            val resources = context.resources
+            val feedback = listOf(
+                resources.getQuantityString(R.plurals.shopping_import_added, result.added, result.added),
+                resources.getQuantityString(R.plurals.shopping_import_increased, result.increased, result.increased),
+                resources.getQuantityString(R.plurals.shopping_import_unchanged, result.unchanged, result.unchanged)
+            ).joinToString("; ") + if (result.skipped > 0) "; " + resources.getQuantityString(R.plurals.shopping_import_skipped, result.skipped, result.skipped) else ""
+            scope.launch { snackbarHostState.showSnackbar(if (result.replayed) context.getString(R.string.shopping_import_replayed) else feedback) }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (error: Exception) {
             onShoppingIncomingConsumed()

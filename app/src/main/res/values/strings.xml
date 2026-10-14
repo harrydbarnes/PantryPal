@@ -37,4 +37,15 @@
     <string name="meal_plan_style_random">Random</string>
     <string name="meal_plan_style_week_ahead">Week ahead</string>
     <string name="meal_plan_style_two_weeks">Two week schedule</string>
+    <string name="shopping_import_replayed">This import has already been saved.</string>
+    <plurals name="shopping_import_added"><item quantity="one">Added %d new item</item><item quantity="other">Added %d new items</item></plurals>
+    <plurals name="shopping_import_increased"><item quantity="one">updated %d quantity</item><item quantity="other">updated %d quantities</item></plurals>
+    <plurals name="shopping_import_unchanged"><item quantity="one">%d already on your list</item><item quantity="other">%d already on your list</item></plurals>
+    <plurals name="shopping_import_skipped"><item quantity="one">skipped %d invalid entry</item><item quantity="other">skipped %d invalid entries</item></plurals>
+    <string name="shopping_sync_local">Shopping saved on this device</string>
+    <string name="shopping_sync_failed">Could not sync shopping. Retry.</string>
+    <string name="shopping_sync_active">Synchronising shopping…</string>
+    <string name="shopping_sync_waiting">Shopping waiting to sync</string>
+    <string name="shopping_sync_complete">Shopping synchronised</string>
+    <string name="shopping_sync_connecting">Connecting to household…</string>
 </resources>
