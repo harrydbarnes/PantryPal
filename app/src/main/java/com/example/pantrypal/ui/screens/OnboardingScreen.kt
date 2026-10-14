@@ -70,12 +70,12 @@ fun OnboardingScreen(
     initialShoppingReminderTiming: ShoppingReminderTiming,
     onSaveShoppingRoutine: (day: Int, timeMinutes: Int, timing: ShoppingReminderTiming, remindersEnabled: Boolean) -> Unit,
     onSaveKitchen: (List<String>, List<OnboardingMeal>, OnboardingStock?, () -> Unit) -> Unit,
-    initialShoppingRemindersEnabled: Boolean = false,
-    saving: Boolean = false,
-    error: String? = null,
     onCompleteToMealPlan: (requestNotificationPermission: Boolean) -> Unit,
     onSkip: () -> Unit,
     modifier: Modifier = Modifier,
+    initialShoppingRemindersEnabled: Boolean = false,
+    saving: Boolean = false,
+    error: String? = null,
     householdContent: (@Composable () -> Unit)? = null
 ) {
     var joiningHousehold by rememberSaveable { mutableStateOf(false) }

@@ -39,8 +39,8 @@ fun DataManagementScreen(
     onExportBackup: () -> Unit,
     onImportBackup: () -> Unit,
     onOpenHousehold: () -> Unit,
-    householdConnected: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    householdConnected: Boolean = false
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),

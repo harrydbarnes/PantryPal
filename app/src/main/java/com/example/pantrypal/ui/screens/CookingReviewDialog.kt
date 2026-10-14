@@ -22,7 +22,7 @@ fun CookingReviewDialog(review: CookingReview, saving: Boolean, error: String?, 
     val multiplier = amount?.div(review.recipe.servings ?: 1.0)?.takeIf { it.isFinite() && it > 0 }
     val plan = remember(review, multiplier) { multiplier?.let { planCooking(review.recipe, review.stock, it) } }
     // Changing portions deliberately resets proposed deductions; each amount remains editable afterwards.
-    var edits by rememberSaveable(review.recipe.id, review.meal?.mealId, portions) { mutableStateOf(hashMapOf<String, String>()) }
+    var edits by rememberSaveable(review.recipe.id, review.meal?.mealId, portions) { mutableStateOf<Map<String, String>>(emptyMap()) }
     val uses = plan?.lines?.map { line ->
         line.stock to (edits[line.stock.inventoryId.toString()]?.toDoubleOrNull() ?: if (edits.containsKey(line.stock.inventoryId.toString())) Double.NaN else line.suggestedQuantity)
     }.orEmpty()
@@ -36,7 +36,7 @@ fun CookingReviewDialog(review: CookingReview, saving: Boolean, error: String?, 
             plan?.notes?.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
             plan?.lines?.forEach { line ->
                 OutlinedTextField(edits[line.stock.inventoryId.toString()] ?: line.suggestedQuantity.toString(),
-                    { value -> edits = HashMap(edits).apply { put(line.stock.inventoryId.toString(), value) } },
+                    { value -> edits = edits + (line.stock.inventoryId.toString() to value) },
                     label = { Text("${line.stock.name} (${line.stock.unit})") },
                     supportingText = { Text("${line.stock.quantity} ${line.stock.unit} · ${line.stock.storageLocation}") },
                     enabled = !saving, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
