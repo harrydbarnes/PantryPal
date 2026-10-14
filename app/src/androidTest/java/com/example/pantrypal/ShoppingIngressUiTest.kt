@@ -23,7 +23,11 @@ class ShoppingIngressUiTest {
         ActivityScenario.launch<MainActivity>(share).use { scenario ->
             compose.waitUntil(10000) { runBlocking { app.database.shoppingListDao().snapshot().any { it.name == name } } }
             compose.onNodeWithText("Shopping List").assertIsDisplayed()
-            compose.onNodeWithText("Added 1 new item; updated 0 quantities; 0 already on your list").assertIsDisplayed()
+            // A committed database row precedes the asynchronous snackbar publication/animation.
+            compose.waitUntil(10000) {
+                try { compose.onNodeWithText("Added 1 new item; updated 0 quantities; 0 already on your list").assertIsDisplayed(); true }
+                catch (_: AssertionError) { false }
+            }
             scenario.recreate()
             assertEquals(2.0, runBlocking { app.database.shoppingListDao().snapshot().first { it.name == name }.quantity }, 0.0)
             val voiceName = "QA bread " + java.util.UUID.randomUUID().toString().take(6)
@@ -48,7 +52,11 @@ class ShoppingIngressUiTest {
         ActivityScenario.launch<MainActivity>(voice).use { scenario ->
             compose.waitUntil(10000) { runBlocking { app.database.shoppingListDao().snapshot().any { it.name == first } } }
             compose.onNodeWithText("Shopping List").assertIsDisplayed()
-            compose.onNodeWithText("Added 1 new item; updated 0 quantities; 0 already on your list").assertIsDisplayed()
+            // A committed database row precedes the asynchronous snackbar publication/animation.
+            compose.waitUntil(10000) {
+                try { compose.onNodeWithText("Added 1 new item; updated 0 quantities; 0 already on your list").assertIsDisplayed(); true }
+                catch (_: AssertionError) { false }
+            }
             scenario.recreate()
             assertEquals(2.0, runBlocking { app.database.shoppingListDao().snapshot().first { it.name == first }.quantity }, 0.0)
             scenario.onActivity { activity -> activity.startActivity(Intent(activity, MainActivity::class.java)

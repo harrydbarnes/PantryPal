@@ -1,5 +1,8 @@
 package com.example.pantrypal
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+
 import com.example.pantrypal.ui.components.expressiveItem
 import com.example.pantrypal.ui.components.expressiveItems
 import com.example.pantrypal.ui.components.expressiveItemsIndexed
@@ -840,8 +843,8 @@ fun KitchenApp(
                                 items = inventory,
                                 onScanIn = { selectScreen(AppScreen.ScanIn) },
                                 onScanOut = { selectScreen(AppScreen.ScanOut) },
-                                onConsume = { item, type ->
-                                    viewModel.consumeItem(item.inventoryId, item.itemId, 1.0, type)
+                                onConsume = { item, amount, type, saved ->
+                                    viewModel.consumeItem(item.inventoryId, item.itemId, amount, type, onSaved = saved)
                                 },
                                 onAdjustQuantity = viewModel::adjustInventoryQuantity,
                                 onToggleOpened = viewModel::toggleInventoryOpened,
@@ -863,6 +866,7 @@ fun KitchenApp(
                         )
                         AppScreen.MealPlan -> MealPlanScreen(
                             viewModel = viewModel,
+                            onCookMeal = featuresViewModel::prepareMealCooking,
                             onOpenRecipes = { currentScreen = AppScreen.Recipes }
                         )
                         AppScreen.AddManual -> {
@@ -960,7 +964,7 @@ fun KitchenApp(
                                 onSaveRecipe = featuresViewModel::saveRecipe,
                                 onToggleFavourite = featuresViewModel::setFavourite,
                                 onRateRecipe = featuresViewModel::rateRecipe,
-                                onMarkCooked = featuresViewModel::markRecipeCooked,
+                                onMarkCooked = { featuresViewModel.prepareRecipeCooking(it, currentWeek) },
                                 onOpenSource = { url ->
                                     runCatching {
                                         context.startActivity(
@@ -1121,6 +1125,31 @@ fun KitchenApp(
                 }
             }
         )
+    }
+
+    val cookingReview by featuresViewModel.cookingReview.collectAsState()
+    cookingReview?.let { review ->
+        CookingReviewDialog(review, featuresViewModel.cookingWorking.collectAsState().value,
+            featuresViewModel.cookingError.collectAsState().value, featuresViewModel::dismissCooking, featuresViewModel::confirmCooking)
+    }
+
+    val manualChoice by viewModel.manualProductChoice.collectAsState()
+    manualChoice?.let { choice ->
+        val saving by viewModel.saving.collectAsState()
+        val error by viewModel.actionError.collectAsState()
+        AlertDialog(onDismissRequest = { if (!saving) viewModel.cancelManualProductChoice() },
+            title = { Text("Add another batch of ${choice.name}?") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Reuse an existing product to keep its stock totals and restock settings together, or keep this as a distinct product.")
+                choice.products.forEach { product ->
+                    OutlinedButton(enabled = !saving, onClick = { choice.choose(product.itemId) }, modifier = Modifier.fillMaxWidth()) {
+                        Text("${product.name} · ${product.defaultUnit} · ${product.category}${product.barcode?.let { " · $it" }.orEmpty()}")
+                    }
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            } },
+            confirmButton = { TextButton(enabled = !saving, onClick = { choice.choose(null) }) { Text("Create distinct product") } },
+            dismissButton = { TextButton(enabled = !saving, onClick = viewModel::cancelManualProductChoice) { Text("Cancel") } })
     }
 
     pendingBackupRestore?.let { json ->

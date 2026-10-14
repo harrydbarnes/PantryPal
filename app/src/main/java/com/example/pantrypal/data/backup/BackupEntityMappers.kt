@@ -168,7 +168,8 @@ fun MealEntity.toBackupMeal(): BackupMeal = BackupMeal(
     dayOfWeek = dayOfWeek,
     mealSlot = mealSlot,
     recipeId = recipeId,
-    servings = servings
+    servings = servings,
+    lastCookedAt = lastCookedAt
 )
 
 fun BackupMeal.toEntity(): MealEntity = MealEntity(
@@ -179,7 +180,8 @@ fun BackupMeal.toEntity(): MealEntity = MealEntity(
     dayOfWeek = dayOfWeek,
     mealSlot = mealSlot,
     recipeId = recipeId,
-    servings = servings ?: MealEntity.DEFAULT_SERVINGS
+    servings = servings ?: MealEntity.DEFAULT_SERVINGS,
+    lastCookedAt = lastCookedAt
 )
 
 fun RecipeEntity.toBackupRecipe(): BackupRecipe = BackupRecipe(

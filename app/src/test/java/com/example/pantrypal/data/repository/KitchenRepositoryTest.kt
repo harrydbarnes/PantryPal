@@ -28,7 +28,7 @@ class KitchenRepositoryTest {
 
     class FakeInventoryDao : InventoryDao {
         override suspend fun getById(id: Long): InventoryEntity? = null
-        override suspend fun totalQuantity(id: Long): Double = 0.0
+        override suspend fun getBatchesForItem(id: Long): List<InventoryEntity> = emptyList()
         override suspend fun insertInventory(inventory: InventoryEntity): Long = 0
         override suspend fun deleteInventory(inventory: InventoryEntity) {}
         override suspend fun updateInventory(inventory: InventoryEntity) {}

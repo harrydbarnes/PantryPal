@@ -539,6 +539,13 @@ class KitchenRepository(
     }
 
 
+    suspend fun matchingProducts(name: String, unit: String): List<ItemEntity> = itemDao.getAllItemsSnapshot().filter {
+        it.name.trim().equals(name.trim(), ignoreCase = true) &&
+            com.example.pantrypal.util.convertShoppingQuantity(1.0, unit, it.defaultUnit) != null
+    }
+
+    suspend fun getProduct(id: Long): ItemEntity? = itemDao.getItemById(id)
+
     // Smart Restock Logic
     suspend fun getRestockSuggestions(currentTime: Long): List<ItemEntity> {
         val candidateIds = consumptionDao.getRestockCandidates(currentTime)

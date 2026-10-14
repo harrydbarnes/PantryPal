@@ -15,7 +15,8 @@ data class MealEntity(
     @ColumnInfo(defaultValue = "NULL")
     val recipeId: Long? = null,
     @ColumnInfo(defaultValue = "4.0")
-    val servings: Double = DEFAULT_SERVINGS
+    val servings: Double = DEFAULT_SERVINGS,
+    @ColumnInfo(defaultValue = "NULL") val lastCookedAt: Long? = null
 ) {
     companion object {
         const val WEEK_A = "A"

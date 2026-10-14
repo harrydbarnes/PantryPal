@@ -134,7 +134,8 @@ data class BackupMeal(
     val dayOfWeek: Int = 1,
     val mealSlot: String = "Dinner",
     val recipeId: Long? = null,
-    val servings: Double? = null
+    val servings: Double? = null,
+    val lastCookedAt: Long? = null
 )
 
 data class BackupRecipe(

@@ -95,12 +95,12 @@ fun ShoppingToolsScreen(
                         )
                         Column {
                             Text(
-                                "This week's food budget",
+                                "This week's recorded food spend",
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                             Text(
-                                "Receipt imports build a simple local price history.",
+                                "Based on receipts and prices you record on this device. Completing a shop without prices does not add to this total.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )

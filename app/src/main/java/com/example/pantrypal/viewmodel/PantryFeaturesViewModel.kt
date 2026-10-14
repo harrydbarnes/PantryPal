@@ -266,17 +266,41 @@ class PantryFeaturesViewModel(
         }
     }
 
-    fun markRecipeCooked(recipe: Recipe) {
-        val cooked = recipe.copy(lastCookedAt = System.currentTimeMillis())
-        saveRecipe(cooked)
-        _recipeState.update { state ->
-            state.copy(
-                selectedRecipe = state.selectedRecipe
-                    ?.takeIf { it.id == recipe.id }
-                    ?.copy(lastCookedAt = cooked.lastCookedAt)
-                    ?: state.selectedRecipe,
-                message = "${recipe.title} marked as cooked today."
-            )
+    private val _cookingReview = MutableStateFlow<com.example.pantrypal.util.CookingReview?>(null)
+    val cookingReview = _cookingReview.asStateFlow()
+    private val _cookingWorking = MutableStateFlow(false)
+    val cookingWorking = _cookingWorking.asStateFlow()
+    private val _cookingError = MutableStateFlow<String?>(null)
+    val cookingError = _cookingError.asStateFlow()
+
+    private fun prepareCooking(block: suspend () -> com.example.pantrypal.util.CookingReview) {
+        if (_cookingWorking.value) return
+        _cookingWorking.value = true
+        _cookingError.value = null
+        viewModelScope.launch {
+            try { _cookingReview.value = block() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { _recipeState.update { it.copy(errorMessage = error.userMessage("Cooking review could not be opened")) } }
+            finally { _cookingWorking.value = false }
+        }
+    }
+    fun prepareRecipeCooking(recipe: Recipe, week: String) = prepareCooking { repository.prepareCooking(recipe, week) }
+    fun prepareMealCooking(meal: com.example.pantrypal.data.entity.MealEntity) = prepareCooking { repository.prepareMealCooking(meal) }
+    fun dismissCooking() { if (!_cookingWorking.value) _cookingReview.value = null }
+    fun confirmCooking(uses: List<Pair<com.example.pantrypal.data.dao.InventoryWithItemMap, Double>>, logOnly: Boolean) {
+        val review = _cookingReview.value ?: return
+        if (_cookingWorking.value) return
+        _cookingWorking.value = true
+        _cookingError.value = null
+        viewModelScope.launch {
+            try {
+                val now = repository.recordCooking(review, uses, logOnly)
+                _recipeState.update { it.copy(selectedRecipe = it.selectedRecipe?.let { selected -> if (selected.id == review.recipe.id) selected.copy(lastCookedAt = now) else selected },
+                    message = if (logOnly) "${review.recipe.title} recorded as cooked. Pantry stock unchanged." else "${review.recipe.title} cooked; confirmed pantry usage saved.") }
+                _cookingReview.value = null
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { _cookingError.value = error.userMessage("Cooking could not be saved") }
+            finally { _cookingWorking.value = false }
         }
     }
 
@@ -308,7 +332,7 @@ class PantryFeaturesViewModel(
                     state.copy(
                         errorMessage = null,
                         message = if (count == 0) {
-                            "Everything for ${recipe.title} is already covered."
+                            "This recipe is covered individually. For several meals, review the whole week in Plan."
                         } else {
                             "$count item${if (count == 1) "" else "s"} added to Week $weekId."
                         }

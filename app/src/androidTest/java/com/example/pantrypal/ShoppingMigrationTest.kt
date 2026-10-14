@@ -53,7 +53,7 @@ class ShoppingMigrationTest {
             }
             original.close()
             val upgraded = androidx.room.Room.databaseBuilder(context, com.example.pantrypal.data.database.KitchenDatabase::class.java, name)
-                .addMigrations(com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_8_9, com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_9_10).build()
+                .addMigrations(com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_8_9, com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_9_10, com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_10_11).build()
             try {
                 assertEquals("Milk", upgraded.shoppingDao().getAllShoppingItemsSnapshot().single().name)
                 assertTrue(upgraded.purchaseRecordDao().records().isEmpty())
@@ -62,6 +62,7 @@ class ShoppingMigrationTest {
         } finally { original.close(); context.deleteDatabase(name) }
     }
     private fun revertShoppingSchemaToNine(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE meals DROP COLUMN lastCookedAt")
         db.execSQL("DROP TABLE shopping_ingest_state")
         db.execSQL("ALTER TABLE inventory DROP COLUMN preferredStore")
         db.execSQL("ALTER TABLE items DROP COLUMN preferredStore")
@@ -83,7 +84,7 @@ class ShoppingMigrationTest {
             old.openHelper.writableDatabase.apply { revertShoppingSchemaToNine(this); execSQL("PRAGMA user_version = 9") }
             old.close()
             val upgraded = androidx.room.Room.databaseBuilder(context, com.example.pantrypal.data.database.KitchenDatabase::class.java, name)
-                .addMigrations(com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_9_10).build()
+                .addMigrations(com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_9_10, com.example.pantrypal.data.database.KitchenDatabase.MIGRATION_10_11).build()
             try {
                 val rows = upgraded.shoppingListDao().snapshot()
                 assertEquals(setOf("A", "B"), rows.map { it.weekId }.toSet())

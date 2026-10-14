@@ -42,7 +42,7 @@ fun InventoryScreen(
     items: List<InventoryUiModel>,
     onScanIn: () -> Unit,
     onScanOut: () -> Unit,
-    onConsume: (InventoryUiModel, ConsumptionType) -> Unit,
+    onConsume: (InventoryUiModel, Double, ConsumptionType, () -> Unit) -> Unit,
     onAdjustQuantity: (Long, Double) -> Unit,
     onToggleOpened: (InventoryUiModel) -> Unit,
     onSaveDetails: (InventoryUiModel, Boolean, Double?, String, () -> Unit) -> Unit,
@@ -65,6 +65,8 @@ fun InventoryScreen(
     var showCategoryMenu by remember { mutableStateOf(false) }
     var showLocationMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
+    var consumingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var consumptionType by rememberSaveable { mutableStateOf(ConsumptionType.FINISHED) }
     var editingStockItem by remember { mutableStateOf<InventoryUiModel?>(null) }
 
     val filteredItems = remember(items, query, category, location, expiryFilter, lowStockOnly, openedOnly, sort) {
@@ -241,7 +243,7 @@ fun InventoryScreen(
                 } }) {
             InventoryItemRow(
                 item = item,
-                onConsume = onConsume,
+                onConsume = { stock, type -> consumingId = stock.inventoryId; consumptionType = type },
                 onAdjustQuantity = onAdjustQuantity,
                 onToggleOpened = onToggleOpened,
                 onEditStockSettings = { editingStockItem = item }
@@ -250,6 +252,24 @@ fun InventoryScreen(
             }
     }
 
+    }
+
+    items.firstOrNull { it.inventoryId == consumingId }?.let { item ->
+        var amountText by rememberSaveable(item.inventoryId, consumptionType) { mutableStateOf("") }
+        val amount = amountText.toDoubleOrNull()
+        AlertDialog(onDismissRequest = { if (!saving) consumingId = null },
+            title = { Text(if (consumptionType == ConsumptionType.WASTED) "Record waste" else "Record food used") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("${item.name}: ${item.quantity} available")
+                OutlinedTextField(amountText, { amountText = it }, label = { Text("Amount (${item.unit})") },
+                    enabled = !saving, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                OutlinedButton(enabled = !saving, onClick = { amountText = item.quantityValue.toString() }) { Text("Whole batch") }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            } },
+            confirmButton = { Button(enabled = !saving && amount?.let { it.isFinite() && it > 0 && it <= item.quantityValue } == true,
+                onClick = { onConsume(item, requireNotNull(amount), consumptionType) { consumingId = null } }) { Text(if (saving) "Saving…" else "Save usage") } },
+            dismissButton = { TextButton(enabled = !saving, onClick = { consumingId = null }) { Text("Cancel") } })
     }
 
     editingStockItem?.let { item ->
@@ -269,7 +289,7 @@ fun InventoryScreen(
                         OutlinedTextField(
                             value = thresholdText,
                             onValueChange = { thresholdText = it },
-                            label = { Text("Low-stock threshold") },
+                            label = { Text("Low-stock threshold (${item.stockUnit})") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -411,7 +431,7 @@ fun InventoryItemRow(
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = { onConsume(item, ConsumptionType.FINISHED) }) {
-                        Text(if (item.quantityValue <= 1.0) "Finished" else "Use 1")
+                        Text("Use…")
                     }
                     TextButton(
                         onClick = { onConsume(item, ConsumptionType.WASTED) },
