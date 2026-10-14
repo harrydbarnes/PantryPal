@@ -355,7 +355,8 @@ fun KitchenApp(
     }
 
     fun captureCurrentLocation(name: String) {
-        if (!ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             refreshLocationPermissions()
             scope.launch {
                 snackbarHostState.showSnackbar("Allow location access before saving a spot.")

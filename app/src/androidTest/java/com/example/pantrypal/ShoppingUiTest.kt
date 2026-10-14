@@ -75,6 +75,7 @@ class ShoppingUiTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             compose.onNodeWithText("Shop").performClick()
             compose.onNodeWithText("Quick add").performTextInput("500 g QA pasta")
+            captureShoppingScreenshot(app, "shopping-quick-add-keyboard.png")
             compose.onNodeWithContentDescription("Keep screen on: disabled").performClick()
             compose.onNodeWithContentDescription("Keep screen on: enabled").assertIsDisplayed()
             scenario.onActivity { org.junit.Assert.assertTrue(hasScreenOn(it.window.decorView)) }
@@ -85,7 +86,22 @@ class ShoppingUiTest {
             compose.onNodeWithText("Shop").performClick()
             compose.onNodeWithText("Quick add").assertTextContains("500 g QA pasta")
             compose.onNodeWithText("Quick add").performTextClearance()
+            compose.onNodeWithText("Quick add").performImeAction()
+            captureShoppingScreenshot(app, "shopping-docked-entry.png")
         }
+    }
+
+    private fun captureShoppingScreenshot(context: Context, name: String) {
+        compose.waitForIdle()
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val directory = java.io.File(context.getExternalFilesDir(null), "review-profile").apply { mkdirs() }
+        val file = java.io.File(directory, name)
+        file.outputStream().use { instrumentation.uiAutomation.takeScreenshot()
+            .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        fun shell(command: String) = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand(command)).use { it.readBytes() }
+        shell("mkdir -p /sdcard/Download/pantrypal-profile")
+        shell("cp ${file.absolutePath} /sdcard/Download/pantrypal-profile/$name")
     }
 
     @Test fun tabletMealDaysUseMoreThanOneColumn() {

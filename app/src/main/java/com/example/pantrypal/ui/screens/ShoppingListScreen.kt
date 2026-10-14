@@ -149,9 +149,8 @@ fun ShoppingListScreen(
     var shopMode by rememberSaveable { mutableStateOf(false) }
     val view = LocalView.current
     DisposableEffect(view, shopMode) {
-        val previous = view.keepScreenOn
         view.keepScreenOn = shopMode
-        onDispose { view.keepScreenOn = previous }
+        onDispose { view.keepScreenOn = false }
     }
     val keyboardVisible = WindowInsets.isImeVisible
     val actionError by viewModel.actionError.collectAsState()

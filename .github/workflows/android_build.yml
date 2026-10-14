@@ -59,6 +59,21 @@ jobs:
     - name: Test and build debug APK
       run: bash .github/scripts/gradle-with-bounded-retry.sh ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintDebug --build-cache --configuration-cache --stacktrace
 
+    - name: Print lint diagnostics
+      if: failure()
+      run: cat app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt || true
+
+    - name: Upload validation reports
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: android-validation-reports
+        path: |
+          app/build/reports/lint-results-debug.*
+          app/build/reports/tests/
+          app/build/test-results/
+        if-no-files-found: ignore
+
     - name: Upload APK
       uses: actions/upload-artifact@v7
       with:
