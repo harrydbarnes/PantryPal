@@ -130,4 +130,15 @@ class ShoppingSyncStoreTest {
         assertEquals(5.0, db.shoppingSyncDao().item(item.syncId)!!.quantity, 0.0)
         assertTrue(db.shoppingSyncDao().pending().any { it.recordKey.endsWith(":quantity") })
     }
+    @Test fun durablePendingStatusIncludesBatchUntilAcknowledged() = runBlocking {
+        store.resetQueue()
+        assertFalse(db.shoppingSyncDao().hasPending())
+        db.shoppingDao().insertShoppingItem(ShoppingItemEntity(name = "Milk", sectionId = 3))
+        assertTrue(db.shoppingSyncDao().hasPending())
+        val batch = store.batch("home")!!
+        assertTrue(db.shoppingSyncDao().hasPending())
+        store.accept(ShoppingWireState(records = store.changes(batch)), batch)
+        assertFalse(db.shoppingSyncDao().hasPending())
+    }
+
 }

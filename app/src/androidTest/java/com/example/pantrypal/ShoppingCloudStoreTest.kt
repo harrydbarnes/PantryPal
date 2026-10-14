@@ -143,4 +143,22 @@ class ShoppingCloudStoreTest {
         assertFalse(current.authoritative)
         assertEquals(0, current.recordsRead)
     }
+    @Test fun retainedDeletionWinsOverStaleFullRowAndTickButAllowsNewIdentity() = runBlocking {
+        cloud.ensureReady(home, uid, ::decode)
+        val seed = cloud.exchange(home, uid, "owner", "create", mapOf("item:old" to ShoppingRecord("a", "Milk")), null)
+        val deleted = cloud.exchange(home, uid, "owner", "delete", mapOf("item:old" to ShoppingRecord("b", null)), seed.revision)
+        val stale = cloud.exchange(home, uid, "partner", "stale", mapOf(
+            "item:old" to ShoppingRecord("c", "Milk quantity 2"),
+            "layout:item-field:old:isChecked" to ShoppingRecord("d", "1"),
+            "item:new" to ShoppingRecord("e", "Milk")
+        ), seed.revision)
+        assertNull(stale.state.records.getValue("item:old").data)
+        assertFalse(stale.state.records.containsKey("layout:item-field:old:isChecked"))
+        assertEquals("Milk", stale.state.records.getValue("item:new").data)
+        val refreshed = cloud.exchange(home, uid, "fresh", null, emptyMap(), deleted.revision)
+        assertFalse(refreshed.state.records.containsKey("item:old"))
+        assertFalse(refreshed.state.records.containsKey("layout:item-field:old:isChecked"))
+        assertEquals("Milk", refreshed.state.records.getValue("item:new").data)
+    }
+
 }

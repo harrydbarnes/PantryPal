@@ -71,8 +71,10 @@ fun OnboardingScreen(
     onSaveShoppingSpot: (String) -> Unit,
     onCompleteToMealPlan: (requestNotificationPermission: Boolean) -> Unit,
     onSkip: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    householdContent: (@Composable () -> Unit)? = null
 ) {
+    var joiningHousehold by rememberSaveable { mutableStateOf(false) }
     var stepIndex by rememberSaveable { mutableIntStateOf(0) }
     var shoppingDay by rememberSaveable { mutableIntStateOf(initialShoppingDay) }
     var shoppingTime by rememberSaveable { mutableIntStateOf(initialShoppingTimeMinutes) }
@@ -98,6 +100,17 @@ fun OnboardingScreen(
         onCompleteToMealPlan(shoppingRemindersEnabled)
     }
 
+    if (joiningHousehold && householdContent != null) {
+        BackHandler { joiningHousehold = false }
+        Column(Modifier.fillMaxSize().systemBarsPadding()) {
+            TextButton(onClick = { joiningHousehold = false }) {
+                Text(androidx.compose.ui.res.stringResource(com.example.pantrypal.R.string.household_back_to_setup))
+            }
+            androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { householdContent() }
+        }
+        return
+    }
+
     BackHandler(enabled = stepIndex > 0 || isReplay) { if (stepIndex > 0) stepIndex -= 1 else onSkip() }
     Column(modifier = modifier.fillMaxSize().systemBarsPadding().padding(horizontal = PantryPalSpacing.sm, vertical = PantryPalSpacing.xs)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -111,6 +124,11 @@ fun OnboardingScreen(
                 Row(modifier = Modifier.padding(PantryPalSpacing.md), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm)) {
                     Icon(step.icon, contentDescription = null)
                     Column { Text("${step.eyebrow} - ${stepIndex + 1} of ${setupSteps.size}".uppercase(), style = MaterialTheme.typography.labelMedium); Text(step.title, style = MaterialTheme.typography.headlineSmall) }
+                }
+            }
+            if (stepIndex == 0 && householdContent != null) {
+                OutlinedButton(onClick = { joiningHousehold = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(androidx.compose.ui.res.stringResource(com.example.pantrypal.R.string.household_join_onboarding))
                 }
             }
             Text(step.supportingText, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

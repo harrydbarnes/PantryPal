@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.res.stringResource
+import com.example.pantrypal.R
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
@@ -35,16 +37,18 @@ data class HouseholdSyncUiState(
     val liveHouseholdId: String? = null,
     val liveInvite: String? = null,
     val liveSyncing: Boolean = false,
+    val livePending: Boolean = false,
     val liveWorking: Boolean = false,
     val liveFailed: Boolean = false,
     val lastSyncedAt: Long? = null
 ) {
-    val syncLabel: String get() = when {
-        liveHouseholdId == null -> "This device only"
-        liveFailed -> "Sync needs attention"
-        liveSyncing -> "Syncing shopping changes…"
-        lastSyncedAt != null -> "Shopping list synced"
-        else -> "Connecting to household…"
+    val syncLabelRes: Int get() = when {
+        liveHouseholdId == null -> R.string.shopping_sync_local
+        liveFailed -> R.string.shopping_sync_failed
+        liveSyncing -> R.string.shopping_sync_active
+        livePending -> R.string.shopping_sync_waiting
+        lastSyncedAt != null -> R.string.shopping_sync_complete
+        else -> R.string.shopping_sync_connecting
     }
 }
 
@@ -63,7 +67,8 @@ fun HouseholdCollaborationScreen(
     onExportSafetyBackup: () -> Unit = {},
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
-    showTopBar: Boolean = false
+    showTopBar: Boolean = false,
+    joiningOnly: Boolean = false
 ) {
     var invite by rememberSaveable { mutableStateOf("") }
     var showQr by rememberSaveable { mutableStateOf(false) }
@@ -94,7 +99,7 @@ fun HouseholdCollaborationScreen(
         LazyColumn(Modifier.fillMaxSize().padding(padding).imePadding(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             expressiveItem {
                 Text("My shopping household", style = MaterialTheme.typography.headlineSmall)
-                Text(state.syncLabel, style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(state.syncLabelRes), style = MaterialTheme.typography.titleMedium)
                 Text("Live sync shares shopping items, sections, week names and My Aldi aisle settings. Pantry, recipes, meal plans and device settings remain on each device.")
             }
             expressiveItem {
@@ -108,7 +113,7 @@ fun HouseholdCollaborationScreen(
             } else {
                 expressiveItem { Text("Signed in as ${state.accountName ?: "Google account"}") }
                 if (state.liveHouseholdId == null) {
-                    expressiveItem { Button(onClick = onCreateLiveHousehold, enabled = !state.liveWorking, modifier = Modifier.fillMaxWidth()) { Text("Create a shopping household") } }
+                    if (!joiningOnly) expressiveItem { Button(onClick = onCreateLiveHousehold, enabled = !state.liveWorking, modifier = Modifier.fillMaxWidth()) { Text("Create a shopping household") } }
                     expressiveItem {
                         Text("Or join your partner", style = MaterialTheme.typography.titleMedium)
                         OutlinedButton(onClick = { permission.launch(Manifest.permission.CAMERA) }, enabled = !state.liveWorking) { Text("Scan household QR") }
@@ -130,7 +135,7 @@ fun HouseholdCollaborationScreen(
                 }
                 expressiveItem { TextButton(onClick = onSignOut, enabled = !state.liveWorking && state.liveHouseholdId == null) { Text("Sign out") } }
             }
-            expressiveItem {
+            if (!joiningOnly) expressiveItem {
                 HorizontalDivider()
                 Text("One-off kitchen copy", style = MaterialTheme.typography.titleMedium)
                 TextButton(onClick = onExportSafetyBackup) { Text("Export backup saved before joining") }

@@ -32,6 +32,7 @@ data class FirebaseHouseholdState(
     val working: Boolean = false,
     val lastSyncedAt: Long? = null,
     val status: String? = null,
+    val pending: Boolean = true,
     val failed: Boolean = false
 )
 
@@ -39,7 +40,7 @@ data class FirebaseHouseholdState(
 class FirebaseHouseholdSync(
     private val context: Context,
     private val repository: PantryFeaturesRepository,
-    database: KitchenDatabase
+    private val database: KitchenDatabase
 ) {
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
@@ -54,7 +55,9 @@ class FirebaseHouseholdSync(
         check(prefs.edit().putString("device_id", it).commit())
     }
     private val _state = MutableStateFlow(currentState())
-    val state = _state.asStateFlow()
+    val state = combine(_state, database.shoppingSyncDao().observeHasPending()) { state, pending ->
+        state.copy(pending = state.householdId != null && pending)
+    }.stateIn(scope, SharingStarted.Eagerly, _state.value)
     private var listener: ListenerRegistration? = null
     private fun cursorKey(id: String) = "shopping_revision_$id"
     private fun compactionKey(id: String) = "shopping_compaction_$id"
@@ -95,6 +98,12 @@ class FirebaseHouseholdSync(
                         backoff = (backoff * 2).coerceAtMost(30_000L)
                     }
                 }
+            }
+        }
+        // Observe the durable outbox, not shopping-row emissions caused by remote application.
+        scope.launch {
+            database.shoppingSyncDao().observeHasPending().distinctUntilChanged().collect { pending ->
+                if (pending && householdId() != null) requests.trySend(Unit)
             }
         }
         auth.addAuthStateListener { scope.launch { mutex.withLock { attachListener() } } }
@@ -195,12 +204,8 @@ class FirebaseHouseholdSync(
         _state.value = currentState().copy(status = "Signed out. Local data is kept.")
     }
 
-    fun onLocalDataChanged() {
-        if (householdId() != null) {
-            _state.update { it.copy(syncing = true) }
-            requests.trySend(Unit)
-        }
-    }
+    /** Foreground reconciliation also retrieves partner changes when there are no local edits. */
+    fun reconcile() { if (householdId() != null) requests.trySend(Unit) }
     fun retry() { scope.launch { mutex.withLock { attachListener() } } }
 
     private fun attachListener() {
@@ -234,8 +239,9 @@ class FirebaseHouseholdSync(
         store.accept(remote.state, batch, authoritative = remote.authoritative)
         // Persist after Room accepts the response. A crash before this line safely replays the delta.
         saveCursor(id, remote.revision)
-        _state.value = currentState().copy(lastSyncedAt = System.currentTimeMillis(), status = "Shopping list synced.")
-        if (store.batch(id) != null) requests.trySend(Unit)
+        val pending = database.shoppingSyncDao().hasPending()
+        _state.value = currentState().copy(lastSyncedAt = if (pending) _state.value.lastSyncedAt else System.currentTimeMillis())
+        if (pending) requests.trySend(Unit)
     }
 
     private fun currentState() = FirebaseHouseholdState(

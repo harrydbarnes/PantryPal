@@ -142,6 +142,11 @@ class MainActivity : ComponentActivity() {
     private val sharedRecipeUrl = MutableStateFlow<String?>(null)
     private val shoppingReminderAction = MutableStateFlow<String?>(null)
 
+    override fun onStart() {
+        super.onStart()
+        (application as PantryPalApplication).householdSync.reconcile()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -650,6 +655,29 @@ fun KitchenApp(
 
     if (showOnboarding) {
         OnboardingScreen(
+            householdContent = {
+                val household by featuresViewModel.householdState.collectAsState()
+                Column(Modifier.fillMaxSize()) {
+                    if (household.liveHouseholdId != null && household.lastSyncedAt != null &&
+                        !household.liveWorking && !household.liveSyncing && !household.livePending && !household.liveFailed) {
+                        Button(onClick = {
+                            viewModel.completeOnboarding()
+                            showOnboarding = false
+                            currentScreen = AppScreen.ShoppingList
+                        }, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                            Text(stringResource(R.string.household_open_joined_list))
+                        }
+                    }
+                    HouseholdCollaborationScreen(
+                        state = household, onShareSnapshot = {}, onImportSnapshot = {}, joiningOnly = true,
+                        onGoogleSignIn = { featuresViewModel.signInToHousehold(context as ComponentActivity) },
+                        onJoinLiveHousehold = featuresViewModel::joinLiveHousehold,
+                        onRetry = featuresViewModel::retryHousehold,
+                        onDisconnect = featuresViewModel::disconnectHousehold,
+                        onSignOut = featuresViewModel::signOutHousehold
+                    )
+                }
+            },
             isReplay = hasCompletedOnboarding,
             initialShoppingDay = appSettings.shoppingDayOfWeek,
             initialShoppingTimeMinutes = appSettings.shoppingTimeMinutes,

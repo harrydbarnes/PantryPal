@@ -48,4 +48,7 @@
     <string name="shopping_sync_waiting">Shopping waiting to sync</string>
     <string name="shopping_sync_complete">Shopping synchronised</string>
     <string name="shopping_sync_connecting">Connecting to household…</string>
+    <string name="household_back_to_setup">Back to setup on this device</string>
+    <string name="household_join_onboarding">Joining your household?</string>
+    <string name="household_open_joined_list">Open household shopping list</string>
 </resources>
