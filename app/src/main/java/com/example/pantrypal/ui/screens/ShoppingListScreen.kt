@@ -209,8 +209,9 @@ fun ShoppingListScreen(
     val dates = "${monday.format(dateFormat)}–${monday.plusDays(6).format(dateFormat)}"
 
     fun addQuickEntry(text: String) {
+        val submittedDraft = viewModel.quickAddDraft.value
         viewModel.quickAddShoppingItem(text) { change ->
-            if (viewModel.quickAddDraft.value == text) viewModel.setQuickAddDraft("")
+            if (viewModel.quickAddDraft.value == submittedDraft) viewModel.setQuickAddDraft("")
             scope.launch {
                 val message = if (change.before == null) "${change.after.name} added" else
                     "${change.after.name} increased to ${formatQuantity(change.after.quantity)} ${change.after.unit}"

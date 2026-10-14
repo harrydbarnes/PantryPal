@@ -38,6 +38,10 @@ Predictive gesture animation, foldable posture, TalkBack, 200% text, light/dark 
 
 ## Verification and delivery
 
-Three sequential implementation commits retain the phase boundaries. Delivery uses one integration PR so the existing main-targeted Android workflow exercises the combined DAO, sync, onboarding and UI changes. No merge is authorised or performed.
+Three sequential implementation commits retain the phase boundaries; a follow-up commit adds integration regressions and accurate stock/unit-conflict feedback. Delivery uses one integration PR so the existing main-targeted Android workflow exercises the combined DAO, sync, onboarding and UI changes. No merge is authorised or performed.
 
 Local `testDebugUnitTest assembleDebug lintDebug` failed before compilation: `java.io.IOException: Unable to establish loopback connection`, including an elevated run with Gradle cache access. Only a JRE 21 was found in the standard installation locations; no Android SDK/device was found there. `adb devices` could not start its daemon (`could not read ok from ADB Server`). Local Android tests, lint, APK, instrumentation, screenshots and visual/accessibility verification are not claimed. GitHub CI results are recorded in the PR once available.
+
+Same-field conflicts retain server transaction/revision order (the last accepted field write wins), independent fields retain separate overlay records, and retained deletion markers take precedence over stale edits. The deletion guard adds one transaction read per distinct uploaded shopping identity; `recordsRead` continues to measure snapshot-query documents only. Existing v4 clients do not gain this protection until updated.
+
+New/extended coverage includes fresh Keep operation IDs, compatible/incompatible units, duplicate maxima, manual contributions, week/recurring/completed scopes, fractional empty batches, existing replacement preservation, pending-batch status, cloud delete versus stale tick/base payload, a single row checkbox action, quick-entry draft retention and scoped Shop Mode. Existing receipt rollback and repeated completion tests remain in place. Device tests run through the existing Firebase/Android emulator script, not the unit-test task.

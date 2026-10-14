@@ -10,7 +10,7 @@ data class ShoppingCloudResult(
     val state: ShoppingWireState,
     val revision: Long,
     val authoritative: Boolean,
-    /** Number of shopping-record documents returned by Firestore for this exchange. */
+    /** Records returned by the snapshot query; excludes transaction guard reads. */
     val recordsRead: Int
 )
 
