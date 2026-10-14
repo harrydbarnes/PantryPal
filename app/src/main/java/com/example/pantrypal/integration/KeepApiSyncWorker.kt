@@ -100,6 +100,10 @@ class KeepApiSyncWorker(context: Context, parameters: WorkerParameters) : Corout
             status(applicationContext, "Keep checked: $imported item${if (imported == 1) "" else "s"} imported. Your Keep notes are unchanged.")
             Result.success()
         } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: com.example.pantrypal.domain.shopping.KeepImportUnitConflict) {
+            status(applicationContext, applicationContext.getString(com.example.pantrypal.R.string.keep_unit_conflict))
+            Result.failure()
+        }
         catch (_: java.io.IOException) { if (runAttemptCount < 3) Result.retry() else { status(applicationContext, "Keep could not connect. Try again or use Keep → Send → PantryPal."); Result.failure() } }
         catch (_: Exception) { status(applicationContext, "Keep access needs attention. Reconnect your Workspace account or use Keep → Send → PantryPal."); Result.failure() }
     }

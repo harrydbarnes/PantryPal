@@ -105,10 +105,11 @@ class PantryFeaturesViewModel(
                         liveHouseholdId = live.householdId,
                         liveInvite = live.invite,
                         liveSyncing = live.syncing,
+                        livePending = live.pending,
                         liveWorking = live.working,
                         liveFailed = live.failed,
                         lastSyncedAt = live.lastSyncedAt,
-                        message = live.status ?: it.message
+                        message = live.status
                     )
                 }
             }

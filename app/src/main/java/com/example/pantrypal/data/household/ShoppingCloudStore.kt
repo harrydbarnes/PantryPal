@@ -10,7 +10,7 @@ data class ShoppingCloudResult(
     val state: ShoppingWireState,
     val revision: Long,
     val authoritative: Boolean,
-    /** Number of shopping-record documents returned by Firestore for this exchange. */
+    /** Records returned by the snapshot query; excludes transaction guard reads. */
     val recordsRead: Int
 )
 
@@ -175,9 +175,24 @@ class ShoppingCloudStore(private val firestore: FirebaseFirestore) {
             val receiptRef = receipts(id).document(device)
             val receipt = if (batch != null) tx.get(receiptRef) else null
             val replay = batch != null && receipt?.getString("batch") == batch
+            // A retained deletion wins over stale full rows and field edits from an offline device.
+            // Read all guards before writes, as required by Firestore transactions.
+            val guarded = if (batch != null && !replay) changes.keys.mapNotNull { key ->
+                when {
+                    key.startsWith("item:") -> key
+                    key.startsWith("layout:item-field:") -> "item:" + key.removePrefix("layout:item-field:").substringBeforeLast(':')
+                    else -> null
+                }
+            }.distinct().associateWith { tx.get(records(id).document(documentId(it))) } else emptyMap()
+            val deletions = guarded.filterValues { it.exists() && it.getBoolean("deleted") == true }
+                .mapValues { ShoppingRecord(requireNotNull(it.value.getString("token")), null) }
+            val accepted = changes.filter { (key, value) ->
+                val base = if (key.startsWith("layout:item-field:")) "item:" + key.removePrefix("layout:item-field:").substringBeforeLast(':') else key
+                value.data == null || base !in deletions
+            }
             val resultRevision = if (batch != null && !replay) beforeRevision + 1 else beforeRevision
             if (batch != null && !replay) {
-                changes.forEach { (key, value) ->
+                accepted.forEach { (key, value) ->
                     require((value.data?.toByteArray()?.size ?: 0) < 100_000) { "A shopping record is too large to sync." }
                     tx.set(records(id).document(documentId(key)), recordData(key, value, uid, resultRevision))
                 }
@@ -185,7 +200,7 @@ class ShoppingCloudStore(private val firestore: FirebaseFirestore) {
                 tx.update(ref, stamp(uid) + mapOf("revision" to resultRevision))
             }
             ShoppingCloudResult(
-                state = ShoppingWireState(records = if (batch == null || replay) current else current + changes),
+                state = ShoppingWireState(records = if (batch == null || replay) current else current + accepted + deletions),
                 revision = resultRevision,
                 authoritative = authoritative,
                 recordsRead = snapshot?.size() ?: 0

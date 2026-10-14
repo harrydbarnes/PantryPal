@@ -76,22 +76,80 @@ abstract class ShoppingListDao {
         return saved
     }
 
+    /** Counts describe consolidated requests, not parsed lines. Compatible duplicates use their maximum. */
+    data class ImportResult(val added: Int = 0, val increased: Int = 0, val unchanged: Int = 0,
+        val skipped: Int = 0, val replayed: Boolean = false)
+
+    private fun importName(name: String) = name.trim().replace(Regex("\\s+"), " ").lowercase(java.util.Locale.ROOT)
+
     @Transaction
-    open suspend fun importItems(items: List<ShoppingIngestItem>, source: String, weekId: String, operationId: String): Int {
-        if (ingestState("operation:$operationId") != null) return 0
+    open suspend fun importItems(items: List<ShoppingIngestItem>, source: String, weekId: String, operationId: String): ImportResult {
+        if (ingestState("operation:$operationId") != null) return ImportResult(replayed = true)
         require(items.size <= 1000)
-        items.forEach { upsertShoppingItem(it.name, it.quantity, source, weekId, unit = it.unit) }
+        var result = ImportResult()
+        if (source != "KEEP_SHARE") {
+            // Voice/manual requests are additive. Only retries of this operation are suppressed.
+            items.forEach { item ->
+                val before = snapshot().map { it.syncId }.toSet()
+                val saved = upsertShoppingItem(item.name, item.quantity, source, weekId, unit = item.unit)
+                result = if (saved.syncId in before) result.copy(increased = result.increased + 1)
+                    else result.copy(added = result.added + 1)
+            }
+        } else {
+            val consolidated = mutableListOf<ShoppingIngestItem>()
+            for (item in items) {
+                if (item.name.isBlank() || item.name.length > 200 || !item.quantity.isFinite() || item.quantity <= 0 ||
+                    item.quantity > 100_000 || item.unit?.isBlank() == true) {
+                    result = result.copy(skipped = result.skipped + 1); continue
+                }
+                // Resolve omitted units once from the same product/stock model used by quick entry.
+                val product = product(item.name.trim().replace(Regex("\\s+"), " "))
+                val unit = item.unit ?: product?.let { stock(it.itemId).firstOrNull()?.unit ?: it.defaultUnit } ?: "pcs"
+                val index = consolidated.indexOfFirst { importName(it.name) == importName(item.name) &&
+                    convertShoppingQuantity(item.quantity, unit, it.unit!!) != null }
+                if (index < 0) consolidated += item.copy(unit = unit)
+                else {
+                    val old = consolidated[index]
+                    consolidated[index] = old.copy(quantity = maxOf(old.quantity, convertShoppingQuantity(item.quantity, unit, old.unit!!)!!))
+                }
+            }
+            val recurring = sections().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
+            for (item in consolidated) {
+                val existing = snapshot().firstOrNull { !it.isChecked && importName(it.name) == importName(item.name) &&
+                    (it.weekId == weekId || it.weekId == null || it.sectionId in recurring) &&
+                    convertShoppingQuantity(item.quantity, item.unit!!, it.unit) != null }
+                if (existing == null) {
+                    upsertShoppingItem(item.name, item.quantity, source, weekId, unit = item.unit)
+                    result = result.copy(added = result.added + 1)
+                } else {
+                    val quantity = convertShoppingQuantity(item.quantity, item.unit!!, existing.unit)!!
+                    if (!quantity.isFinite() || quantity > 100_000) {
+                        result = result.copy(skipped = result.skipped + 1)
+                    } else if (quantity > existing.quantity) {
+                        update(existing.copy(quantity = quantity)) // Preserve manual metadata and associations.
+                        result = result.copy(increased = result.increased + 1)
+                    } else result = result.copy(unchanged = result.unchanged + 1)
+                }
+            }
+        }
         saveIngestState(ShoppingIngestEntity("operation:$operationId"))
-        return items.size
+        return result
     }
 
     @Transaction
     open suspend fun importKeepItem(key: String, item: ShoppingIngestItem, weekId: String): Boolean {
         val previous = ingestState(key)
-        val delta = if (previous?.unit == item.unit.orEmpty()) (item.quantity - previous.quantity).coerceAtLeast(0.0) else item.quantity
+        val linked = previous?.shoppingSyncId?.let { bySyncId(it) }
+        val targetUnit = item.unit ?: linked?.unit ?: product(item.name)?.defaultUnit ?: "pcs"
+        val previousQuantity = if (previous == null || previous.quantity == 0.0) 0.0 else {
+            val previousUnit = previous.unit.ifEmpty { linked?.unit ?: targetUnit }
+            convertShoppingQuantity(previous.quantity, previousUnit, targetUnit)
+                ?: throw KeepImportUnitConflict()
+        }
+        val delta = (item.quantity - previousQuantity).coerceAtLeast(0.0)
         if (previous != null && delta <= 0) return false
-        val saved = upsertShoppingItem(item.name, delta, "KEEP_API", weekId, unit = item.unit)
-        saveIngestState(ShoppingIngestEntity(key, item.quantity, item.unit.orEmpty(), saved.syncId))
+        val saved = upsertShoppingItem(item.name, delta, "KEEP_API", weekId, unit = targetUnit)
+        saveIngestState(ShoppingIngestEntity(key, item.quantity, targetUnit, saved.syncId))
         return true
     }
 
@@ -160,7 +218,7 @@ abstract class ShoppingListDao {
     }
 
     data class EmptyChange(val before: InventoryEntity, val after: InventoryEntity, val historyId: Long,
-        val shoppingBefore: ShoppingListEntity?, val shoppingAfter: ShoppingListEntity)
+        val shoppingBefore: ShoppingListEntity?, val shoppingAfter: ShoppingListEntity?)
 
     @Transaction open suspend fun markEmptyAndAdd(inventoryId: Long, weekId: String): EmptyChange {
         val stock = batch(inventoryId) ?: error("This stock item changed. Refresh the pantry.")
@@ -172,16 +230,18 @@ abstract class ShoppingListDao {
         val event = logConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = stock.quantity, type = ConsumptionType.FINISHED))
         val after = stock.copy(quantity = 0.0)
         updateStock(after)
-        val shopping = upsertShoppingItem(item.name, stock.quantity, "EMPTY_STOCK", weekId, unit = stock.unit)
+        // Another batch still supplies this product; an existing request already supplies its replacement.
+        val shopping = if (this.stock(stock.itemId).any { it.quantity > 0.0 }) null
+            else before ?: upsertShoppingItem(item.name, stock.quantity, "EMPTY_STOCK", weekId, unit = stock.unit)
         return EmptyChange(stock, after, event, before, shopping)
     }
 
     @Transaction open suspend fun undoEmpty(change: EmptyChange) {
-        require(batch(change.after.inventoryId) == change.after && bySyncId(change.shoppingAfter.syncId) == change.shoppingAfter && consumption(change.historyId) != null) {
+        require(batch(change.after.inventoryId) == change.after && (change.shoppingAfter == null || bySyncId(change.shoppingAfter.syncId) == change.shoppingAfter) && consumption(change.historyId) != null) {
             "This item changed after the swipe. Review it instead of undoing another person's edit."
         }
         updateStock(change.before)
         deleteConsumption(change.historyId)
-        if (change.shoppingBefore == null) delete(change.shoppingAfter) else update(change.shoppingBefore)
+        change.shoppingAfter?.let { if (change.shoppingBefore == null) delete(it) else update(change.shoppingBefore) }
     }
 }

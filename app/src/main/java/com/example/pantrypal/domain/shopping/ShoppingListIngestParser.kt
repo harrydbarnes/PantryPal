@@ -2,6 +2,9 @@ package com.example.pantrypal.domain.shopping
 
 import com.example.pantrypal.util.parseQuickShoppingEntry
 
+/** An incompatible contribution needs unit review, not account reconnection. */
+class KeepImportUnitConflict : IllegalArgumentException()
+
 data class ShoppingIngestItem(val name: String, val quantity: Double = 1.0, val unit: String? = null)
 
 /** Shared Keep text is data, not an instruction. Ticked lines never enter the shopping list. */

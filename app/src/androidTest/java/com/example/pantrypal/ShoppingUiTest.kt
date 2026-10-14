@@ -42,11 +42,11 @@ class ShoppingUiTest {
             compose.waitUntil(10000) {
                 kotlinx.coroutines.runBlocking { app.database.shoppingListDao().snapshot().any { it.name == "QA first item" && it.isChecked } }
             }
-            // Extended FAB text is decorative; its explicit accessibility label identifies the action.
+            // The completion button exposes its visible action and count to accessibility.
             try {
                 compose.waitUntil(10000) {
                     runCatching {
-                        compose.onNode(hasContentDescription("Complete Shop & Restock (", substring = true)).assertIsDisplayed()
+                        compose.onNode(hasText("Complete shop & restock (", substring = true)).assertIsDisplayed()
                         true
                     }.getOrDefault(false)
                 }
@@ -58,14 +58,57 @@ class ShoppingUiTest {
                 }
                 throw AssertionError("Bottom action layout:\n" + compose.onRoot(useUnmergedTree = true).printToString(), failure)
             }
-            list.performScrollToNode(hasText("Ticked Items (", substring = true))
+            list.performScrollToNode(hasText("In trolley (", substring = true))
             compose.onNodeWithText("QA first item").assertDoesNotExist()
-            compose.onNodeWithText("Ticked Items (", substring = true).performClick()
+            compose.onNodeWithText("In trolley (", substring = true).performClick()
             list.performScrollToNode(hasContentDescription("More options for QA first item"))
             compose.onNodeWithContentDescription("More options for QA first item").assertIsDisplayed()
             compose.onNodeWithText("QA first item").performClick()
         }
     }
+    @Test fun quickEntryDraftSurvivesNavigationAndRecreationAndShopModeIsScoped() {
+        val app = ApplicationProvider.getApplicationContext<PantryPalApplication>()
+        app.getSharedPreferences(AppPreferences.FILE_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, true).putString("shopping_quick_add_draft", "").commit()
+        fun hasScreenOn(view: android.view.View): Boolean = view.keepScreenOn ||
+            (view is android.view.ViewGroup && (0 until view.childCount).any { hasScreenOn(view.getChildAt(it)) })
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            compose.onNodeWithText("Shop").performClick()
+            compose.onNodeWithText("Quick add").performTextInput("500 g QA pasta")
+            captureShoppingScreenshot(app, "shopping-quick-add-keyboard.png")
+            compose.onNodeWithContentDescription("Keep screen on: disabled").performClick()
+            compose.onNodeWithContentDescription("Keep screen on: enabled").assertIsDisplayed()
+            compose.waitForIdle()
+            scenario.onActivity { org.junit.Assert.assertTrue(hasScreenOn(it.window.decorView)) }
+            scenario.recreate()
+            compose.onNodeWithText("Quick add").assertTextContains("500 g QA pasta")
+            compose.onNodeWithText("Pantry").performClick()
+            compose.onNodeWithText(app.getString(R.string.inventory_title)).assertIsDisplayed()
+            scenario.onActivity { org.junit.Assert.assertFalse(hasScreenOn(it.window.decorView)) }
+            compose.onNodeWithText("Shop").performClick()
+            compose.onNodeWithText("Quick add").assertTextContains("500 g QA pasta")
+            compose.onNodeWithText("Quick add").performTextClearance()
+            scenario.onActivity { activity ->
+                androidx.core.view.WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+                    .hide(androidx.core.view.WindowInsetsCompat.Type.ime())
+            }
+            captureShoppingScreenshot(app, "shopping-docked-entry.png")
+        }
+    }
+
+    private fun captureShoppingScreenshot(context: Context, name: String) {
+        compose.waitForIdle()
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val directory = java.io.File(context.getExternalFilesDir(null), "review-profile").apply { mkdirs() }
+        val file = java.io.File(directory, name)
+        file.outputStream().use { instrumentation.uiAutomation.takeScreenshot()
+            .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        fun shell(command: String) = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand(command)).use { it.readBytes() }
+        shell("mkdir -p /sdcard/Download/pantrypal-profile")
+        shell("cp ${file.absolutePath} /sdcard/Download/pantrypal-profile/$name")
+    }
+
     @Test fun tabletMealDaysUseMoreThanOneColumn() {
         val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         fun shell(cmd: String) = android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(cmd)).bufferedReader().use { it.readText() }

@@ -10,6 +10,10 @@ interface ShoppingSyncDao {
     @Query("SELECT * FROM shopping_layout") suspend fun layout(): List<ShoppingLayoutEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putLayout(row: ShoppingLayoutEntity)
     @Query("DELETE FROM shopping_layout WHERE layoutKey = :key") suspend fun deleteLayout(key: String)
+    @Query("SELECT EXISTS(SELECT 1 FROM shopping_sync_queue) OR EXISTS(SELECT 1 FROM shopping_sync_batch)")
+    fun observeHasPending(): Flow<Boolean>
+    @Query("SELECT EXISTS(SELECT 1 FROM shopping_sync_queue) OR EXISTS(SELECT 1 FROM shopping_sync_batch)")
+    suspend fun hasPending(): Boolean
     @Query("SELECT * FROM shopping_sync_queue") suspend fun pending(): List<ShoppingSyncQueueEntity>
     @Query("DELETE FROM shopping_sync_queue WHERE recordKey = :key AND token = :token") suspend fun acknowledge(key: String, token: String)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun enqueue(row: ShoppingSyncQueueEntity)

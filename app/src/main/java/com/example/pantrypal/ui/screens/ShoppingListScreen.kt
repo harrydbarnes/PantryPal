@@ -1,6 +1,16 @@
 package com.example.pantrypal.ui.screens
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.example.pantrypal.R
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
@@ -42,7 +52,6 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material3.AlertDialog
@@ -132,7 +141,18 @@ fun ShoppingListScreen(
     val aisleMode by viewModel.prefersAisleMode.collectAsState()
     val inventory by viewModel.inventoryState.collectAsState()
     val currentWeek by viewModel.currentWeek.collectAsState()
-    val saving by viewModel.saving.collectAsState()
+    val coreSaving by viewModel.saving.collectAsState()
+    val adding by viewModel.quickAdding.collectAsState()
+    val completing by viewModel.shoppingCompleting.collectAsState()
+    val saving = coreSaving || adding || completing
+    val products by viewModel.shoppingProducts.collectAsState()
+    var shopMode by rememberSaveable { mutableStateOf(false) }
+    val view = LocalView.current
+    DisposableEffect(view, shopMode) {
+        view.keepScreenOn = shopMode
+        onDispose { view.keepScreenOn = false }
+    }
+    val keyboardVisible = WindowInsets.isImeVisible
     val actionError by viewModel.actionError.collectAsState()
     var editAisles by rememberSaveable { mutableStateOf(false) }
     var movingItem by remember { mutableStateOf<ShoppingItemEntity?>(null) }
@@ -174,7 +194,7 @@ fun ShoppingListScreen(
     }
 
     var showPlanningControls by rememberSaveable { mutableStateOf(false) }
-    var quickAddName by rememberSaveable { mutableStateOf("") }
+    val quickAddName by viewModel.quickAddDraft.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -188,8 +208,9 @@ fun ShoppingListScreen(
     val dates = "${monday.format(dateFormat)}–${monday.plusDays(6).format(dateFormat)}"
 
     fun addQuickEntry(text: String) {
+        val submittedDraft = viewModel.quickAddDraft.value
         viewModel.quickAddShoppingItem(text) { change ->
-            if (quickAddName == text) quickAddName = ""
+            if (viewModel.quickAddDraft.value == submittedDraft) viewModel.setQuickAddDraft("")
             scope.launch {
                 val message = if (change.before == null) "${change.after.name} added" else
                     "${change.after.name} increased to ${formatQuantity(change.after.quantity)} ${change.after.unit}"
@@ -215,23 +236,28 @@ fun ShoppingListScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            AnimatedVisibility(visible = unfinishedPurchases.isNotEmpty()) {
-                Surface {
-                    ExtendedFloatingActionButton(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                            .semantics {
-                                contentDescription = if (saving) "Restocking" else "Complete Shop & Restock (${unfinishedPurchases.size})"
-                                if (saving) disabled()
-                            },
-                        onClick = {
-                            if (!saving) viewModel.completeShopAndRestock(selectedStore) { count ->
-                                if (count > 0) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                scope.launch { snackbarHostState.showSnackbar("$count purchases completed and restocked") }
-                            }
-                        },
-                        icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
-                        text = { Text(if (saving) "Restocking…" else "Complete Shop & Restock (${unfinishedPurchases.size})") }
+            Surface(shape = MaterialTheme.shapes.large, tonalElevation = 3.dp) {
+                Column(Modifier.fillMaxWidth().imePadding().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    QuickAddShoppingItem(
+                        value = quickAddName, onValueChange = viewModel::setQuickAddDraft,
+                        onSubmit = ::submitQuickAdd, onAddSuggestion = ::addQuickEntry,
+                        suggestions = products.map { it.name } + history.map { it.displayName },
+                        preferredStores = products.associate { normalizeShoppingName(it.name) to it.preferredStore.label },
+                        listedNames = visibleItems.filterNot { it.isChecked }.map { normalizeShoppingName(it.name) }.toSet(),
+                        enabled = !saving
                     )
+                    if (!keyboardVisible && unfinishedPurchases.isNotEmpty()) {
+                        FilledTonalButton(enabled = !saving, modifier = Modifier.fillMaxWidth(), onClick = {
+                            viewModel.completeShopAndRestock(selectedStore) { count ->
+                                if (count > 0) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                scope.launch { snackbarHostState.showSnackbar(view.resources.getQuantityString(R.plurals.shopping_completed, count, count)) }
+                            }
+                        }) {
+                            Text(if (completing) stringResource(R.string.shopping_restocking) else
+                                pluralStringResource(R.plurals.shopping_complete_action, unfinishedPurchases.size, unfinishedPurchases.size))
+                        }
+                    }
                 }
             }
         },
@@ -242,6 +268,10 @@ fun ShoppingListScreen(
                         Column(Modifier.weight(1f)) {
                             Text("${currentWeekDetails?.displayName ?: "Week $selectedWeek"} · ${visibleItems.count { !it.isChecked }} left", style = MaterialTheme.typography.titleMedium)
                             Text(dates, style = MaterialTheme.typography.bodySmall)
+                        }
+                        IconToggleButton(checked = shopMode, onCheckedChange = { shopMode = it }) {
+                            Icon(Icons.Outlined.LightMode, contentDescription = stringResource(
+                                if (shopMode) R.string.shopping_screen_on_enabled else R.string.shopping_screen_on_disabled))
                         }
                         if (unfinishedPurchases.isNotEmpty()) androidx.compose.foundation.layout.Box {
                             IconButton(onClick = { showShopMenu = true }) { Icon(androidx.compose.material.icons.Icons.Default.MoreVert, contentDescription = "Shopping actions") }
@@ -260,7 +290,7 @@ fun ShoppingListScreen(
                     TextButton(onClick = onOpenHousehold, contentPadding = PaddingValues(0.dp)) {
                         Icon(Icons.Outlined.Group, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text(household.syncLabel)
+                        Text(stringResource(household.syncLabelRes))
                     }
                 }
             }
@@ -268,7 +298,7 @@ fun ShoppingListScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             if (loading) expressiveItem { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
@@ -291,18 +321,6 @@ fun ShoppingListScreen(
                     }
                 }
             }
-            expressiveItem {
-                QuickAddShoppingItem(
-                    value = quickAddName,
-                    onValueChange = { quickAddName = it },
-                    onSubmit = ::submitQuickAdd,
-                    onAddSuggestion = ::addQuickEntry,
-                    suggestions = history.map { it.displayName },
-                    listedNames = visibleItems.filterNot { it.isChecked }.map { normalizeShoppingName(it.name) }.toSet()
-
-                )
-            }
-
             expressiveItem {
                 OutlinedButton(
                     onClick = { showPlanningControls = !showPlanningControls },
@@ -438,9 +456,7 @@ fun ShoppingListScreen(
                         stickyHeader(key = "aisle-$aisle") { Surface(Modifier.fillMaxWidth().then(shoppingMotion()), color = MaterialTheme.colorScheme.surfaceContainer) { Text(aisle, Modifier.padding(12.dp), style = MaterialTheme.typography.titleLarge) } }
                         expressiveItemsIndexed(rows, key = { _, row -> "item-${row.syncId}" }) { index, row ->
                             Card(Modifier.fillMaxWidth(), shape = shoppingSegmentShape(index, rows.size)) {
-                                ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) })
-                                TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
-                            TextButton(onClick = { movingItem = row }) { Text("Aisle / section") }
+                                ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) }, onCycleStore = { viewModel.cycleShoppingStore(row) }, onMove = { movingItem = row })
                             }
                         }
                     }
@@ -461,9 +477,7 @@ fun ShoppingListScreen(
                         }
                     expressiveItemsIndexed(rows, key = { _, row -> "item-${row.syncId}" }) { index, row ->
                         Card(Modifier.fillMaxWidth(), shape = shoppingSegmentShape(index, rows.size)) {
-                            ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = section }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) })
-                            TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
-                            TextButton(onClick = { movingItem = row }) { Text("Move section / assign aisle") }
+                            ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = section }, { deleteWithUndo(row) }, layout[ShoppingMetadata.checkStock(row.syncId)] == "true", { viewModel.confirmShoppingStock(row) }, onCycleStore = { viewModel.cycleShoppingStore(row) }, onMove = { movingItem = row })
                         }
                     }
                     }
@@ -474,7 +488,7 @@ fun ShoppingListScreen(
             if (tickedRows.isNotEmpty()) {
                 expressiveItem(key = "ticked-heading") {
                     TextButton(onClick = { showTicked = !showTicked }) {
-                        Text("Ticked Items (${tickedRows.size})")
+                        Text(pluralStringResource(R.plurals.shopping_trolley, tickedRows.size, tickedRows.size))
                         Icon(if (showTicked) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                             contentDescription = if (showTicked) "Collapse ticked items" else "Expand ticked items")
                     }
@@ -486,8 +500,7 @@ fun ShoppingListScreen(
                                 androidx.compose.runtime.key(row.syncId) {
                                     Card(Modifier.fillMaxWidth(), shape = shoppingSegmentShape(index, tickedRows.size),
                                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                                        ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) })
-                                        TextButton(enabled = !saving, onClick = { viewModel.cycleShoppingStore(row) }) { Text("Store: ${row.storeTag.label}") }
+                                        ShoppingListItemRow(row, { viewModel.toggleShoppingItem(row) }, { editingItem = row; itemEditorSection = sections.firstOrNull { it.sectionId == row.sectionId } }, { deleteWithUndo(row) }, onCycleStore = { viewModel.cycleShoppingStore(row) }, onMove = { movingItem = row })
                                     }
                                 }
                             }
@@ -499,7 +512,7 @@ fun ShoppingListScreen(
             if (!loading && visibleItems.none { !it.isChecked }) {
                 expressiveItem {
                     Text(
-                        if (visibleItems.isEmpty()) "No items yet. Add something above or prepare your next list." else "Everything is ticked off. Add something above or prepare your next list.",
+                        stringResource(if (visibleItems.isEmpty()) R.string.shopping_empty_entry else R.string.shopping_all_ticked),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -680,74 +693,42 @@ internal fun shoppingItemsForSection(
 
 @Composable
 private fun QuickAddShoppingItem(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onSubmit: () -> Unit,
-    onAddSuggestion: (String) -> Unit,
-    suggestions: List<String>,
-    listedNames: Set<String>
+    value: String, onValueChange: (String) -> Unit, onSubmit: () -> Unit,
+    onAddSuggestion: (String) -> Unit, suggestions: List<String>, preferredStores: Map<String, String>,
+    listedNames: Set<String>, enabled: Boolean
 ) {
-    var showPreviousItems by rememberSaveable { mutableStateOf(false) }
-    val matchingSuggestions = remember(suggestions, value) {
-        suggestions.filter { value.isBlank() || it.contains(value, ignoreCase = true) }
-            .filterNot { it.equals(value, ignoreCase = true) }
-            .distinctBy { it.lowercase() }
+    val query = parseQuickShoppingEntry(value)?.name ?: value.trim()
+    val matching = remember(suggestions, query) {
+        if (query.count { it.isLetterOrDigit() } < 2) emptyList() else suggestions.asSequence()
+            .filter { it.contains(query, ignoreCase = true) }.distinctBy { normalizeShoppingName(it) }
+            .sortedWith(compareBy<String> { !it.startsWith(query, ignoreCase = true) }.thenBy { it.lowercase(java.util.Locale.ROOT) })
+            .take(3).toList()
     }
-    val visibleSuggestions = matchingSuggestions.take(8)
-    val previousSuggestions = matchingSuggestions.drop(8)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = { Text("Quick add") },
-            placeholder = { Text("Milk x2 or 500 g pasta") },
-            trailingIcon = { IconButton(enabled = parseQuickShoppingEntry(value) != null, onClick = onSubmit) { Icon(Icons.Default.Add, "Add shopping item") } },
-            singleLine = true,
+    Column {
+        matching.forEach { name ->
+            TextButton(enabled = enabled, onClick = {
+                val entry = parseQuickShoppingEntry(value)
+                onAddSuggestion(if (entry != null && (entry.quantity != 1.0 || entry.unit != "pcs"))
+                    "${formatQuantity(entry.quantity)} ${entry.unit} $name" else name)
+            }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(name, modifier = Modifier.weight(1f))
+                val normalised = normalizeShoppingName(name)
+                Text(if (normalised in listedNames) stringResource(R.string.shopping_already_listed)
+                    else preferredStores[normalised].orEmpty(), style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        OutlinedTextField(value = value, onValueChange = onValueChange, enabled = enabled,
+            label = { Text(stringResource(R.string.shopping_quick_add)) },
+            placeholder = { Text(stringResource(R.string.shopping_quick_add_hint)) },
+            trailingIcon = { IconButton(enabled = enabled && parseQuickShoppingEntry(value) != null, onClick = onSubmit) {
+                Icon(Icons.Default.Add, stringResource(R.string.shopping_add_action))
+            } }, singleLine = true, shape = MaterialTheme.shapes.large,
+            isError = value.isNotBlank() && parseQuickShoppingEntry(value) == null,
+            supportingText = if (value.isNotBlank() && parseQuickShoppingEntry(value) == null) {
+                { Text(stringResource(R.string.shopping_entry_invalid)) }
+            } else null,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onSubmit() }),
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (visibleSuggestions.isNotEmpty()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LazyRow(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(end = 4.dp)
-                ) {
-                    expressiveItems(visibleSuggestions, key = { it.lowercase() }) { suggestion ->
-                        AssistChip(
-                            onClick = { onAddSuggestion(suggestion) },
-                            label = { Text(if (normalizeShoppingName(suggestion) in listedNames) "$suggestion · On your list" else suggestion) },
-                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
-                        )
-                    }
-                }
-                if (previousSuggestions.isNotEmpty()) {
-                    IconButton(
-                        onClick = { showPreviousItems = !showPreviousItems }
-                    ) {
-                        Icon(
-                            if (showPreviousItems) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (showPreviousItems) "Hide previous items" else "Show previous items"
-                        )
-                    }
-                }
-            }
-        }
-        if (showPreviousItems && previousSuggestions.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Previous items", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    previousSuggestions.forEach { suggestion ->
-                        AssistChip(
-                            onClick = { onAddSuggestion(suggestion) },
-                            label = { Text(if (normalizeShoppingName(suggestion) in listedNames) "$suggestion · On your list" else suggestion) },
-                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
-                        )
-                    }
-                }
-            }
-        }
+            keyboardActions = KeyboardActions(onDone = { if (enabled) onSubmit() }), modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -979,7 +960,9 @@ fun ShoppingListItemRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     needsStockCheck: Boolean = false,
-    onConfirmStock: () -> Unit = {}
+    onConfirmStock: () -> Unit = {},
+    onCycleStore: (() -> Unit)? = null,
+    onMove: (() -> Unit)? = null
 ) {
     val haptics = LocalHapticFeedback.current
     val toggleWithFeedback = {
@@ -988,11 +971,14 @@ fun ShoppingListItemRow(
     }
     var actionsExpanded by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = item.quantity > 0 || item.isChecked, onClick = toggleWithFeedback)
-            .padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(checked = item.isChecked, enabled = item.quantity > 0 || item.isChecked, onCheckedChange = { toggleWithFeedback() })
+        Row(Modifier.weight(1f).heightIn(min = 48.dp).toggleable(value = item.isChecked,
+            enabled = item.quantity > 0 || item.isChecked, role = Role.Checkbox,
+            onValueChange = { toggleWithFeedback() }).padding(start = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = item.isChecked, enabled = item.quantity > 0 || item.isChecked, onCheckedChange = null)
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -1012,10 +998,16 @@ fun ShoppingListItemRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        }
         IconButton(onClick = { actionsExpanded = true }) {
             Icon(androidx.compose.material.icons.Icons.Default.MoreVert, contentDescription = "More options for ${item.name}")
         }
         DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
+            onCycleStore?.let { action -> DropdownMenuItem(
+                text = { Text(stringResource(R.string.shopping_store_action, item.storeTag.label)) },
+                onClick = { actionsExpanded = false; action() }) }
+            onMove?.let { action -> DropdownMenuItem(text = { Text(stringResource(R.string.shopping_move_action)) },
+                onClick = { actionsExpanded = false; action() }) }
             if (needsStockCheck) DropdownMenuItem(text = { Text("Stock checked") }, onClick = { actionsExpanded = false; onConfirmStock() })
             DropdownMenuItem(
                 text = { Text("Edit") },

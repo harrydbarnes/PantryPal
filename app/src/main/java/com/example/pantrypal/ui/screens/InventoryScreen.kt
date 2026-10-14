@@ -52,6 +52,7 @@ fun InventoryScreen(
     error: String? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val resources = androidx.compose.ui.platform.LocalResources.current
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     var query by rememberSaveable { mutableStateOf("") }
@@ -217,7 +218,10 @@ fun InventoryScreen(
             val dismiss = rememberSwipeToDismissBoxState(positionalThreshold = { distance -> distance * 0.5f }, confirmValueChange = { value ->
                 if (value == SwipeToDismissBoxValue.EndToStart && !saving) onMarkEmpty(item) { change ->
                     scope.launch {
-                        if (snackbarHostState.showSnackbar("Marked empty & added to Shopping List", "Undo") == SnackbarResult.ActionPerformed) onUndoEmpty(change)
+                        if (snackbarHostState.showSnackbar(resources.getString(
+                            if (change.shoppingAfter == null) com.example.pantrypal.R.string.stock_empty_other_batches
+                            else if (change.shoppingBefore != null) com.example.pantrypal.R.string.stock_empty_already_requested
+                            else com.example.pantrypal.R.string.stock_empty_added), resources.getString(com.example.pantrypal.R.string.action_undo)) == SnackbarResult.ActionPerformed) onUndoEmpty(change)
                     }
                 }
                 false
@@ -233,7 +237,7 @@ fun InventoryScreen(
             }
             SwipeToDismissBox(modifier = Modifier.onSizeChanged { swipeWidth = it.width.toFloat() }, state = dismiss, enableDismissFromStartToEnd = false, enableDismissFromEndToStart = !saving,
                 backgroundContent = { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.large) {
-                    Box(Modifier.padding(16.dp), contentAlignment = Alignment.CenterEnd) { Text("Mark empty & add to shopping") }
+                    Box(Modifier.padding(16.dp), contentAlignment = Alignment.CenterEnd) { Text(androidx.compose.ui.res.stringResource(com.example.pantrypal.R.string.stock_empty_action)) }
                 } }) {
             InventoryItemRow(
                 item = item,

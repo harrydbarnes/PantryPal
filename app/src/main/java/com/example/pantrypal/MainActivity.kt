@@ -142,6 +142,11 @@ class MainActivity : ComponentActivity() {
     private val sharedRecipeUrl = MutableStateFlow<String?>(null)
     private val shoppingReminderAction = MutableStateFlow<String?>(null)
 
+    override fun onStart() {
+        super.onStart()
+        (application as PantryPalApplication).householdSync.reconcile()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -350,7 +355,8 @@ fun KitchenApp(
     }
 
     fun captureCurrentLocation(name: String) {
-        if (!ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             refreshLocationPermissions()
             scope.launch {
                 snackbarHostState.showSnackbar("Allow location access before saving a spot.")
@@ -434,6 +440,7 @@ fun KitchenApp(
         )
     }
 
+    val shoppingResources = androidx.compose.ui.platform.LocalResources.current
     val shoppingIncoming by incomingShopping.collectAsState()
     LaunchedEffect(shoppingIncoming, hasCompletedOnboarding) {
         val request = shoppingIncoming ?: return@LaunchedEffect
@@ -442,12 +449,18 @@ fun KitchenApp(
         if (request.source == "OPEN") { onShoppingIncomingConsumed(); return@LaunchedEffect }
         try {
             val parsed = com.example.pantrypal.domain.shopping.ShoppingListIngestParser.parseKeepSharedText(request.text)
-            val count = withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 (context.applicationContext as PantryPalApplication).database.shoppingListDao().importItems(
                     parsed, request.source, viewModel.shoppingWeek.value, request.operationId)
             }
             onShoppingIncomingConsumed()
-            scope.launch { snackbarHostState.showSnackbar("$count item${if (count == 1) "" else "s"} imported into your shopping list") }
+            val resources = shoppingResources
+            val feedback = listOf(
+                resources.getQuantityString(R.plurals.shopping_import_added, result.added, result.added),
+                resources.getQuantityString(R.plurals.shopping_import_increased, result.increased, result.increased),
+                resources.getQuantityString(R.plurals.shopping_import_unchanged, result.unchanged, result.unchanged)
+            ).joinToString("; ") + if (result.skipped > 0) "; " + resources.getQuantityString(R.plurals.shopping_import_skipped, result.skipped, result.skipped) else ""
+            scope.launch { snackbarHostState.showSnackbar(if (result.replayed) shoppingResources.getString(R.string.shopping_import_replayed) else feedback) }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (error: Exception) {
             onShoppingIncomingConsumed()
@@ -644,6 +657,29 @@ fun KitchenApp(
 
     if (showOnboarding) {
         OnboardingScreen(
+            householdContent = {
+                val household by featuresViewModel.householdState.collectAsState()
+                Column(Modifier.fillMaxSize()) {
+                    if (household.liveHouseholdId != null && household.lastSyncedAt != null &&
+                        !household.liveWorking && !household.liveSyncing && !household.livePending && !household.liveFailed) {
+                        Button(onClick = {
+                            viewModel.completeOnboarding()
+                            showOnboarding = false
+                            currentScreen = AppScreen.ShoppingList
+                        }, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                            Text(stringResource(R.string.household_open_joined_list))
+                        }
+                    }
+                    HouseholdCollaborationScreen(
+                        state = household, onShareSnapshot = {}, onImportSnapshot = {}, joiningOnly = true,
+                        onGoogleSignIn = { featuresViewModel.signInToHousehold(context as ComponentActivity) },
+                        onJoinLiveHousehold = featuresViewModel::joinLiveHousehold,
+                        onRetry = featuresViewModel::retryHousehold,
+                        onDisconnect = featuresViewModel::disconnectHousehold,
+                        onSignOut = featuresViewModel::signOutHousehold
+                    )
+                }
+            },
             isReplay = hasCompletedOnboarding,
             initialShoppingDay = appSettings.shoppingDayOfWeek,
             initialShoppingTimeMinutes = appSettings.shoppingTimeMinutes,
@@ -764,7 +800,7 @@ fun KitchenApp(
             }
         }
     ) { padding ->
-        Row(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Row(modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
             if (isWideScreen && currentScreen in primaryScreens) {
                 KitchenNavigationRail(
                     currentScreen = currentScreen,
