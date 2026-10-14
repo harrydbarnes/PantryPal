@@ -109,7 +109,7 @@ class PantryFeaturesViewModel(
                         liveWorking = live.working,
                         liveFailed = live.failed,
                         lastSyncedAt = live.lastSyncedAt,
-                        message = live.status ?: it.message
+                        message = live.status
                     )
                 }
             }

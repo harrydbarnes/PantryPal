@@ -230,7 +230,7 @@ class FirebaseHouseholdSync(
     private suspend fun syncOnce() {
         val id = householdId() ?: return
         val uid = auth.currentUser?.uid ?: return
-        _state.update { it.copy(syncing = true, failed = false) }
+        _state.update { it.copy(syncing = true, failed = false, status = null) }
         val batch = store.batch(id)
         val changes = batch?.let(store::changes).orEmpty()
         ensureCloudReady(id, uid)

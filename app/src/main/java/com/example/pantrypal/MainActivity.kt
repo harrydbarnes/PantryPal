@@ -440,6 +440,7 @@ fun KitchenApp(
         )
     }
 
+    val shoppingResources = androidx.compose.ui.platform.LocalResources.current
     val shoppingIncoming by incomingShopping.collectAsState()
     LaunchedEffect(shoppingIncoming, hasCompletedOnboarding) {
         val request = shoppingIncoming ?: return@LaunchedEffect
@@ -453,13 +454,13 @@ fun KitchenApp(
                     parsed, request.source, viewModel.shoppingWeek.value, request.operationId)
             }
             onShoppingIncomingConsumed()
-            val resources = context.resources
+            val resources = shoppingResources
             val feedback = listOf(
                 resources.getQuantityString(R.plurals.shopping_import_added, result.added, result.added),
                 resources.getQuantityString(R.plurals.shopping_import_increased, result.increased, result.increased),
                 resources.getQuantityString(R.plurals.shopping_import_unchanged, result.unchanged, result.unchanged)
             ).joinToString("; ") + if (result.skipped > 0) "; " + resources.getQuantityString(R.plurals.shopping_import_skipped, result.skipped, result.skipped) else ""
-            scope.launch { snackbarHostState.showSnackbar(if (result.replayed) context.getString(R.string.shopping_import_replayed) else feedback) }
+            scope.launch { snackbarHostState.showSnackbar(if (result.replayed) shoppingResources.getString(R.string.shopping_import_replayed) else feedback) }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (error: Exception) {
             onShoppingIncomingConsumed()

@@ -78,15 +78,20 @@ class ShoppingUiTest {
             captureShoppingScreenshot(app, "shopping-quick-add-keyboard.png")
             compose.onNodeWithContentDescription("Keep screen on: disabled").performClick()
             compose.onNodeWithContentDescription("Keep screen on: enabled").assertIsDisplayed()
+            compose.waitForIdle()
             scenario.onActivity { org.junit.Assert.assertTrue(hasScreenOn(it.window.decorView)) }
             scenario.recreate()
             compose.onNodeWithText("Quick add").assertTextContains("500 g QA pasta")
             compose.onNodeWithText("Pantry").performClick()
+            compose.onNodeWithText(app.getString(R.string.inventory_title)).assertIsDisplayed()
             scenario.onActivity { org.junit.Assert.assertFalse(hasScreenOn(it.window.decorView)) }
             compose.onNodeWithText("Shop").performClick()
             compose.onNodeWithText("Quick add").assertTextContains("500 g QA pasta")
             compose.onNodeWithText("Quick add").performTextClearance()
-            compose.onNodeWithText("Quick add").performImeAction()
+            scenario.onActivity { activity ->
+                androidx.core.view.WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+                    .hide(androidx.core.view.WindowInsetsCompat.Type.ime())
+            }
             captureShoppingScreenshot(app, "shopping-docked-entry.png")
         }
     }

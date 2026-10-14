@@ -113,13 +113,16 @@ object ShoppingLocationGeofenceManager {
             .addGeofences(geofences)
             .build()
 
-        runCatching {
+        try {
             client.addGeofences(request, pendingIntent)
                 .addOnFailureListener { error ->
                     Log.w(TAG, "Could not register shopping geofences.", error)
                 }
                 .addOnCompleteListener { onComplete() }
-        }.onFailure { error ->
+        } catch (error: SecurityException) {
+            Log.w(TAG, "Location permission changed before registering shopping geofences.", error)
+            onComplete()
+        } catch (error: Exception) {
             Log.w(TAG, "Could not register shopping geofences.", error)
             onComplete()
         }

@@ -52,7 +52,7 @@ fun InventoryScreen(
     error: String? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     var query by rememberSaveable { mutableStateOf("") }
@@ -218,10 +218,10 @@ fun InventoryScreen(
             val dismiss = rememberSwipeToDismissBoxState(positionalThreshold = { distance -> distance * 0.5f }, confirmValueChange = { value ->
                 if (value == SwipeToDismissBoxValue.EndToStart && !saving) onMarkEmpty(item) { change ->
                     scope.launch {
-                        if (snackbarHostState.showSnackbar(context.getString(
+                        if (snackbarHostState.showSnackbar(resources.getString(
                             if (change.shoppingAfter == null) com.example.pantrypal.R.string.stock_empty_other_batches
                             else if (change.shoppingBefore != null) com.example.pantrypal.R.string.stock_empty_already_requested
-                            else com.example.pantrypal.R.string.stock_empty_added), context.getString(com.example.pantrypal.R.string.action_undo)) == SnackbarResult.ActionPerformed) onUndoEmpty(change)
+                            else com.example.pantrypal.R.string.stock_empty_added), resources.getString(com.example.pantrypal.R.string.action_undo)) == SnackbarResult.ActionPerformed) onUndoEmpty(change)
                     }
                 }
                 false
