@@ -758,7 +758,7 @@ fun KitchenApp(
             if (currentScreen == AppScreen.Inventory) {
                 ExtendedFloatingActionButton(
                     onClick = { currentScreen = AppScreen.AddManual },
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    icon = { Icon(Icons.Default.Add, contentDescription = "Add item") },
                     text = { Text("Add item") }
                 )
             }

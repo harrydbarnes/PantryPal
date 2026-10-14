@@ -42,11 +42,11 @@ class ShoppingUiTest {
             compose.waitUntil(10000) {
                 kotlinx.coroutines.runBlocking { app.database.shoppingListDao().snapshot().any { it.name == "QA first item" && it.isChecked } }
             }
-            // Capture actual layout bounds if the fixed bottom action is clipped.
+            // Extended FAB text is decorative; its explicit accessibility label identifies the action.
             try {
                 compose.waitUntil(10000) {
                     runCatching {
-                        compose.onNodeWithText("Complete Shop & Restock (", substring = true).assertIsDisplayed()
+                        compose.onNode(hasContentDescription("Complete Shop & Restock (", substring = true)).assertIsDisplayed()
                         true
                     }.getOrDefault(false)
                 }
