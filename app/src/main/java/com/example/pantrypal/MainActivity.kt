@@ -798,7 +798,7 @@ fun KitchenApp(
             }
         }
     ) { padding ->
-        Row(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Row(modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
             if (isWideScreen && currentScreen in primaryScreens) {
                 KitchenNavigationRail(
                     currentScreen = currentScreen,

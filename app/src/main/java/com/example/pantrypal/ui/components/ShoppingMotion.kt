@@ -1,7 +1,6 @@
 package com.example.pantrypal.ui.components
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
@@ -12,11 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** Shared spring motion for shopping and pantry lists, including their chip carousels. */
+/** Short, non-bouncy motion uses Compose's system animation duration scale. */
 fun LazyItemScope.shoppingMotion(): Modifier = Modifier.animateItem(
-    fadeInSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
-    placementSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
-    fadeOutSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
+    fadeInSpec = tween(120), placementSpec = tween(180), fadeOutSpec = tween(100)
 )
 
 fun LazyListScope.expressiveItem(key: Any? = null, content: @Composable LazyItemScope.() -> Unit) {

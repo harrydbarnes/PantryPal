@@ -42,11 +42,11 @@ class ShoppingUiTest {
             compose.waitUntil(10000) {
                 kotlinx.coroutines.runBlocking { app.database.shoppingListDao().snapshot().any { it.name == "QA first item" && it.isChecked } }
             }
-            // Extended FAB text is decorative; its explicit accessibility label identifies the action.
+            // The completion button exposes its visible action and count to accessibility.
             try {
                 compose.waitUntil(10000) {
                     runCatching {
-                        compose.onNode(hasContentDescription("Complete Shop & Restock (", substring = true)).assertIsDisplayed()
+                        compose.onNode(hasText("Complete shop & restock (", substring = true)).assertIsDisplayed()
                         true
                     }.getOrDefault(false)
                 }
@@ -58,9 +58,9 @@ class ShoppingUiTest {
                 }
                 throw AssertionError("Bottom action layout:\n" + compose.onRoot(useUnmergedTree = true).printToString(), failure)
             }
-            list.performScrollToNode(hasText("Ticked Items (", substring = true))
+            list.performScrollToNode(hasText("In trolley (", substring = true))
             compose.onNodeWithText("QA first item").assertDoesNotExist()
-            compose.onNodeWithText("Ticked Items (", substring = true).performClick()
+            compose.onNodeWithText("In trolley (", substring = true).performClick()
             list.performScrollToNode(hasContentDescription("More options for QA first item"))
             compose.onNodeWithContentDescription("More options for QA first item").assertIsDisplayed()
             compose.onNodeWithText("QA first item").performClick()

@@ -267,12 +267,32 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     fun cycleShoppingStore(item: ShoppingItemEntity) = shoppingAction {
         repository.shoppingItemsDao.cycleStore(item.syncId); markShoppingChanged()
     }
+    private val _shoppingCompleting = MutableStateFlow(false)
+    val shoppingCompleting = _shoppingCompleting.asStateFlow()
+    private val _quickAdding = MutableStateFlow(false)
+    val quickAdding = _quickAdding.asStateFlow()
+    private val _quickAddDraft = MutableStateFlow(prefs.getString("shopping_quick_add_draft", "").orEmpty())
+    val quickAddDraft = _quickAddDraft.asStateFlow()
+    fun setQuickAddDraft(value: String) {
+        _quickAddDraft.value = value
+        prefs.edit().putString("shopping_quick_add_draft", value).apply()
+    }
+    val shoppingProducts = repository.getAllItems().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun completeShopAndRestock(store: com.example.pantrypal.data.entity.StoreTag?, removeOnly: Boolean = false, onFinished: (Int) -> Unit = {}) {
-        var count = 0
-        shoppingAction(onSuccess = { onFinished(count) }) {
-            count = if (removeOnly) repository.shoppingItemsDao.removeTickedOnly(_shoppingWeek.value, store)
-                else repository.shoppingItemsDao.completeShopAndRestock(_shoppingWeek.value, store)
-            markShoppingChanged()
+        if (_shoppingCompleting.value || _quickAdding.value) return
+        _shoppingCompleting.value = true
+        val week = _shoppingWeek.value
+        viewModelScope.launch {
+            try {
+                val count = if (removeOnly) repository.shoppingItemsDao.removeTickedOnly(week, store)
+                    else repository.shoppingItemsDao.completeShopAndRestock(week, store)
+                markShoppingChanged()
+                shoppingError.value = null
+                onFinished(count)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { shoppingError.value = error.message }
+            finally { _shoppingCompleting.value = false }
         }
     }
     fun markEmptyAndAdd(item: InventoryUiModel, onSaved: (com.example.pantrypal.data.dao.ShoppingListDao.EmptyChange) -> Unit) {
@@ -287,15 +307,23 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
 
     fun quickAddShoppingItem(text: String, onAdded: (KitchenRepository.QuickAddChange) -> Unit) {
         val entry = com.example.pantrypal.util.parseQuickShoppingEntry(text) ?: return
-        var change: KitchenRepository.QuickAddChange? = null
-        shoppingAction(onSuccess = { change?.let(onAdded) }) {
-            change = repository.quickAddShoppingItem(ShoppingItemEntity(
-                name = entry.name, quantity = entry.quantity, unit = entry.unit,
-                sectionId = ShoppingSectionEntity.ID_THE_REST, weekId = _shoppingWeek.value
-            ), _shoppingWeek.value, inheritUnit = entry.unit == "pcs" &&
-                !Regex("^\\s*[0-9.,/]+\\s+(?:pcs?|pieces?)\\b", RegexOption.IGNORE_CASE).containsMatchIn(text))
-            repository.rememberShoppingItem(entry.name)
-            markShoppingChanged()
+        if (_quickAdding.value || _shoppingCompleting.value) return
+        _quickAdding.value = true
+        val week = _shoppingWeek.value
+        viewModelScope.launch {
+            try {
+                val change = repository.quickAddShoppingItem(ShoppingItemEntity(
+                    name = entry.name, quantity = entry.quantity, unit = entry.unit,
+                    sectionId = ShoppingSectionEntity.ID_THE_REST, weekId = week
+                ), week, inheritUnit = entry.unit == "pcs" &&
+                    !Regex("^\\s*[0-9.,/]+\\s+(?:pcs?|pieces?)\\b", RegexOption.IGNORE_CASE).containsMatchIn(text))
+                repository.rememberShoppingItem(entry.name)
+                markShoppingChanged()
+                shoppingError.value = null
+                onAdded(change)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { shoppingError.value = error.message }
+            finally { _quickAdding.value = false }
         }
     }
 

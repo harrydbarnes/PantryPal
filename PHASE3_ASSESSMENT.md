@@ -35,3 +35,9 @@ Barcode candidate selection is a separate interaction/data change, not a cosmeti
 Tombstone compaction and stale unsent base creation need a protocol-level distinction between a new record and an old resurrected identity; retained-tombstone protection alone cannot guarantee that case. Do not claim exhaustive cross-device correctness from Room/unit tests. Keep current retention and document the remaining case.
 
 Predictive gesture animation, foldable posture, TalkBack, 200% text, light/dark appearance and screenshots require emulator/device evidence. Existing custom back/navigation behaviour is preserved pending that evidence.
+
+## Verification and delivery
+
+Three sequential implementation commits retain the phase boundaries. Delivery uses one integration PR so the existing main-targeted Android workflow exercises the combined DAO, sync, onboarding and UI changes. No merge is authorised or performed.
+
+Local `testDebugUnitTest assembleDebug lintDebug` failed before compilation: `java.io.IOException: Unable to establish loopback connection`, including an elevated run with Gradle cache access. Only a JRE 21 was found in the standard installation locations; no Android SDK/device was found there. `adb devices` could not start its daemon (`could not read ok from ADB Server`). Local Android tests, lint, APK, instrumentation, screenshots and visual/accessibility verification are not claimed. GitHub CI results are recorded in the PR once available.
