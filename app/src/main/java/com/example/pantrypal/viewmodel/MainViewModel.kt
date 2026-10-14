@@ -549,19 +549,23 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         action { repository.addOnboardingRegulars(regulars) }
     }
 
-    fun addOnboardingMeals(meals: List<Pair<String, Int>>) {
-        action {
-            repository.addOnboardingMeals(
-                meals.map { (name, dayOfWeek) ->
-                    MealEntity(
-                        name = name.trim(),
-                        week = MealEntity.WEEK_A,
-                        ingredients = emptyList(),
-                        dayOfWeek = dayOfWeek.coerceIn(1, 7),
-                        mealSlot = MealEntity.SLOT_DINNER
-                    )
-                }
-            )
+    fun saveOnboardingKitchen(
+        regulars: List<String>,
+        meals: List<com.example.pantrypal.ui.screens.OnboardingMeal>,
+        stock: com.example.pantrypal.ui.screens.OnboardingStock?,
+        onSaved: () -> Unit
+    ) = action(onSaved) {
+        repository.transaction {
+            repository.addOnboardingRegulars(regulars)
+            repository.addOnboardingMeals(meals.map { meal ->
+                MealEntity(name = meal.name.trim(), week = _currentWeek.value,
+                    ingredients = normalizedIngredients(meal.ingredients), dayOfWeek = meal.dayOfWeek.coerceIn(1, 7), mealSlot = MealEntity.SLOT_DINNER)
+            })
+            stock?.let {
+                val id = repository.insertItem(ItemEntity(name = it.name, defaultUnit = it.unit, category = "General"))
+                require(id != -1L) { "Could not save your first pantry item. Try again." }
+                repository.addInventory(InventoryEntity(itemId = id, quantity = it.quantity, unit = it.unit, expirationDate = it.expiry))
+            }
         }
     }
 

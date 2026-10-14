@@ -39,6 +39,7 @@ fun DataManagementScreen(
     onExportBackup: () -> Unit,
     onImportBackup: () -> Unit,
     onOpenHousehold: () -> Unit,
+    householdConnected: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -102,7 +103,7 @@ fun DataManagementScreen(
                     }
                     OutlinedButton(
                         onClick = onImportBackup,
-                        enabled = !state.isWorking,
+                        enabled = !state.isWorking && !householdConnected,
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Outlined.Upload, contentDescription = null)
@@ -110,7 +111,7 @@ fun DataManagementScreen(
                     }
                 }
                 Text(
-                    "Restoring replaces the kitchen currently stored on this device after validation.",
+                    if (householdConnected) "Disconnect this device in Household sharing before restoring. This protects your partner’s shopping list." else "Restoring replaces the kitchen currently stored on this device after validation.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -119,7 +120,7 @@ fun DataManagementScreen(
         expressiveItem {
             DataCard(
                 title = "Share with your household",
-                supportingText = "Exchange a checksummed snapshot with another PantryPal device and keep a clear route to future real-time sync."
+                supportingText = "Share a live shopping list using Google sign-in, or exchange a kitchen snapshot. Pantry stock, plans and recipes are not live-synced."
             ) {
                 FilledTonalButton(
                     onClick = onOpenHousehold,

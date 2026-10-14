@@ -512,14 +512,17 @@ class KitchenRepository(
 
     /** Adds starter dinners once, even if onboarding is run again later. */
     suspend fun addOnboardingMeals(meals: List<MealEntity>) {
-        val existingWeekAMeals = mealDao.getAllMealsSnapshot()
-            .filter { it.week == MealEntity.WEEK_A }
-            .map { it.name }
-        onboardingNamesMissingFrom(existingWeekAMeals, meals.map { it.name }).forEach { name ->
-            val source = meals.first { it.name.trim().equals(name, ignoreCase = true) }
-            val meal = source.copy(name = name)
+        val existing = mealDao.getAllMealsSnapshot().toMutableList()
+        meals.forEach { source ->
+            val meal = source.copy(name = source.name.trim())
             requireValidMeal(meal)
-            mealDao.insertMeal(meal)
+            val previous = existing.firstOrNull { it.week == meal.week && normalizeShoppingName(it.name) == normalizeShoppingName(meal.name) }
+            if (previous == null) {
+                mealDao.insertMeal(meal)
+                existing += meal
+            } else if (previous.ingredients.isEmpty() && meal.ingredients.isNotEmpty()) {
+                mealDao.updateMeal(previous.copy(ingredients = meal.ingredients))
+            }
         }
     }
 

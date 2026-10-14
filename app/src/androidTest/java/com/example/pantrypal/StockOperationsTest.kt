@@ -85,4 +85,17 @@ class StockOperationsTest {
         } finally { prefs.edit().clear().commit() }
     }
 
+    @Test fun starterMealsRespectRotationAndCompleteOldIngredientlessMeals() = runBlocking {
+        val kitchen = com.example.pantrypal.data.repository.KitchenRepository(db.itemDao(), db.inventoryDao(),
+            db.consumptionDao(), db.shoppingDao(), db.mealDao(), db.mealWeekDao(), db.shoppingSectionDao(), db.shoppingHistoryDao(), db)
+        db.mealDao().insertMeal(MealEntity(name = "Rice bowl", week = "A", ingredients = emptyList()))
+        db.mealDao().insertMeal(MealEntity(name = "Rice bowl", week = "B", ingredients = emptyList()))
+        kitchen.addOnboardingMeals(listOf(MealEntity(name = "Rice bowl", week = "B", ingredients = listOf("300 g rice"))))
+        kitchen.addOnboardingMeals(listOf(MealEntity(name = "Rice bowl", week = "B", ingredients = listOf("300 g rice"))))
+        val meals = db.mealDao().getAllMealsSnapshot()
+        assertEquals(2, meals.size)
+        assertTrue(meals.single { it.week == "A" }.ingredients.isEmpty())
+        assertEquals(listOf("300 g rice"), meals.single { it.week == "B" }.ingredients)
+    }
+
 }

@@ -113,7 +113,8 @@ fun SettingsScreen(
     onDeleteShoppingLocation: (ShoppingLocation) -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onLaunchOnboarding: () -> Unit,
-    onOpenDataManagement: () -> Unit = {}
+    onOpenDataManagement: () -> Unit = {},
+    householdConnected: Boolean = false
 ) {
     var showSettingsIntro by rememberSaveable { mutableStateOf(!hasSeenSettingsIntro) }
 
@@ -162,7 +163,6 @@ fun SettingsScreen(
                 )
             }
 
-            KeepIntegrationSettings()
 
             if (useTwoColumns) {
                 Row(
@@ -179,7 +179,7 @@ fun SettingsScreen(
                             onThemeModeChange = onThemeModeChange,
                             onDynamicColorChange = onDynamicColorChange
                         )
-                        LocalDataCard(onOpenDataManagement)
+                        LocalDataCard(onOpenDataManagement, householdConnected)
                     }
                     Column(
                         modifier = Modifier.weight(1f),
@@ -248,9 +248,10 @@ fun SettingsScreen(
                     onDeleteLocation = onDeleteShoppingLocation
                 )
                 LearningCard(onLaunchOnboarding)
-                LocalDataCard(onOpenDataManagement)
+                LocalDataCard(onOpenDataManagement, householdConnected)
                 BuildDetailsCard()
             }
+            KeepIntegrationSettings()
         }
     }
 }
@@ -690,8 +691,8 @@ private fun NearbyShoppingSettingsCard(
 private fun LearningCard(onLaunchOnboarding: () -> Unit) {
     SettingsSectionCard(
         icon = Icons.Default.School,
-        title = "Learn PantryPal",
-        supportingText = "Revisit the five-step guide to scanning, planning, shopping, and privacy.",
+        title = "Your kitchen setup",
+        supportingText = "Edit your shopping routine or add starter meals and pantry stock. Existing reminders stay as you set them.",
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     ) {
@@ -699,28 +700,28 @@ private fun LearningCard(onLaunchOnboarding: () -> Unit) {
             onClick = onLaunchOnboarding,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("View walkthrough")
+            Text("Edit setup")
         }
     }
 }
 
 @Composable
-private fun LocalDataCard(onOpenDataManagement: () -> Unit) {
+private fun LocalDataCard(onOpenDataManagement: () -> Unit, householdConnected: Boolean) {
     SettingsSectionCard(
         icon = Icons.Default.Lock,
         title = "Your data",
-        supportingText = "Pantry items, meals, and shopping lists stay on this device."
+        supportingText = "Pantry stock, meals and recipes stay on this device. Optional Google sign-in shares shopping lists with your household."
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "No account or cloud sync",
+                if (householdConnected) "Household shopping sync connected" else "Household shopping sync disconnected",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f)
             )
-            StatusPill(label = "Local")
+            StatusPill(label = if (householdConnected) "Shopping shared" else "Local")
         }
         OutlinedButton(
             onClick = onOpenDataManagement,

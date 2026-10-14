@@ -689,24 +689,12 @@ fun KitchenApp(
                 viewModel.setShoppingReminderTiming(timing)
                 viewModel.setShoppingRemindersEnabled(remindersEnabled)
             },
-            onSaveRegulars = { regulars ->
-                viewModel.addOnboardingRegulars(regulars)
-            },
-            onSaveMeals = { meals ->
-                viewModel.addOnboardingMeals(meals.map { it.name to it.dayOfWeek })
-            },
-            onSaveShoppingSpot = { name ->
-                viewModel.setNearbyShoppingRemindersEnabled(true)
-                pendingShoppingLocationName = name
-                if (ShoppingLocationGeofenceManager.hasForegroundPermission(context)) {
-                    pendingShoppingLocationName = null
-                    captureCurrentLocation(name)
-                } else {
-                    requestLocationPermission()
-                }
-            },
+            onSaveKitchen = viewModel::saveOnboardingKitchen,
+            initialShoppingRemindersEnabled = appSettings.shoppingRemindersEnabled,
+            saving = viewModel.saving.collectAsState().value,
+            error = viewModel.actionError.collectAsState().value,
             onCompleteToMealPlan = { requestNotificationPermission ->
-                if (requestNotificationPermission) requestNotificationPermissionIfNeeded()
+                if (requestNotificationPermission || appSettings.expiryRemindersEnabled) requestNotificationPermissionIfNeeded()
                 viewModel.completeOnboarding()
                 showOnboarding = false
                 if (!hasCompletedOnboarding) {
@@ -842,6 +830,7 @@ fun KitchenApp(
                             DashboardScreen(
                                 expiringItems,
                                 restockSuggestions,
+                                inventory = inventory,
                                 onOpenInventory = { currentScreen = AppScreen.Inventory },
                                 onAddRestock = viewModel::addRestockToShopping
                             )
@@ -903,6 +892,7 @@ fun KitchenApp(
                         }
                         AppScreen.Settings -> SettingsScreen(
                             settings = appSettings,
+                            householdConnected = featuresViewModel.householdState.collectAsState().value.liveHouseholdId != null,
                             hasSeenSettingsIntro = hasSeenSettingsIntro,
                             onSettingsIntroSeen = viewModel::markSettingsIntroSeen,
                             notificationPermissionGranted = hasNotificationPermission,
@@ -1034,6 +1024,7 @@ fun KitchenApp(
                             val state by featuresViewModel.dataState.collectAsState()
                             DataManagementScreen(
                                 state = state,
+                                householdConnected = featuresViewModel.householdState.collectAsState().value.liveHouseholdId != null,
                                 onExportBackup = {
                                     backupCreateLauncher.launch(
                                         "PantryPal-backup-${java.time.LocalDate.now()}.json"
@@ -1330,7 +1321,8 @@ fun DashboardScreen(
     expiringItems: List<InventoryUiModel>,
     restockSuggestions: List<ItemEntity>,
     onOpenInventory: () -> Unit,
-    onAddRestock: (ItemEntity) -> Unit
+    onAddRestock: (ItemEntity) -> Unit,
+    inventory: List<InventoryUiModel> = emptyList()
 ) {
     LazyColumn(
         contentPadding = PaddingValues(
@@ -1377,8 +1369,13 @@ fun DashboardScreen(
         if (expiringItems.isEmpty()) {
             expressiveItem {
                 FriendlyEmptyState(
-                    title = "Nothing racing the clock",
-                    supportingText = "Your cupboard is comfortably in date. Nicely done.",
+                    title = if (inventory.isEmpty()) "Start with your first pantry item" else "No dated stock due soon",
+                    supportingText = when {
+                        inventory.isEmpty() -> "Add or scan something you have at home, with an expiry date if you know it."
+                        inventory.all { it.expirationDate == null } -> "Your stock has no expiry dates yet. Add dates in Pantry to get useful reminders."
+                        inventory.any { it.expirationDate == null } -> "Nothing with a recorded date is due soon. Some pantry items still have no date."
+                        else -> "Your recorded expiry dates are more than a week away."
+                    },
                     icon = Icons.Default.CheckCircle
                 )
             }
