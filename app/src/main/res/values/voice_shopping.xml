@@ -1,0 +1,4 @@
+<resources>
+    <bool name="app_functions_supported">false</bool>
+    <string name="voice_shopping_description">Add groceries to your weekly PantryPal shopping list.</string>
+</resources>

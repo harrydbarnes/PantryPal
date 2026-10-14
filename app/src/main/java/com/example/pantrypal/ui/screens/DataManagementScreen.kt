@@ -1,5 +1,8 @@
 package com.example.pantrypal.ui.screens
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,7 +51,7 @@ fun DataManagementScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)
     ) {
-        item {
+        expressiveItem {
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -80,7 +83,7 @@ fun DataManagementScreen(
                 }
             }
         }
-        item {
+        expressiveItem {
             DataCard(
                 title = "Complete backup",
                 supportingText = "Includes pantry batches, shopping, meal plans, recipes, prices, budgets and preferences."
@@ -113,7 +116,7 @@ fun DataManagementScreen(
                 )
             }
         }
-        item {
+        expressiveItem {
             DataCard(
                 title = "Share with your household",
                 supportingText = "Exchange a checksummed snapshot with another PantryPal device and keep a clear route to future real-time sync."
@@ -129,7 +132,7 @@ fun DataManagementScreen(
             }
         }
         state.message?.let { message ->
-            item {
+            expressiveItem {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer

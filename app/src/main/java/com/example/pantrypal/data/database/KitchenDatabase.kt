@@ -55,9 +55,10 @@ import com.google.gson.Gson
         com.example.pantrypal.data.entity.ShoppingSyncQueueEntity::class,
         com.example.pantrypal.data.entity.ShoppingSyncBatchEntity::class,
         com.example.pantrypal.data.entity.PurchaseRecordEntity::class,
-        com.example.pantrypal.data.entity.ReceiptImportEntity::class
+        com.example.pantrypal.data.entity.ReceiptImportEntity::class,
+        com.example.pantrypal.data.entity.ShoppingIngestEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -76,6 +77,7 @@ abstract class KitchenDatabase : RoomDatabase() {
     abstract fun backupDao(): BackupDao
     abstract fun shoppingSyncDao(): com.example.pantrypal.data.dao.ShoppingSyncDao
 
+    abstract fun shoppingListDao(): com.example.pantrypal.data.dao.ShoppingListDao
     abstract fun purchaseRecordDao(): com.example.pantrypal.data.dao.PurchaseRecordDao
 
     companion object {
@@ -202,6 +204,23 @@ abstract class KitchenDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE shopping_ingest_state (ingestKey TEXT NOT NULL PRIMARY KEY, quantity REAL NOT NULL, unit TEXT NOT NULL, shoppingSyncId TEXT, updatedAt INTEGER NOT NULL)")
+                db.execSQL("ALTER TABLE inventory ADD COLUMN preferredStore TEXT NOT NULL DEFAULT 'EITHER'")
+                db.execSQL("ALTER TABLE items ADD COLUMN preferredStore TEXT NOT NULL DEFAULT 'EITHER'")
+                // Preserve identities, weeks and unlike measures. Name-only uniqueness would erase legitimate rows.
+                db.execSQL("CREATE TABLE shopping_list_new (shoppingId INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, quantity REAL NOT NULL, unit TEXT NOT NULL, isChecked INTEGER NOT NULL, addedAt INTEGER NOT NULL, frequency TEXT NOT NULL, sectionId INTEGER NOT NULL, weekId TEXT, syncId TEXT NOT NULL DEFAULT '', inventoryId INTEGER DEFAULT NULL, category TEXT NOT NULL DEFAULT 'Uncategorised', storeTag TEXT NOT NULL DEFAULT 'EITHER', source TEXT NOT NULL DEFAULT 'MANUAL', FOREIGN KEY(inventoryId) REFERENCES inventory(inventoryId) ON UPDATE NO ACTION ON DELETE SET NULL)")
+                db.execSQL("INSERT INTO shopping_list_new(shoppingId,name,quantity,unit,isChecked,addedAt,frequency,sectionId,weekId,syncId) SELECT shoppingId,name,quantity,unit,isChecked,addedAt,frequency,sectionId,weekId,syncId FROM shopping_list")
+                db.execSQL("DROP TABLE shopping_list")
+                db.execSQL("ALTER TABLE shopping_list_new RENAME TO shopping_list")
+                db.execSQL("CREATE INDEX index_shopping_list_inventoryId ON shopping_list(inventoryId)")
+                db.execSQL("CREATE INDEX index_shopping_list_name ON shopping_list(name)")
+                db.execSQL("UPDATE shopping_list SET inventoryId = (SELECT inventory.inventoryId FROM inventory JOIN items ON items.itemId = inventory.itemId WHERE lower(trim(items.name)) = lower(trim(shopping_list.name)) ORDER BY inventory.quantity DESC, inventory.inventoryId LIMIT 1)")
+                db.execSQL("UPDATE shopping_list SET category = COALESCE((SELECT category FROM items WHERE lower(trim(items.name)) = lower(trim(shopping_list.name)) LIMIT 1), 'Uncategorised')")
+            }
+        }
+
         fun getDatabase(context: Context): KitchenDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -217,7 +236,8 @@ abstract class KitchenDatabase : RoomDatabase() {
                     MIGRATION_5_6,
                     MIGRATION_6_7,
                     MIGRATION_7_8,
-                    MIGRATION_8_9
+                    MIGRATION_8_9,
+                    MIGRATION_9_10
                 )
                 .addCallback(object : Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {

@@ -369,7 +369,8 @@ class PantryFeaturesRepository(
         snapshot().toPayload().copy(
             shoppingLayout = database.shoppingSyncDao().layout().associate { it.layoutKey to it.value },
             purchaseRecords = database.purchaseRecordDao().records(),
-            receiptImports = database.purchaseRecordDao().imports()
+            receiptImports = database.purchaseRecordDao().imports(),
+            shoppingIngestStates = database.shoppingListDao().ingestStates()
         )
     }
 
@@ -456,6 +457,8 @@ class PantryFeaturesRepository(
             purchases.clearRecords(); purchases.clearImports()
             payload.purchaseRecords.orEmpty().forEach { purchases.put(it) }
             payload.receiptImports.orEmpty().forEach { purchases.markImported(it) }
+            database.shoppingListDao().clearIngestStates()
+            payload.shoppingIngestStates.orEmpty().forEach { database.shoppingListDao().saveIngestState(it) }
             val restoredItemIds = payload.items.mapTo(mutableSetOf()) { it.itemId }
             database.shoppingSyncDao().layout().forEach { database.shoppingSyncDao().deleteLayout(it.layoutKey) }
 

@@ -2,7 +2,6 @@ package com.example.pantrypal.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Inventory2
@@ -15,7 +14,15 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
+import com.example.pantrypal.ui.components.shoppingMotion
+import com.example.pantrypal.ui.components.shoppingSegmentShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import com.example.pantrypal.viewmodel.InventoryUiModel
 import com.example.pantrypal.data.entity.ConsumptionType
@@ -26,6 +33,8 @@ import com.example.pantrypal.ui.components.StatusPill
 import com.example.pantrypal.util.ExpiryStatus
 import com.example.pantrypal.util.InventorySort
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -37,9 +46,14 @@ fun InventoryScreen(
     onAdjustQuantity: (Long, Double) -> Unit,
     onToggleOpened: (InventoryUiModel) -> Unit,
     onSaveDetails: (InventoryUiModel, Boolean, Double?, String, () -> Unit) -> Unit,
+    onMarkEmpty: (InventoryUiModel, (com.example.pantrypal.data.dao.ShoppingListDao.EmptyChange) -> Unit) -> Unit = { _, _ -> },
+    onUndoEmpty: (com.example.pantrypal.data.dao.ShoppingListDao.EmptyChange) -> Unit = {},
     saving: Boolean = false,
     error: String? = null
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var location by rememberSaveable { mutableStateOf<String?>(null) }
@@ -76,11 +90,12 @@ fun InventoryScreen(
         }
     }
 
-    LazyColumn(
+    Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0), snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    LazyColumn(modifier = Modifier.padding(padding),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
+        expressiveItem {
             ExpressiveHero(
                 eyebrow = "Kitchen cupboard",
                 title = "${filteredItems.size} of ${items.size} pantry item${if (items.size == 1) "" else "s"}",
@@ -90,7 +105,7 @@ fun InventoryScreen(
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
             )
         }
-        item {
+        expressiveItem {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.xs)
@@ -113,7 +128,7 @@ fun InventoryScreen(
                 }
             }
         }
-        item {
+        expressiveItem {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -124,7 +139,7 @@ fun InventoryScreen(
                 singleLine = true
             )
         }
-        item {
+        expressiveItem {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -181,7 +196,7 @@ fun InventoryScreen(
             }
         }
         if (items.isEmpty()) {
-            item {
+            expressiveItem {
                 FriendlyEmptyState(
                     title = "Your pantry is ready",
                     supportingText = "Scan something in or use the Add item button to start filling the shelves.",
@@ -189,7 +204,7 @@ fun InventoryScreen(
                 )
             }
         } else if (filteredItems.isEmpty()) {
-            item {
+            expressiveItem {
                 FriendlyEmptyState(
                     title = "Nothing matches those filters",
                     supportingText = "Try a broader search or clear one of the filter chips.",
@@ -197,7 +212,29 @@ fun InventoryScreen(
                 )
             }
         }
-        items(filteredItems, key = { it.inventoryId }) { item ->
+        expressiveItems(filteredItems, key = { it.inventoryId }) { item ->
+            var swipeWidth by remember { mutableFloatStateOf(0f) }
+            val dismiss = rememberSwipeToDismissBoxState(positionalThreshold = { distance -> distance * 0.5f }, confirmValueChange = { value ->
+                if (value == SwipeToDismissBoxValue.EndToStart && !saving) onMarkEmpty(item) { change ->
+                    scope.launch {
+                        if (snackbarHostState.showSnackbar("Marked empty & added to Shopping List", "Undo") == SnackbarResult.ActionPerformed) onUndoEmpty(change)
+                    }
+                }
+                false
+            })
+            LaunchedEffect(dismiss, saving) {
+                snapshotFlow {
+                    swipeWidth > 0f && dismiss.dismissDirection == SwipeToDismissBoxValue.EndToStart &&
+                        -dismiss.requireOffset() >= swipeWidth * 0.5f
+                }
+                    .distinctUntilChanged().collect { crossedThreshold ->
+                        if (crossedThreshold && !saving) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
+            }
+            SwipeToDismissBox(modifier = Modifier.onSizeChanged { swipeWidth = it.width.toFloat() }, state = dismiss, enableDismissFromStartToEnd = false, enableDismissFromEndToStart = !saving,
+                backgroundContent = { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.large) {
+                    Box(Modifier.padding(16.dp), contentAlignment = Alignment.CenterEnd) { Text("Mark empty & add to shopping") }
+                } }) {
             InventoryItemRow(
                 item = item,
                 onConsume = onConsume,
@@ -206,6 +243,9 @@ fun InventoryScreen(
                 onEditStockSettings = { editingStockItem = item }
             )
         }
+            }
+    }
+
     }
 
     editingStockItem?.let { item ->

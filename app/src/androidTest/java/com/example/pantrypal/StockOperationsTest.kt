@@ -36,7 +36,7 @@ class StockOperationsTest {
         val id = db.itemDao().insertItem(ItemEntity(name = "Milk", defaultUnit = "pcs", category = "General", isUsual = true))
         val batch = db.inventoryDao().insertInventory(InventoryEntity(itemId = id, quantity = 1.0, unit = "pcs"))
         coroutineScope { repeat(2) { launch(Dispatchers.IO) { stock.consume(listOf(StockOperations.Use(batch, id, 1.0)), ConsumptionType.FINISHED, "A") } } }
-        assertNull(db.inventoryDao().getById(batch))
+        assertEquals(0.0, db.inventoryDao().getById(batch)!!.quantity, 0.0)
         assertEquals(1, db.consumptionDao().getAllHistory().size)
         assertEquals(1, db.shoppingDao().getAllShoppingItemsSnapshot().size)
     }

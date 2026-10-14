@@ -109,6 +109,9 @@ class KitchenRepository(
         checked.size
     }
 
+    val shoppingItemsDao get() = requireNotNull(database).shoppingListDao()
+    val likelyRunningLowStaples get() = shoppingItemsDao.getLikelyRunningLowStaples(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
+
     suspend fun stockRecordedShoppingIds(): Set<String> = database?.purchaseRecordDao()?.records().orEmpty()
         .filter { it.stockRecorded && !it.completed }.mapNotNull { it.shoppingSyncId }.toSet()
 
@@ -133,24 +136,26 @@ class KitchenRepository(
     /** Exact insert is used only by a reviewed plan delta, never to increment a protected edit. */
     suspend fun insertReviewedShoppingItem(item: ShoppingItemEntity) {
         requireValidShoppingItem(item)
-        shoppingDao.insertShoppingItem(item)
+        shoppingDao.insertShoppingItem(enrichShoppingItem(item))
     }
 
     data class QuickAddChange(val before: ShoppingItemEntity?, val after: ShoppingItemEntity)
 
-    suspend fun quickAddShoppingItem(item: ShoppingItemEntity, weekId: String): QuickAddChange = shoppingTransaction {
+    suspend fun quickAddShoppingItem(item: ShoppingItemEntity, weekId: String, inheritUnit: Boolean = false): QuickAddChange = shoppingTransaction {
         requireValidShoppingItem(item)
         val recurring = shoppingSections.first().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
-        val existing = shoppingDao.getAllShoppingItemsSnapshot().firstOrNull {
+        val beforeRows = shoppingDao.getAllShoppingItemsSnapshot()
+        val existing = beforeRows.firstOrNull {
             !it.isChecked && (it.weekId == weekId || it.weekId == null || it.sectionId in recurring) &&
                 normalizeShoppingName(it.name) == normalizeShoppingName(item.name) &&
                 com.example.pantrypal.util.convertShoppingQuantity(item.quantity, item.unit, it.unit) != null
         }
-        val saved = if (existing != null) {
+        val saved = if (database != null) database.shoppingListDao().upsertShoppingItem(item.name, item.quantity, item.source,
+            weekId, unit = item.unit.takeUnless { inheritUnit }) else if (existing != null) {
             val quantity = existing.quantity + com.example.pantrypal.util.convertShoppingQuantity(item.quantity, item.unit, existing.unit)!!
             existing.copy(quantity = quantity).also { requireValidShoppingItem(it); shoppingDao.updateShoppingItem(it) }
         } else item.copy(shoppingId = shoppingDao.insertShoppingItem(item))
-        QuickAddChange(existing, saved)
+        QuickAddChange(beforeRows.firstOrNull { it.syncId == saved.syncId }, saved)
     }
 
     suspend fun undoQuickAdd(change: QuickAddChange) = shoppingTransaction {
@@ -276,13 +281,13 @@ class KitchenRepository(
                         )
             }
             if (existing == null) {
-                shoppingDao.insertShoppingItem(item)
+                shoppingDao.insertShoppingItem(enrichShoppingItem(item))
             } else {
                 val combinedQuantity = existing.quantity + item.quantity
                 if (combinedQuantity.isFinite()) {
                     shoppingDao.updateShoppingItem(existing.copy(quantity = combinedQuantity))
                 } else {
-                    shoppingDao.insertShoppingItem(item)
+                    shoppingDao.insertShoppingItem(enrichShoppingItem(item))
                 }
             }
         }
@@ -311,10 +316,25 @@ class KitchenRepository(
         }
     }
 
+    private suspend fun enrichShoppingItem(row: ShoppingItemEntity): ShoppingItemEntity {
+        val db = database ?: return row
+        val product = db.shoppingListDao().product(row.name)
+        val linked = product?.let { db.shoppingListDao().stock(it.itemId).firstOrNull { batch ->
+            com.example.pantrypal.util.convertShoppingQuantity(row.quantity, row.unit, batch.unit) != null
+        } }
+        return row.copy(inventoryId = row.inventoryId ?: linked?.inventoryId,
+            category = row.category.takeUnless { it == "Uncategorised" } ?: product?.category
+                ?: com.example.pantrypal.domain.shopping.AisleCategoryMapper.categoryFor(row.name),
+            storeTag = row.storeTag.takeUnless { it == com.example.pantrypal.data.entity.StoreTag.EITHER }
+                ?: linked?.preferredStore ?: product?.preferredStore ?: com.example.pantrypal.data.entity.StoreTag.EITHER)
+    }
+
     suspend fun editShoppingItem(syncId: String, edit: (ShoppingItemEntity) -> ShoppingItemEntity) = shoppingTransaction {
         val current = shoppingDao.getAllShoppingItemsSnapshot().firstOrNull { it.syncId == syncId }
             ?: error("This item was removed. Refresh your list.")
-        val updated = edit(current)
+        var updated = edit(current)
+        if (!updated.name.equals(current.name, true)) updated = enrichShoppingItem(updated.copy(inventoryId = null,
+            category = "Uncategorised", storeTag = com.example.pantrypal.data.entity.StoreTag.EITHER))
         requireValidShoppingItem(updated)
         shoppingDao.updateShoppingItem(updated)
     }
@@ -450,7 +470,8 @@ class KitchenRepository(
                 ?: ItemEntity(
                     name = shoppingItem.name.trim(),
                     defaultUnit = shoppingItem.unit,
-                    category = if (storageLocation == InventoryEntity.LOCATION_HOUSEHOLD) "Household" else "General"
+                    category = if (storageLocation == InventoryEntity.LOCATION_HOUSEHOLD) "Household & Baby" else shoppingItem.category,
+                    preferredStore = shoppingItem.storeTag
                 ).let { newItem ->
                     val id = itemDao.insertItem(newItem)
                     newItem.copy(itemId = id).also(knownItems::add)
@@ -463,12 +484,13 @@ class KitchenRepository(
                     it.expirationDate == null
             }
             if (existingBatch != null) {
-                val updated = existingBatch.copy(quantity = existingBatch.quantity + shoppingItem.quantity)
+                val updated = existingBatch.copy(quantity = existingBatch.quantity + shoppingItem.quantity, preferredStore = shoppingItem.storeTag)
                 inventoryDao.updateInventory(updated)
                 inventory[inventory.indexOf(existingBatch)] = updated
             } else {
                 val newInventory = InventoryEntity(
                     itemId = item.itemId,
+                    preferredStore = shoppingItem.storeTag,
                     quantity = shoppingItem.quantity,
                     unit = shoppingItem.unit,
                     storageLocation = storageLocation

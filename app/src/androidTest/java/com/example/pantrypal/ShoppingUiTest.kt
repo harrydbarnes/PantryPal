@@ -35,6 +35,35 @@ class ShoppingUiTest {
             compose.onNodeWithText("Shopping List").assertIsDisplayed()
             compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToNode(hasText("Shop by aisle · My Aldi"))
             compose.onNodeWithText("Shop by aisle · My Aldi").assertIsDisplayed()
+            val list = compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange))
+            list.performScrollToNode(hasContentDescription("More options for QA first item"))
+            compose.onNodeWithText("QA first item").performClick()
+            val app = context.applicationContext as PantryPalApplication
+            compose.waitUntil(10000) {
+                kotlinx.coroutines.runBlocking { app.database.shoppingListDao().snapshot().any { it.name == "QA first item" && it.isChecked } }
+            }
+            // Extended FAB text is decorative; its explicit accessibility label identifies the action.
+            try {
+                compose.waitUntil(10000) {
+                    runCatching {
+                        compose.onNode(hasContentDescription("Complete Shop & Restock (", substring = true)).assertIsDisplayed()
+                        true
+                    }.getOrDefault(false)
+                }
+            } catch (failure: Throwable) {
+                val output = java.io.File(context.getExternalFilesDir(null), "review-profile").apply { mkdirs() }
+                java.io.File(output, "shopping-bottom-action.png").outputStream().use { stream ->
+                    androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                        .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                }
+                throw AssertionError("Bottom action layout:\n" + compose.onRoot(useUnmergedTree = true).printToString(), failure)
+            }
+            list.performScrollToNode(hasText("Ticked Items (", substring = true))
+            compose.onNodeWithText("QA first item").assertDoesNotExist()
+            compose.onNodeWithText("Ticked Items (", substring = true).performClick()
+            list.performScrollToNode(hasContentDescription("More options for QA first item"))
+            compose.onNodeWithContentDescription("More options for QA first item").assertIsDisplayed()
+            compose.onNodeWithText("QA first item").performClick()
         }
     }
     @Test fun tabletMealDaysUseMoreThanOneColumn() {

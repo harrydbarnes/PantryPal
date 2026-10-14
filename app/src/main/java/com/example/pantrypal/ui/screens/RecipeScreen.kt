@@ -2,6 +2,9 @@
 
 package com.example.pantrypal.ui.screens
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,8 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddShoppingCart
@@ -144,10 +145,10 @@ fun RecipeScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
+            expressiveItem {
                 RecipeHero(onImportClick = { showImportDialog = true })
             }
-            item {
+            expressiveItem {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -174,10 +175,10 @@ fun RecipeScreen(
             }
 
             state.errorMessage?.let { message ->
-                item { RecipeErrorCard(message) }
+                expressiveItem { RecipeErrorCard(message) }
             }
             state.message?.let { message ->
-                item {
+                expressiveItem {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer
@@ -195,7 +196,7 @@ fun RecipeScreen(
 
             when (selectedSection) {
                 0 -> {
-                    item {
+                    expressiveItem {
                         RecipeSearchField(
                             query = state.searchQuery,
                             onQueryChange = onSearchQueryChange,
@@ -203,7 +204,7 @@ fun RecipeScreen(
                         )
                     }
                     if (localResults.isEmpty()) {
-                        item {
+                        expressiveItem {
                             RecipeEmptyCard(
                                 title = if (state.savedRecipes.isEmpty()) {
                                     "Build your family recipe book"
@@ -219,7 +220,7 @@ fun RecipeScreen(
                             )
                         }
                     } else {
-                        items(localResults, key = { "saved-${it.id}-${it.title}" }) { recipe ->
+                        expressiveItems(localResults, key = { "saved-${it.id}-${it.title}" }) { recipe ->
                             RecipeLibraryRow(
                                 recipe = recipe,
                                 onClick = { onRecipeSelected(recipe, emptyList()) },
@@ -233,7 +234,7 @@ fun RecipeScreen(
 
                 1 -> {
                     if (state.ideaShelves.isEmpty()) {
-                        item {
+                        expressiveItem {
                             RecipeEmptyCard(
                                 title = "Ideas get smarter with your cupboard",
                                 supportingText = "Save recipes and add pantry items to see what you can cook now, what uses food soon, and what only needs one or two extras.",
@@ -269,7 +270,7 @@ fun RecipeScreen(
                 }
 
                 else -> {
-                    item {
+                    expressiveItem {
                         RecipeExternalSearch(
                             query = state.searchQuery,
                             mode = externalSearchMode,
@@ -284,7 +285,7 @@ fun RecipeScreen(
                         )
                     }
                     if (state.externalResults.isEmpty() && !state.isExternalSearchLoading) {
-                        item {
+                        expressiveItem {
                             RecipeEmptyCard(
                                 title = "Search TheMealDB",
                                 supportingText = "Find a recipe by meal name or start with an ingredient you want to use.",
@@ -292,7 +293,7 @@ fun RecipeScreen(
                             )
                         }
                     } else {
-                        items(
+                        expressiveItems(
                             state.externalResults,
                             key = { "external-${it.externalId}-${it.title}" }
                         ) { recipe ->
@@ -599,7 +600,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recipeShelf(
     onRecipeSelected: (Recipe, List<RecipeIngredient>) -> Unit
 ) {
     if (matches.isEmpty()) return
-    item(key = "heading-$title") {
+    expressiveItem(key = "heading-$title") {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             Text(
@@ -609,12 +610,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recipeShelf(
             )
         }
     }
-    item(key = "shelf-$title") {
+    expressiveItem(key = "shelf-$title") {
         LazyRow(
             contentPadding = PaddingValues(end = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(matches, key = { "${title}-${it.recipe.id}-${it.recipe.title}" }) { match ->
+            expressiveItems(matches, key = { "${title}-${it.recipe.id}-${it.recipe.title}" }) { match ->
                 RecipeIdeaCard(
                     match = match,
                     onClick = {
@@ -1009,10 +1010,10 @@ private fun RecipeDetailContent(
         modifier = Modifier.heightIn(max = 520.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
+        expressiveItem {
             RecipeWideImage(recipe)
         }
-        item {
+        expressiveItem {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1023,10 +1024,10 @@ private fun RecipeDetailContent(
                 }
             }
         }
-        item {
+        expressiveItem {
             Text("Ingredients", style = MaterialTheme.typography.titleMedium)
         }
-        items(recipe.ingredients, key = { "${it.sortOrder}-${it.normalizedName}" }) { ingredient ->
+        expressiveItems(recipe.ingredients, key = { "${it.sortOrder}-${it.normalizedName}" }) { ingredient ->
             val missing = missingIngredients.any {
                 it.normalizedName == ingredient.normalizedName
             }
@@ -1056,11 +1057,11 @@ private fun RecipeDetailContent(
             }
         }
         if (showInstructions && recipe.instructions.isNotEmpty()) {
-            item { HorizontalDivider() }
-            item {
+            expressiveItem { HorizontalDivider() }
+            expressiveItem {
                 Text("Method", style = MaterialTheme.typography.titleMedium)
             }
-            itemsIndexed(recipe.instructions) { index, instruction ->
+            expressiveItemsIndexed(recipe.instructions) { index, instruction ->
                 Text(
                     "${index + 1}. $instruction",
                     style = MaterialTheme.typography.bodyMedium
@@ -1068,7 +1069,7 @@ private fun RecipeDetailContent(
             }
         }
         recipe.source?.let { source ->
-            item {
+            expressiveItem {
                 HorizontalDivider()
                 Text(
                     source.attribution,

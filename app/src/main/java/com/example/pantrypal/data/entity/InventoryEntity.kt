@@ -28,7 +28,8 @@ data class InventoryEntity(
     @ColumnInfo(defaultValue = "'Pantry'")
     val storageLocation: String = LOCATION_PANTRY,
     @ColumnInfo(defaultValue = "0")
-    val isOpened: Boolean = false
+    val isOpened: Boolean = false,
+    @ColumnInfo(defaultValue = "'EITHER'") val preferredStore: StoreTag = StoreTag.EITHER
 ) {
     companion object {
         const val LOCATION_PANTRY = "Pantry"

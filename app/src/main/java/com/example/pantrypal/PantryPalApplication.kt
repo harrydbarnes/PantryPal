@@ -50,6 +50,7 @@ class PantryPalApplication : Application(), Configuration.Provider {
             "meal_weeks",
             "shopping_sections",
             "shopping_history",
+            "shopping_ingest_state",
             "price_history",
             "weekly_budgets",
             "recipes",

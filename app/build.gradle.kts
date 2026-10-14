@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
     id("com.google.gms.google-services")
@@ -53,7 +52,7 @@ val buildMetadataProvider = gitHashProvider.zip(buildDateProvider) { gitHash, bu
 
 android {
     namespace = "com.example.pantrypal"
-    compileSdk = 36
+    compileSdk = 37
 
     val releaseSigningKeystore = providers.environmentVariable("PANTRYPAL_RELEASE_KEYSTORE")
     val releaseSigningStorePassword = providers.environmentVariable("PANTRYPAL_RELEASE_STORE_PASSWORD")
@@ -164,8 +163,13 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3:1.5.0-beta01")
     implementation("androidx.compose.material:material-icons-extended")
+
+    // On-device agent entry points, compiled into a permission-protected Android service.
+    implementation("androidx.appfunctions:appfunctions:1.0.0-alpha13")
+    ksp("androidx.appfunctions:appfunctions-compiler:1.0.0-alpha13")
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
 
     // Room
     val roomVersion = "2.8.4"

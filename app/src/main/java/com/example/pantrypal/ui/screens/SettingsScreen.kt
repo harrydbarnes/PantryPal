@@ -162,6 +162,8 @@ fun SettingsScreen(
                 )
             }
 
+            KeepIntegrationSettings()
+
             if (useTwoColumns) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

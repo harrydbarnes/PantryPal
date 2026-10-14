@@ -1,5 +1,8 @@
 package com.example.pantrypal
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import android.os.Bundle
 import android.Manifest
 import android.content.Context
@@ -18,7 +21,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -130,13 +132,22 @@ sealed class AppScreen(@StringRes val titleResId: Int) {
     data object Household : AppScreen(R.string.household_title)
 }
 
+data class ShoppingIncomingRequest(val operationId: String, val text: String, val source: String)
+
 class MainActivity : ComponentActivity() {
+    private val incomingShopping = MutableStateFlow<ShoppingIncomingRequest?>(null)
+    private var shoppingIntentId = java.util.UUID.randomUUID().toString()
+    private var shoppingIntentHandled = false
+
     private val sharedRecipeUrl = MutableStateFlow<String?>(null)
     private val shoppingReminderAction = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        shoppingIntentId = savedInstanceState?.getString("shopping_intent_id") ?: shoppingIntentId
+        shoppingIntentHandled = savedInstanceState?.getBoolean("shopping_intent_handled") ?: false
+        if (!shoppingIntentHandled) incomingShopping.value = extractShoppingIncoming(intent, shoppingIntentId)
         sharedRecipeUrl.value = extractSharedRecipeUrl(intent)
         shoppingReminderAction.value = extractShoppingReminderAction(intent)
 
@@ -185,7 +196,9 @@ class MainActivity : ComponentActivity() {
                         incomingSharedRecipeUrl = sharedRecipeUrl,
                         onSharedRecipeUrlConsumed = { sharedRecipeUrl.value = null },
                         incomingShoppingReminderAction = shoppingReminderAction,
-                        onShoppingReminderActionConsumed = { shoppingReminderAction.value = null }
+                        onShoppingReminderActionConsumed = { shoppingReminderAction.value = null },
+                        incomingShopping = incomingShopping,
+                        onShoppingIncomingConsumed = { incomingShopping.value = null; shoppingIntentHandled = true }
                     )
                 }
             }
@@ -194,9 +207,44 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        shoppingIntentId = java.util.UUID.randomUUID().toString()
+        shoppingIntentHandled = false
+        incomingShopping.value = extractShoppingIncoming(intent, shoppingIntentId)
         sharedRecipeUrl.value = extractSharedRecipeUrl(intent)
         shoppingReminderAction.value = extractShoppingReminderAction(intent)
     }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("shopping_intent_id", shoppingIntentId)
+        outState.putBoolean("shopping_intent_handled", shoppingIntentHandled)
+        super.onSaveInstanceState(outState)
+    }
+
+}
+
+@Suppress("DEPRECATION")
+private fun extractShoppingIncoming(intent: Intent?, operationId: String): ShoppingIncomingRequest? {
+    if (intent == null) return null
+    if (intent.action == "com.example.pantrypal.OPEN_SHOPPING") return ShoppingIncomingRequest(operationId, "", "OPEN")
+    if (intent.action == Intent.ACTION_INSERT) {
+        val value = intent.extras?.get("voice_item_names")
+        val text = when (value) {
+            is String -> value
+            is Array<*> -> value.filterIsInstance<String>().joinToString("\n")
+            is ArrayList<*> -> value.filterIsInstance<String>().joinToString("\n")
+            else -> ""
+        }
+        return ShoppingIncomingRequest(operationId, text, "VOICE")
+    }
+    if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+        val shared = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+        val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim()
+        val text = if (!subject.isNullOrBlank() && shared.lineSequence().firstOrNull()?.trim() == subject)
+            shared.substringAfter('\n', "") else shared
+        if (Regex("https?://\\S+").containsMatchIn(text)) return null
+        return ShoppingIncomingRequest(operationId, text, "KEEP_SHARE")
+    }
+    return null
 }
 
 private fun extractSharedRecipeUrl(intent: Intent?): String? {
@@ -250,7 +298,9 @@ fun KitchenApp(
     incomingSharedRecipeUrl: StateFlow<String?>,
     onSharedRecipeUrlConsumed: () -> Unit,
     incomingShoppingReminderAction: StateFlow<String?>,
-    onShoppingReminderActionConsumed: () -> Unit
+    onShoppingReminderActionConsumed: () -> Unit,
+    incomingShopping: StateFlow<ShoppingIncomingRequest?> = MutableStateFlow(null),
+    onShoppingIncomingConsumed: () -> Unit = {}
 ) {
     val inventory by viewModel.inventoryState.collectAsState()
     val expiringItems by viewModel.expiringItemsState.collectAsState()
@@ -382,6 +432,27 @@ fun KitchenApp(
                 data = Uri.parse("package:${context.packageName}")
             }
         )
+    }
+
+    val shoppingIncoming by incomingShopping.collectAsState()
+    LaunchedEffect(shoppingIncoming, hasCompletedOnboarding) {
+        val request = shoppingIncoming ?: return@LaunchedEffect
+        if (!hasCompletedOnboarding) return@LaunchedEffect
+        currentScreen = AppScreen.ShoppingList
+        if (request.source == "OPEN") { onShoppingIncomingConsumed(); return@LaunchedEffect }
+        try {
+            val parsed = com.example.pantrypal.domain.shopping.ShoppingListIngestParser.parseKeepSharedText(request.text)
+            val count = withContext(Dispatchers.IO) {
+                (context.applicationContext as PantryPalApplication).database.shoppingListDao().importItems(
+                    parsed, request.source, viewModel.shoppingWeek.value, request.operationId)
+            }
+            onShoppingIncomingConsumed()
+            scope.launch { snackbarHostState.showSnackbar("$count item${if (count == 1) "" else "s"} imported into your shopping list") }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            onShoppingIncomingConsumed()
+            scope.launch { snackbarHostState.showSnackbar(error.message ?: "Shopping items could not be imported. Try sending the list again.") }
+        }
     }
 
     val incomingRecipeUrl by incomingSharedRecipeUrl.collectAsState()
@@ -687,7 +758,7 @@ fun KitchenApp(
             if (currentScreen == AppScreen.Inventory) {
                 ExtendedFloatingActionButton(
                     onClick = { currentScreen = AppScreen.AddManual },
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    icon = { Icon(Icons.Default.Add, contentDescription = "Add item") },
                     text = { Text("Add item") }
                 )
             }
@@ -751,6 +822,8 @@ fun KitchenApp(
                                 onAdjustQuantity = viewModel::adjustInventoryQuantity,
                                 onToggleOpened = viewModel::toggleInventoryOpened,
                                 onSaveDetails = viewModel::updateInventoryDetails,
+                                onMarkEmpty = viewModel::markEmptyAndAdd,
+                                onUndoEmpty = viewModel::undoEmpty,
                                 saving = viewModel.saving.collectAsState().value,
                                 error = viewModel.actionError.collectAsState().value
                             )
@@ -1233,7 +1306,7 @@ fun DashboardScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.sm)
     ) {
-        item {
+        expressiveItem {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1259,7 +1332,7 @@ fun DashboardScreen(
             }
         }
 
-        item {
+        expressiveItem {
             SectionHeading(
                 title = "Use these next",
                 supportingText = "A small nudge to keep good food out of the bin."
@@ -1267,7 +1340,7 @@ fun DashboardScreen(
         }
 
         if (expiringItems.isEmpty()) {
-            item {
+            expressiveItem {
                 FriendlyEmptyState(
                     title = "Nothing racing the clock",
                     supportingText = "Your cupboard is comfortably in date. Nicely done.",
@@ -1275,7 +1348,7 @@ fun DashboardScreen(
                 )
             }
         } else {
-            item {
+            expressiveItem {
                  FlowRow(
                      modifier = Modifier.fillMaxWidth(),
                      horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1316,7 +1389,7 @@ fun DashboardScreen(
             }
         }
 
-        item {
+        expressiveItem {
             SectionHeading(
                 title = "Restock radar",
                 supportingText = "Things you usually keep around but may have run out of."
@@ -1324,7 +1397,7 @@ fun DashboardScreen(
         }
 
         if (restockSuggestions.isEmpty()) {
-            item {
+            expressiveItem {
                 FriendlyEmptyState(
                     title = "No gaps spotted yet",
                     supportingText = "PantryPal will learn what you reach for as you use the app.",
@@ -1332,7 +1405,7 @@ fun DashboardScreen(
                 )
             }
         } else {
-            items(restockSuggestions) { item ->
+            expressiveItems(restockSuggestions) { item ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
@@ -1374,7 +1447,7 @@ fun DashboardScreen(
             }
         }
 
-        item {
+        expressiveItem {
             Button(
                 onClick = onOpenInventory,
                 modifier = Modifier.fillMaxWidth().height(72.dp),

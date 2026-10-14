@@ -142,4 +142,15 @@ class ShoppingCompletionTest {
         assertEquals(0, features().addMissingIngredientsToShopping(ingredients, "A"))
         assertEquals(300.0, db.shoppingDao().getAllShoppingItemsSnapshot().first { it.sectionId == ShoppingSectionEntity.ID_MEAL_PLAN }.quantity, 0.0)
     }
+    @Test fun unmeasuredQuickAddInheritsStockUnitAndUndoRestoresExactMergedRow() = runBlocking {
+        val id = db.itemDao().insertItem(ItemEntity(name = "Milk", defaultUnit = "l", category = "Dairy & Fridge"))
+        db.inventoryDao().insertInventory(InventoryEntity(itemId = id, quantity = 1.0, unit = "l"))
+        val row = ShoppingItemEntity(name = "Milk", quantity = 2.0, unit = "l", sectionId = 3, weekId = "A")
+        db.shoppingDao().insertShoppingItem(row)
+        val change = repo.quickAddShoppingItem(ShoppingItemEntity(name = "Milk", quantity = 1.0, unit = "pcs", weekId = "A"), "A", inheritUnit = true)
+        assertEquals(row.syncId, change.before!!.syncId)
+        assertEquals(3.0, change.after.quantity, 0.0)
+        repo.undoQuickAdd(change)
+        assertEquals(2.0, db.shoppingDao().getAllShoppingItemsSnapshot().single().quantity, 0.0)
+    }
 }

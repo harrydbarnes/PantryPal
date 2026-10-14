@@ -63,6 +63,7 @@ data class InventoryWithItemMap(
     val expirationDate: Long?,
     val storageLocation: String = InventoryEntity.LOCATION_PANTRY,
     val isOpened: Boolean = false,
+    val preferredStore: com.example.pantrypal.data.entity.StoreTag = com.example.pantrypal.data.entity.StoreTag.EITHER,
     // Item fields
     val name: String,
     val barcode: String?,

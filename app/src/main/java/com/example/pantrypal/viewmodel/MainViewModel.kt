@@ -256,6 +256,35 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         prefs.edit().putBoolean("shopping_aisle_mode", enabled).apply()
     }
 
+    val likelyRunningLowStaples = kotlinx.coroutines.flow.combine(repository.likelyRunningLowStaples, repository.getAllItems()) { stock, products ->
+        stock.mapNotNull { batch -> products.firstOrNull { it.itemId == batch.itemId }?.let { it to batch } }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun addLowStaple(item: ItemEntity, batch: InventoryEntity) = shoppingAction {
+        repository.shoppingItemsDao.upsertShoppingItem(item.name, 1.0, "LOW_STOCK", _shoppingWeek.value, unit = batch.unit)
+        markShoppingChanged()
+    }
+    fun cycleShoppingStore(item: ShoppingItemEntity) = shoppingAction {
+        repository.shoppingItemsDao.cycleStore(item.syncId); markShoppingChanged()
+    }
+    fun completeShopAndRestock(store: com.example.pantrypal.data.entity.StoreTag?, removeOnly: Boolean = false, onFinished: (Int) -> Unit = {}) {
+        var count = 0
+        shoppingAction(onSuccess = { onFinished(count) }) {
+            count = if (removeOnly) repository.shoppingItemsDao.removeTickedOnly(_shoppingWeek.value, store)
+                else repository.shoppingItemsDao.completeShopAndRestock(_shoppingWeek.value, store)
+            markShoppingChanged()
+        }
+    }
+    fun markEmptyAndAdd(item: InventoryUiModel, onSaved: (com.example.pantrypal.data.dao.ShoppingListDao.EmptyChange) -> Unit) {
+        var change: com.example.pantrypal.data.dao.ShoppingListDao.EmptyChange? = null
+        shoppingAction(onSuccess = { change?.let(onSaved) }) {
+            change = repository.shoppingItemsDao.markEmptyAndAdd(item.inventoryId, _shoppingWeek.value); markShoppingChanged()
+        }
+    }
+    fun undoEmpty(change: com.example.pantrypal.data.dao.ShoppingListDao.EmptyChange) = shoppingAction {
+        repository.shoppingItemsDao.undoEmpty(change); markShoppingChanged()
+    }
+
     fun quickAddShoppingItem(text: String, onAdded: (KitchenRepository.QuickAddChange) -> Unit) {
         val entry = com.example.pantrypal.util.parseQuickShoppingEntry(text) ?: return
         var change: KitchenRepository.QuickAddChange? = null
@@ -263,7 +292,8 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
             change = repository.quickAddShoppingItem(ShoppingItemEntity(
                 name = entry.name, quantity = entry.quantity, unit = entry.unit,
                 sectionId = ShoppingSectionEntity.ID_THE_REST, weekId = _shoppingWeek.value
-            ), _shoppingWeek.value)
+            ), _shoppingWeek.value, inheritUnit = entry.unit == "pcs" &&
+                !Regex("^\\s*[0-9.,/]+\\s+(?:pcs?|pieces?)\\b", RegexOption.IGNORE_CASE).containsMatchIn(text))
             repository.rememberShoppingItem(entry.name)
             markShoppingChanged()
         }
@@ -332,7 +362,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     val inventoryState: StateFlow<List<InventoryUiModel>> = observe(repository.currentInventory, "inventory")
         .map { list ->
             val totals = list.groupBy { it.itemId }.mapValues { (_, batches) -> batches.sumOf { it.quantity } }
-            list.map { it.toUiModel(totalQuantity = totals[it.itemId] ?: it.quantity) }
+            list.filter { it.quantity > 0 }.map { it.toUiModel(totalQuantity = totals[it.itemId] ?: it.quantity) }
         }.flowOn(Dispatchers.Default)
         .stateIn(
             scope = viewModelScope,

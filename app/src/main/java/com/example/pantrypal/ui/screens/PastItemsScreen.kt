@@ -1,5 +1,8 @@
 package com.example.pantrypal.ui.screens
 
+import com.example.pantrypal.ui.components.expressiveItem
+import com.example.pantrypal.ui.components.expressiveItems
+import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.History
@@ -44,7 +46,7 @@ fun PastItemsScreen(viewModel: MainViewModel) {
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
+        expressiveItem {
             ExpressiveHero(
                 eyebrow = "Pantry history",
                 title = "A little record of what came and went",
@@ -55,7 +57,7 @@ fun PastItemsScreen(viewModel: MainViewModel) {
             )
         }
         if (pastItems.isEmpty()) {
-            item {
+            expressiveItem {
                 FriendlyEmptyState(
                     title = "No pantry history yet",
                     supportingText = "Items will appear here after you mark them finished or wasted.",
@@ -63,7 +65,7 @@ fun PastItemsScreen(viewModel: MainViewModel) {
                 )
             }
         } else {
-            items(pastItems, key = { it.eventId }) { item ->
+            expressiveItems(pastItems, key = { it.eventId }) { item ->
                 PastItemRow(item, dateFormat)
             }
         }

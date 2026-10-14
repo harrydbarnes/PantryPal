@@ -27,7 +27,8 @@ fun ItemEntity.toBackupItem(): BackupItem = BackupItem(
     isUsual = isUsual,
     lowStockThreshold = lowStockThreshold,
     imageUrl = imageUrl,
-    createdAt = createdAt
+    createdAt = createdAt,
+    preferredStore = preferredStore.name
 )
 
 fun BackupItem.toEntity(): ItemEntity = ItemEntity(
@@ -41,7 +42,8 @@ fun BackupItem.toEntity(): ItemEntity = ItemEntity(
     isUsual = isUsual,
     lowStockThreshold = lowStockThreshold,
     imageUrl = imageUrl,
-    createdAt = createdAt
+    createdAt = createdAt,
+    preferredStore = storeFromBackup(preferredStore)
 )
 
 fun InventoryEntity.toBackupInventory(): BackupInventory = BackupInventory(
@@ -52,7 +54,8 @@ fun InventoryEntity.toBackupInventory(): BackupInventory = BackupInventory(
     addedDate = addedDate,
     expirationDate = expirationDate,
     storageLocation = storageLocation,
-    isOpened = isOpened
+    isOpened = isOpened,
+    preferredStore = preferredStore.name
 )
 
 fun BackupInventory.toEntity(): InventoryEntity = InventoryEntity(
@@ -63,7 +66,8 @@ fun BackupInventory.toEntity(): InventoryEntity = InventoryEntity(
     addedDate = addedDate,
     expirationDate = expirationDate,
     storageLocation = storageLocation,
-    isOpened = isOpened
+    isOpened = isOpened,
+    preferredStore = storeFromBackup(preferredStore)
 )
 
 fun ConsumptionEntity.toBackupConsumption(): BackupConsumption = BackupConsumption(
@@ -100,7 +104,8 @@ fun ShoppingItemEntity.toBackupShoppingItem(): BackupShoppingItem = BackupShoppi
     frequency = frequency,
     sectionId = sectionId,
     weekId = weekId,
-    syncId = syncId
+    syncId = syncId,
+    inventoryId = inventoryId, category = category, storeTag = storeTag.name, source = source
 )
 
 fun BackupShoppingItem.toEntity(): ShoppingItemEntity = ShoppingItemEntity(
@@ -113,7 +118,8 @@ fun BackupShoppingItem.toEntity(): ShoppingItemEntity = ShoppingItemEntity(
     frequency = frequency,
     sectionId = sectionId,
     weekId = weekId,
-    syncId = syncId ?: "legacy-item-$shoppingId"
+    syncId = syncId ?: "legacy-item-$shoppingId",
+    inventoryId = inventoryId, category = category ?: "Uncategorised", storeTag = storeFromBackup(storeTag), source = source ?: "MANUAL"
 )
 
 fun ShoppingArchiveEntity.toBackupShoppingArchive(): BackupShoppingArchive =
@@ -320,3 +326,5 @@ data class BackupEntitySnapshot(
         preferences = preferences
     )
 }
+
+private fun storeFromBackup(value: String?) = runCatching { com.example.pantrypal.data.entity.StoreTag.valueOf(value.orEmpty()) }.getOrDefault(com.example.pantrypal.data.entity.StoreTag.EITHER)
