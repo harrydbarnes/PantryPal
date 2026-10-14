@@ -38,12 +38,22 @@ class ShoppingUiTest {
             val list = compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange))
             list.performScrollToNode(hasContentDescription("More options for QA first item"))
             compose.onNodeWithText("QA first item").performClick()
-            // Room updates and the bottom-bar entrance finish independently of the tap.
+            val app = context.applicationContext as PantryPalApplication
             compose.waitUntil(10000) {
-                runCatching {
-                    compose.onNodeWithText("Complete Shop & Restock (", substring = true).assertIsDisplayed()
-                    true
-                }.getOrDefault(false)
+                kotlinx.coroutines.runBlocking { app.database.shoppingListDao().snapshot().any { it.name == "QA first item" && it.isChecked } }
+            }
+            // Capture actual layout bounds if the fixed bottom action is clipped.
+            try {
+                compose.waitUntil(10000) {
+                    runCatching {
+                        compose.onNodeWithText("Complete Shop & Restock (", substring = true).assertIsDisplayed()
+                        true
+                    }.getOrDefault(false)
+                }
+            } catch (failure: Throwable) {
+                println(compose.onRoot(useUnmergedTree = true).printToString())
+                println("SHOPPING_DB=" + kotlinx.coroutines.runBlocking { app.database.shoppingListDao().snapshot() })
+                throw failure
             }
             list.performScrollToNode(hasText("Ticked Items (", substring = true))
             compose.onNodeWithText("QA first item").assertDoesNotExist()
