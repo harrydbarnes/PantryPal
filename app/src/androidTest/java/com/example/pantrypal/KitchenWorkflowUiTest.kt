@@ -62,6 +62,7 @@ class KitchenWorkflowUiTest {
         } }
         compose.onNodeWithText("Household shopping sync connected").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("No account or cloud sync").assertDoesNotExist()
+        compose.onNodeWithText("Backup and household sharing").performScrollTo().assertIsDisplayed()
         captureReviewScreen(compose, "settings-household-data")
     }
 }
