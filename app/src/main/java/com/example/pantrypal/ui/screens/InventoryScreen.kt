@@ -22,6 +22,7 @@ import com.example.pantrypal.ui.components.expressiveItemsIndexed
 import com.example.pantrypal.ui.components.shoppingMotion
 import com.example.pantrypal.ui.components.shoppingSegmentShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import com.example.pantrypal.viewmodel.InventoryUiModel
 import com.example.pantrypal.data.entity.ConsumptionType
@@ -212,6 +213,7 @@ fun InventoryScreen(
             }
         }
         expressiveItems(filteredItems, key = { it.inventoryId }) { item ->
+            var swipeWidth by remember { mutableFloatStateOf(0f) }
             val dismiss = rememberSwipeToDismissBoxState(positionalThreshold = { distance -> distance * 0.5f }, confirmValueChange = { value ->
                 if (value == SwipeToDismissBoxValue.EndToStart && !saving) onMarkEmpty(item) { change ->
                     scope.launch {
@@ -221,12 +223,15 @@ fun InventoryScreen(
                 false
             })
             LaunchedEffect(dismiss, saving) {
-                snapshotFlow { dismiss.dismissDirection == SwipeToDismissBoxValue.EndToStart && dismiss.progress >= 0.5f }
+                snapshotFlow {
+                    swipeWidth > 0f && dismiss.dismissDirection == SwipeToDismissBoxValue.EndToStart &&
+                        -dismiss.requireOffset() >= swipeWidth * 0.5f
+                }
                     .distinctUntilChanged().collect { crossedThreshold ->
                         if (crossedThreshold && !saving) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     }
             }
-            SwipeToDismissBox(state = dismiss, enableDismissFromStartToEnd = false, enableDismissFromEndToStart = !saving,
+            SwipeToDismissBox(modifier = Modifier.onSizeChanged { swipeWidth = it.width.toFloat() }, state = dismiss, enableDismissFromStartToEnd = false, enableDismissFromEndToStart = !saving,
                 backgroundContent = { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.large) {
                     Box(Modifier.padding(16.dp), contentAlignment = Alignment.CenterEnd) { Text("Mark empty & add to shopping") }
                 } }) {
