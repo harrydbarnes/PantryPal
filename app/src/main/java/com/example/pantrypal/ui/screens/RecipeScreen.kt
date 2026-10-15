@@ -947,7 +947,7 @@ private fun RecipeDetailDialog(
                     FilledTonalButton(onClick = onMarkCooked) {
                         Icon(Icons.Default.CheckCircle, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Cooked today")
+                        Text("Cook / record usage")
                     }
                     recipe.source?.url?.let { sourceUrl ->
                         OutlinedButton(onClick = { onOpenSource(sourceUrl) }) {
@@ -964,12 +964,13 @@ private fun RecipeDetailDialog(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             if (missingIngredients.isEmpty()) {
-                                "Nothing missing"
+                                if (recipe.ingredients.isEmpty()) "Add ingredients to check stock" else "This recipe covered"
                             } else {
                                 "Add ${missingIngredients.size} to shop"
                             }
                         )
                     }
+                    Text("This stock check covers one recipe. For several meals sharing ingredients, use Plan → Review shopping list.", style = MaterialTheme.typography.bodySmall)
                     if (recipe.id == 0L) {
                         OutlinedButton(onClick = onSave) {
                             Icon(Icons.Default.Save, contentDescription = null)

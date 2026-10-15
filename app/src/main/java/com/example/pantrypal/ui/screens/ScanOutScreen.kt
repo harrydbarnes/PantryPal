@@ -34,10 +34,26 @@ fun ScanOutScreen(
     onShowSnackbar: (String) -> Unit,
     viewModel: MainViewModel
 ) {
+    val saving by viewModel.saving.collectAsState()
+    val error by viewModel.actionError.collectAsState()
+    androidx.activity.compose.BackHandler(enabled = saving) { }
     var detectedBarcode by remember { mutableStateOf<String?>(null) }
     // Batch mode: Queue of items to consume
-    val scanQueue = remember { mutableStateListOf<InventoryWithItemMap>() }
-    val scanAmounts = remember { mutableStateMapOf<Long, Double>() }
+    val scanQueue = androidx.compose.runtime.saveable.rememberSaveable(saver = androidx.compose.runtime.saveable.listSaver<androidx.compose.runtime.snapshots.SnapshotStateList<InventoryWithItemMap>, String>(
+        save = { entries -> entries.map { com.google.gson.Gson().toJson(it) } },
+        restore = { entries -> entries.map { com.google.gson.Gson().fromJson(it, InventoryWithItemMap::class.java) }.toMutableStateList() }
+    )) { mutableStateListOf<InventoryWithItemMap>() }
+    val scanAmounts = androidx.compose.runtime.saveable.rememberSaveable(saver = androidx.compose.runtime.saveable.listSaver<androidx.compose.runtime.snapshots.SnapshotStateMap<Long, String>, String>(
+        save = { entries -> entries.flatMap { listOf(it.key.toString(), it.value) } },
+        restore = { entries -> mutableStateMapOf<Long, String>().apply { entries.chunked(2).forEach { put(it[0].toLong(), it[1]) } } }
+    )) { mutableStateMapOf<Long, String>() }
+    fun queueBatch(batch: InventoryWithItemMap) {
+        if (scanQueue.none { it.inventoryId == batch.inventoryId }) scanQueue.add(batch)
+        val counted = com.example.pantrypal.util.canonicalShoppingUnit(batch.unit) in setOf("pcs", "pack", "tin", "bottle")
+        scanAmounts[batch.inventoryId] = if (counted)
+            ((scanAmounts[batch.inventoryId]?.toDoubleOrNull() ?: 0.0) + 1.0).coerceAtMost(batch.quantity).toString()
+        else scanAmounts[batch.inventoryId].orEmpty()
+    }
     // State to show selection dialog for duplicate batches
     var duplicateBatches by remember { mutableStateOf<List<InventoryWithItemMap>?>(null) }
 
@@ -51,13 +67,11 @@ fun ScanOutScreen(
         detectedBarcode?.let { code ->
              val currentTime = System.currentTimeMillis()
              if (currentTime - lastScanTime > SCAN_DEBOUNCE_MS) { // 2 second debounce
-                 val inv = viewModel.getInventoryByBarcode(code)
+                 val inv = viewModel.getInventoryByBarcode(code).filter { it.quantity > 0 }
                  if (inv.isNotEmpty()) {
                      // If only one batch, add to queue immediately
                      if (inv.size == 1) {
-                         if (scanQueue.none { it.inventoryId == inv[0].inventoryId }) scanQueue.add(inv[0])
-                         scanAmounts[inv[0].inventoryId] =
-                             ((scanAmounts[inv[0].inventoryId] ?: 0.0) + 1.0).coerceAtMost(inv[0].quantity)
+                         queueBatch(inv[0])
                      } else {
                          // Multiple batches found, let user select
                          duplicateBatches = inv
@@ -88,9 +102,7 @@ fun ScanOutScreen(
                                      .fillMaxWidth()
                                      .padding(vertical = 4.dp)
                                      .clickable {
-                                         if (scanQueue.none { it.inventoryId == item.inventoryId }) scanQueue.add(item)
-                                         scanAmounts[item.inventoryId] =
-                                             ((scanAmounts[item.inventoryId] ?: 0.0) + 1.0).coerceAtMost(item.quantity)
+                                         queueBatch(item)
                                          duplicateBatches = null
                                      },
                                  shape = MaterialTheme.shapes.large,
@@ -112,11 +124,11 @@ fun ScanOutScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().imePadding()) {
         // Scanner taking up most space
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             BarcodeScanner(onBarcodeDetected = { code ->
-                if (detectedBarcode == null && duplicateBatches == null) {
+                if (!saving && detectedBarcode == null && duplicateBatches == null) {
                     detectedBarcode = code
                 }
             })
@@ -158,7 +170,7 @@ fun ScanOutScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .heightIn(min = 240.dp, max = 400.dp)
                     .padding(16.dp),
                 shape = MaterialTheme.shapes.extraLarge,
                 colors = CardDefaults.cardColors(
@@ -166,7 +178,7 @@ fun ScanOutScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Ready to check out", style = MaterialTheme.typography.titleLarge)
+                    Text("Review food used", style = MaterialTheme.typography.titleLarge)
                     Text(
                         "${scanQueue.size} item${if (scanQueue.size == 1) "" else "s"} queued",
                         style = MaterialTheme.typography.bodyMedium,
@@ -180,20 +192,13 @@ fun ScanOutScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(item.name, modifier = Modifier.weight(1f))
-                                IconButton(onClick = {
-                                    val current = scanAmounts[item.inventoryId] ?: 1.0
-                                    scanAmounts[item.inventoryId] = (current - 1.0).coerceAtLeast(0.1)
-                                }) {
-                                    Icon(androidx.compose.material.icons.Icons.Default.Remove, contentDescription = "Reduce amount")
-                                }
-                                Text("${scanAmounts[item.inventoryId] ?: 1.0} ${item.unit}")
-                                IconButton(onClick = {
-                                    val current = scanAmounts[item.inventoryId] ?: 1.0
-                                    scanAmounts[item.inventoryId] = (current + 1.0).coerceAtMost(item.quantity)
-                                }) {
-                                    Icon(androidx.compose.material.icons.Icons.Default.Add, contentDescription = "Increase amount")
-                                }
-                                IconButton(onClick = {
+                                OutlinedTextField(value = scanAmounts[item.inventoryId].orEmpty(), onValueChange = { value ->
+                                    scanAmounts[item.inventoryId] = value
+                                }, label = { Text(item.unit) }, singleLine = true, enabled = !saving,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                                    modifier = Modifier.width(104.dp))
+                                TextButton(enabled = !saving, onClick = { scanAmounts[item.inventoryId] = item.quantity.toString() }) { Text("All") }
+                                IconButton(enabled = !saving, onClick = {
                                     scanQueue.remove(item)
                                     scanAmounts.remove(item.inventoryId)
                                 }) {
@@ -202,22 +207,24 @@ fun ScanOutScreen(
                             }
                         }
                     }
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                         Button(onClick = {
+                         Button(enabled = !saving && scanQueue.all { item -> scanAmounts[item.inventoryId]?.toDoubleOrNull()?.let { it.isFinite() && it > 0 && it <= item.quantity } == true }, onClick = {
                              viewModel.consumeItemAmounts(
-                                 scanQueue.map { it to (scanAmounts[it.inventoryId] ?: 1.0) },
+                                 scanQueue.map { it to requireNotNull(scanAmounts[it.inventoryId]?.toDoubleOrNull()) },
                                  ConsumptionType.FINISHED
-                             )
-                             scanQueue.clear()
-                             scanAmounts.clear()
-                             onDismiss()
+                             ) {
+                                 scanQueue.clear()
+                                 scanAmounts.clear()
+                                 onDismiss()
+                             }
                          }) {
-                             Text("Finish all")
+                             Text(if (saving) "Saving…" else "Save usage")
                          }
-                         OutlinedButton(onClick = {
+                         OutlinedButton(enabled = !saving, onClick = {
                              scanQueue.clear()
                              scanAmounts.clear()
                          }) {

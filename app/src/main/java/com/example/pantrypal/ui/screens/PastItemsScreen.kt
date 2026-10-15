@@ -107,7 +107,7 @@ fun PastItemRow(item: ConsumptionWithItem, dateFormat: DateTimeFormatter) {
             androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
                 Text(text = item.name, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = "${item.quantity} • ${item.category}",
+                    text = "${item.quantity} ${item.unit ?: "(unit not recorded)"} • ${item.category}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

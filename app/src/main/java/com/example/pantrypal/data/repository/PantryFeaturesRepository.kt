@@ -139,6 +139,49 @@ class PantryFeaturesRepository(
         }
     }
 
+    suspend fun prepareCooking(recipe: Recipe, week: String): com.example.pantrypal.util.CookingReview =
+        com.example.pantrypal.util.CookingReview(recipe, kitchenRepository.currentInventory.first(), week)
+
+    suspend fun prepareMealCooking(meal: MealEntity): com.example.pantrypal.util.CookingReview {
+        val source = meal.recipeId?.let { recipeDao.getRecipe(it)?.toDomain() }
+        val ingredients = meal.ingredients.mapIndexed { index, raw ->
+            val parsed = com.example.pantrypal.domain.recipe.RecipeIngredientNormalizer.parse(raw, index)
+            parsed.copy(linkedPantryItemId = source?.ingredients?.firstOrNull { it.normalizedName == parsed.normalizedName }?.linkedPantryItemId)
+        }
+        return com.example.pantrypal.util.CookingReview(
+            Recipe(id = source?.id ?: 0, title = meal.name, ingredients = ingredients, servings = meal.servings),
+            kitchenRepository.currentInventory.first(), meal.week, initialServings = meal.servings, meal = meal, recipeSnapshot = source)
+    }
+
+    suspend fun recordCooking(review: com.example.pantrypal.util.CookingReview,
+        uses: List<Pair<com.example.pantrypal.data.dao.InventoryWithItemMap, Double>>, logOnly: Boolean): com.example.pantrypal.util.CookingRecord = database.withTransaction {
+        val meal = review.meal
+        if (meal != null) check(database.mealDao().getAllMealsSnapshot().firstOrNull { it.mealId == meal.mealId } == meal) {
+            "This meal changed. Close the review and open it again."
+        }
+        review.recipeSnapshot?.let { snapshot ->
+            check(recipeDao.getRecipe(snapshot.id)?.toDomain() == snapshot) { "This recipe changed. Close the review and open it again." }
+        }
+        if (!logOnly) {
+            require(uses.map { it.first.inventoryId }.distinct().size == uses.size) { "A batch can only be used once per review." }
+            uses.forEach { (batch, amount) ->
+                require(batch in review.stock && amount.isFinite() && amount > 0 && amount <= batch.quantity)
+                val current = database.inventoryDao().getById(batch.inventoryId)
+                check(current != null && current.itemId == batch.itemId && current.quantity == batch.quantity && current.unit == batch.unit && current.expirationDate == batch.expirationDate) {
+                    "Pantry stock changed. Close the review and open it again before confirming usage."
+                }
+            }
+            kitchenRepository.stockOperations.consume(uses.map { (batch, amount) ->
+                StockOperations.Use(batch.inventoryId, batch.itemId, amount)
+            }, com.example.pantrypal.data.entity.ConsumptionType.FINISHED, review.week)
+        }
+        val now = System.currentTimeMillis()
+        val recipeId = if (meal == null && review.recipe.id == 0L) saveRecipe(review.recipe.copy(lastCookedAt = now)) else review.recipe.id
+        if (recipeId > 0) recipeDao.getRecipeEntity(recipeId)?.let { recipeDao.updateRecipe(it.copy(lastCookedAt = now, updatedAt = now)) }
+        if (meal != null) database.mealDao().updateMeal(meal.copy(lastCookedAt = now))
+        com.example.pantrypal.util.CookingRecord(now, if (recipeId > 0) recipeDao.getRecipe(recipeId)?.toDomain() else null)
+    }
+
     suspend fun addRecipeToPlan(recipe: Recipe, weekId: String): MealEntity {
         requireValidRecipe(recipe)
         require(weekId.isNotBlank()) { "Meal plan week must not be blank." }
@@ -306,14 +349,18 @@ class PantryFeaturesRepository(
         )
     }
 
-    suspend fun restoreBackupJson(json: String): BackupDecodeResult {
+    suspend fun restoreBackupJson(json: String): BackupDecodeResult =
+        com.example.pantrypal.data.household.HouseholdMutationGate.mutex.withLock {
+        check(context.getSharedPreferences("firebase_household", Context.MODE_PRIVATE).getString("household_id", null) == null) {
+            "Disconnect this device from its shopping household before restoring a full backup. Your partner’s list will stay unchanged."
+        }
         val result = withContext(Dispatchers.Default) {
             backupCodec.decode(json)
         }
         if (result is BackupDecodeResult.Success) {
             restore(result.document.payload)
         }
-        return result
+        result
     }
 
     suspend fun exportHouseholdSnapshot(): String = withContext(Dispatchers.Default) {
@@ -341,11 +388,15 @@ class PantryFeaturesRepository(
         )
     }
 
-    suspend fun importHouseholdSnapshot(json: String): Result<Int> {
+    suspend fun importHouseholdSnapshot(json: String): Result<Int> =
+        com.example.pantrypal.data.household.HouseholdMutationGate.mutex.withLock {
+        if (context.getSharedPreferences("firebase_household", Context.MODE_PRIVATE).getString("household_id", null) != null) {
+            return@withLock Result.failure(IllegalStateException("Disconnect this device from its shopping household before importing a kitchen snapshot."))
+        }
         val result = withContext(Dispatchers.Default) {
             householdCodec.decode(json)
         }
-        return when (result) {
+        when (result) {
             is HouseholdSnapshotDecodeResult.Failure ->
                 Result.failure(IllegalArgumentException(result.errors.joinToString("\n")))
 

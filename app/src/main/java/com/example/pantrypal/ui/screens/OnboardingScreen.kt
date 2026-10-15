@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -48,15 +49,17 @@ import com.example.pantrypal.ui.components.PantryPalSpacing
 import com.example.pantrypal.util.ShoppingReminderSchedule
 import com.example.pantrypal.util.ShoppingReminderTiming
 import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 private data class SetupStep(val eyebrow: String, val title: String, val supportingText: String, val icon: ImageVector)
 
 private val setupSteps = listOf(
     SetupStep("Your shopping routine", "Choose a shop day and an optional nudge", "Start with the rhythm that makes the rest of PantryPal useful. You can fine-tune it in Settings later.", Icons.Default.NotificationsActive),
     SetupStep("Your regulars", "Put the essentials on the list", "Add only the things you buy most weeks. PantryPal will place them in your Every week section.", Icons.Default.ShoppingCart),
-    SetupStep("This week's meals", "Start with the meals you already know", "Add a few familiar dinners. You can move, edit and expand them in your meal plan later.", Icons.Default.RestaurantMenu),
-    SetupStep("Your usual shop", "Save a place for a useful nudge", "Optional: save the shop you are standing in so PantryPal can remind you when you are nearby.", Icons.Default.LocationOn),
-    SetupStep("Ready for this week", "Your routine is ready", "Your shopping rhythm, essentials and meals are in place. Build a list whenever you are ready.", Icons.Default.Eco)
+    SetupStep("This week's meals", "Start with the meals you already know", "Add ingredients with amounts so your first dinner can produce a useful shopping list. Leave unused dinners blank.", Icons.Default.RestaurantMenu),
+    SetupStep("Your cupboard", "Start with something already at home", "Optional: add one item and its expiry date. Shopping review will account for it. Add the rest by scanning or typing in Pantry.", Icons.Default.Eco),
+    SetupStep("Ready for this week", "Your routine is ready", "Save your choices, then review ingredients in this week’s meal plan. Nothing is saved until you finish.", Icons.Default.Eco)
 )
 
 @Composable
@@ -66,12 +69,13 @@ fun OnboardingScreen(
     initialShoppingTimeMinutes: Int,
     initialShoppingReminderTiming: ShoppingReminderTiming,
     onSaveShoppingRoutine: (day: Int, timeMinutes: Int, timing: ShoppingReminderTiming, remindersEnabled: Boolean) -> Unit,
-    onSaveRegulars: (List<String>) -> Unit,
-    onSaveMeals: (List<OnboardingMeal>) -> Unit,
-    onSaveShoppingSpot: (String) -> Unit,
+    onSaveKitchen: (List<String>, List<OnboardingMeal>, OnboardingStock?, () -> Unit) -> Unit,
     onCompleteToMealPlan: (requestNotificationPermission: Boolean) -> Unit,
     onSkip: () -> Unit,
     modifier: Modifier = Modifier,
+    initialShoppingRemindersEnabled: Boolean = false,
+    saving: Boolean = false,
+    error: String? = null,
     householdContent: (@Composable () -> Unit)? = null
 ) {
     var joiningHousehold by rememberSaveable { mutableStateOf(false) }
@@ -79,7 +83,7 @@ fun OnboardingScreen(
     var shoppingDay by rememberSaveable { mutableIntStateOf(initialShoppingDay) }
     var shoppingTime by rememberSaveable { mutableIntStateOf(initialShoppingTimeMinutes) }
     var reminderTimingName by rememberSaveable { mutableStateOf(initialShoppingReminderTiming.name) }
-    var shoppingRemindersEnabled by rememberSaveable { mutableStateOf(false) }
+    var shoppingRemindersEnabled by rememberSaveable { mutableStateOf(initialShoppingRemindersEnabled) }
     var regularsText by rememberSaveable { mutableStateOf("") }
     var firstMeal by rememberSaveable { mutableStateOf("") }
     var secondMeal by rememberSaveable { mutableStateOf("") }
@@ -87,17 +91,35 @@ fun OnboardingScreen(
     var firstMealDay by rememberSaveable { mutableIntStateOf(DayOfWeek.MONDAY.value) }
     var secondMealDay by rememberSaveable { mutableIntStateOf(DayOfWeek.WEDNESDAY.value) }
     var thirdMealDay by rememberSaveable { mutableIntStateOf(DayOfWeek.FRIDAY.value) }
-    var storeName by rememberSaveable { mutableStateOf("") }
-    var saveStoreSpot by rememberSaveable { mutableStateOf(false) }
+    var firstIngredients by rememberSaveable { mutableStateOf("") }
+    var secondIngredients by rememberSaveable { mutableStateOf("") }
+    var thirdIngredients by rememberSaveable { mutableStateOf("") }
+    var stockName by rememberSaveable { mutableStateOf("") }
+    var stockAmount by rememberSaveable { mutableStateOf("1") }
+    var stockUnit by rememberSaveable { mutableStateOf("pcs") }
+    var stockExpiry by rememberSaveable { mutableStateOf("") }
+    val expiry = runCatching { LocalDate.parse(stockExpiry).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
+    val stockValid = stockName.isBlank() || (stockAmount.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true && stockUnit.isNotBlank() && (stockExpiry.isBlank() || expiry != null))
+    val mealsValid = listOf(firstMeal to firstIngredients, secondMeal to secondIngredients, thirdMeal to thirdIngredients).all { (name, ingredients) -> name.isBlank() || onboardingRegulars(ingredients).isNotEmpty() }
+    fun meals() = onboardingMeals(listOf(OnboardingMeal(firstMeal, firstMealDay, onboardingRegulars(firstIngredients)), OnboardingMeal(secondMeal, secondMealDay, onboardingRegulars(secondIngredients)), OnboardingMeal(thirdMeal, thirdMealDay, onboardingRegulars(thirdIngredients))))
     val step = setupSteps[stepIndex]
     val reminderTiming = ShoppingReminderTiming.fromStoredValue(reminderTimingName)
 
     fun finish() {
-        onSaveShoppingRoutine(shoppingDay, shoppingTime, reminderTiming, shoppingRemindersEnabled)
-        onboardingRegulars(regularsText).takeIf(List<String>::isNotEmpty)?.let(onSaveRegulars)
-        onboardingMeals(listOf(OnboardingMeal(firstMeal, firstMealDay), OnboardingMeal(secondMeal, secondMealDay), OnboardingMeal(thirdMeal, thirdMealDay))).takeIf(List<OnboardingMeal>::isNotEmpty)?.let(onSaveMeals)
-        if (saveStoreSpot && storeName.isNotBlank()) onSaveShoppingSpot(storeName.trim())
-        onCompleteToMealPlan(shoppingRemindersEnabled)
+        onSaveKitchen(onboardingRegulars(regularsText), meals(),
+            stockName.trim().takeIf { it.isNotEmpty() }?.let { OnboardingStock(it, stockAmount.toDouble(), stockUnit.trim(), expiry) }) {
+            onSaveShoppingRoutine(shoppingDay, shoppingTime, reminderTiming, shoppingRemindersEnabled)
+            onCompleteToMealPlan(shoppingRemindersEnabled)
+        }
+    }
+
+    if (saving) {
+        BackHandler { }
+        Column(Modifier.fillMaxSize().systemBarsPadding().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            androidx.compose.material3.CircularProgressIndicator()
+            Text("Saving your kitchen…", modifier = Modifier.padding(top = 16.dp))
+        }
+        return
     }
 
     if (joiningHousehold && householdContent != null) {
@@ -111,12 +133,12 @@ fun OnboardingScreen(
         return
     }
 
-    BackHandler(enabled = stepIndex > 0 || isReplay) { if (stepIndex > 0) stepIndex -= 1 else onSkip() }
-    Column(modifier = modifier.fillMaxSize().systemBarsPadding().padding(horizontal = PantryPalSpacing.sm, vertical = PantryPalSpacing.xs)) {
+    BackHandler(enabled = !saving && (stepIndex > 0 || isReplay)) { if (stepIndex > 0) stepIndex -= 1 else onSkip() }
+    Column(modifier = modifier.fillMaxSize().systemBarsPadding().imePadding().padding(horizontal = PantryPalSpacing.sm, vertical = PantryPalSpacing.xs)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) { Icon(Icons.Default.Eco, contentDescription = null, modifier = Modifier.padding(10.dp)) }
             Text("PantryPal", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = PantryPalSpacing.xs).weight(1f))
-            TextButton(onClick = onSkip) { Text(if (isReplay) "Close" else "Skip setup") }
+            TextButton(enabled = !saving, onClick = onSkip) { Text(if (isReplay) "Close" else "Skip setup") }
         }
         LinearProgressIndicator(progress = { (stepIndex + 1).toFloat() / setupSteps.size }, modifier = Modifier.fillMaxWidth().padding(vertical = PantryPalSpacing.xs).semantics { contentDescription = "Setup step ${stepIndex + 1} of ${setupSteps.size}" })
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(PantryPalSpacing.md)) {
@@ -135,15 +157,35 @@ fun OnboardingScreen(
             when (stepIndex) {
                 0 -> ShoppingRoutineSetup(shoppingDay, { shoppingDay = it }, shoppingTime, { shoppingTime = it }, reminderTiming, { reminderTimingName = it.name }, shoppingRemindersEnabled, { shoppingRemindersEnabled = it })
                 1 -> RegularsSetup(regularsText, { regularsText = it })
-                2 -> MealSetup(firstMeal, { firstMeal = it }, firstMealDay, { firstMealDay = it }, secondMeal, { secondMeal = it }, secondMealDay, { secondMealDay = it }, thirdMeal, { thirdMeal = it }, thirdMealDay, { thirdMealDay = it })
-                3 -> ShoppingSpotSetup(storeName, { storeName = it }, saveStoreSpot, { saveStoreSpot = it })
-                else -> SetupSummary(shoppingDay, shoppingTime, reminderTiming, shoppingRemindersEnabled, onboardingRegulars(regularsText).size, onboardingMeals(listOf(OnboardingMeal(firstMeal, firstMealDay), OnboardingMeal(secondMeal, secondMealDay), OnboardingMeal(thirdMeal, thirdMealDay))).size, saveStoreSpot && storeName.isNotBlank())
+                2 -> {
+                    MealEntry("A dinner you plan to make", firstMeal, { firstMeal = it }, firstMealDay, { firstMealDay = it })
+                    if (firstMeal.isNotBlank()) IngredientsEntry(firstIngredients, { firstIngredients = it })
+                    MealEntry("Another dinner (optional)", secondMeal, { secondMeal = it }, secondMealDay, { secondMealDay = it })
+                    if (secondMeal.isNotBlank()) IngredientsEntry(secondIngredients, { secondIngredients = it })
+                    MealEntry("One more dinner (optional)", thirdMeal, { thirdMeal = it }, thirdMealDay, { thirdMealDay = it })
+                    if (thirdMeal.isNotBlank()) IngredientsEntry(thirdIngredients, { thirdIngredients = it })
+                }
+                3 -> {
+                    OutlinedTextField(stockName, { stockName = it }, label = { Text("Item at home (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    if (stockName.isNotBlank()) {
+                        OutlinedTextField(stockAmount, { stockAmount = it }, label = { Text("Amount") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                        OutlinedTextField(stockUnit, { stockUnit = it }, label = { Text("Unit, e.g. g, kg, ml or pcs") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(stockExpiry, { stockExpiry = it }, label = { Text("Expiry date (optional)") }, supportingText = { Text("YYYY-MM-DD, e.g. ${LocalDate.now().plusDays(3)}") }, isError = stockExpiry.isNotBlank() && expiry == null, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    }
+                    Text("Near-store reminders can be set up later in Settings while you are at the shop.")
+                }
+                else -> {
+                    SetupSummary(shoppingDay, shoppingTime, reminderTiming, shoppingRemindersEnabled, onboardingRegulars(regularsText).size, meals().size)
+                    SetupCard("Your pantry", if (stockName.isBlank()) "No stock added yet. Open Pantry to add or scan your first item; recipe suggestions improve as you add stock." else "$stockName will be added${if (expiry == null) " without an expiry date" else " with its expiry date"}.")
+                    if (meals().isEmpty()) SetupCard("Next: your first meal", "No dinners added yet. In Plan, add a dinner and its ingredients before reviewing shopping.")
+                }
             }
         }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Row(modifier = Modifier.fillMaxWidth().padding(top = PantryPalSpacing.xs), horizontalArrangement = Arrangement.spacedBy(PantryPalSpacing.xs)) {
-            if (stepIndex > 0) OutlinedButton(onClick = { stepIndex -= 1 }, modifier = Modifier.weight(1f)) { Text("Back") }
-            Button(onClick = { if (stepIndex == setupSteps.lastIndex) finish() else stepIndex += 1 }, modifier = Modifier.weight(if (stepIndex > 0) 1f else 2f)) {
-                Text(if (stepIndex == setupSteps.lastIndex) "Open this week's meal plan" else "Continue")
+            if (stepIndex > 0) OutlinedButton(enabled = !saving, onClick = { stepIndex -= 1 }, modifier = Modifier.weight(1f)) { Text("Back") }
+            Button(enabled = !saving && (stepIndex != 2 || mealsValid) && (stepIndex != 3 || stockValid) && (stepIndex != setupSteps.lastIndex || (mealsValid && stockValid)), onClick = { if (stepIndex == setupSteps.lastIndex) finish() else stepIndex += 1 }, modifier = Modifier.weight(if (stepIndex > 0) 1f else 2f)) {
+                Text(if (saving) "Saving…" else if (stepIndex == setupSteps.lastIndex) "Save and open meal plan" else "Continue")
                 Spacer(Modifier.width(PantryPalSpacing.xs)); Icon(if (stepIndex == setupSteps.lastIndex) Icons.Default.CalendarMonth else Icons.Default.CheckCircle, contentDescription = null)
             }
         }
@@ -166,12 +208,6 @@ private fun ShoppingRoutineSetup(day: Int, onDayChange: (Int) -> Unit, time: Int
 
 @Composable private fun RegularsSetup(value: String, onChange: (String) -> Unit) { OutlinedTextField(value = value, onValueChange = onChange, label = { Text("Regulars") }, supportingText = { Text("Separate items with commas, e.g. milk, bread, coffee") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
 
-@Composable private fun MealSetup(first: String, onFirstChange: (String) -> Unit, firstDay: Int, onFirstDayChange: (Int) -> Unit, second: String, onSecondChange: (String) -> Unit, secondDay: Int, onSecondDayChange: (Int) -> Unit, third: String, onThirdChange: (String) -> Unit, thirdDay: Int, onThirdDayChange: (Int) -> Unit) {
-    MealEntry("A dinner you plan to make", first, onFirstChange, firstDay, onFirstDayChange)
-    MealEntry("Another dinner (optional)", second, onSecondChange, secondDay, onSecondDayChange)
-    MealEntry("One more dinner (optional)", third, onThirdChange, thirdDay, onThirdDayChange)
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable private fun MealEntry(label: String, value: String, onValueChange: (String) -> Unit, day: Int, onDayChange: (Int) -> Unit) {
     OutlinedTextField(value = value, onValueChange = onValueChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -181,18 +217,15 @@ private fun ShoppingRoutineSetup(day: Int, onDayChange: (Int) -> Unit, time: Int
     }
 }
 
-@Composable private fun ShoppingSpotSetup(storeName: String, onStoreNameChange: (String) -> Unit, saveStoreSpot: Boolean, onSaveStoreSpotChange: (Boolean) -> Unit) {
-    OutlinedTextField(value = storeName, onValueChange = onStoreNameChange, label = { Text("Store name (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-    FilterChip(selected = saveStoreSpot, onClick = { onSaveStoreSpotChange(!saveStoreSpot) }, enabled = storeName.isNotBlank(), leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null) }, label = { Text("Remind me when I'm near this store") }, modifier = Modifier.fillMaxWidth())
-    if (saveStoreSpot) SetupCard("Save the spot you are standing in", "Allow location only if you are at this store now. PantryPal uses Android geofencing, not continuous tracking.")
-}
-
-@Composable private fun SetupSummary(shoppingDay: Int, shoppingTime: Int, timing: ShoppingReminderTiming, remindersEnabled: Boolean, regularsCount: Int, mealCount: Int, savingStoreSpot: Boolean) {
+@Composable private fun SetupSummary(shoppingDay: Int, shoppingTime: Int, timing: ShoppingReminderTiming, remindersEnabled: Boolean, regularsCount: Int, mealCount: Int) {
     val timingLabel = when (timing) { ShoppingReminderTiming.NIGHT_BEFORE -> "the night before"; ShoppingReminderTiming.MORNING_OF -> "the morning of"; ShoppingReminderTiming.HOUR_BEFORE -> "one hour before" }
     SetupCard("Your weekly routine", if (remindersEnabled) "We'll nudge you $timingLabel your ${DayOfWeek.of(shoppingDay).name.lowercase().replaceFirstChar(Char::titlecase)} shop around ${ShoppingReminderSchedule.formatShoppingTime(shoppingTime)}." else "Your usual shop day is ${DayOfWeek.of(shoppingDay).name.lowercase().replaceFirstChar(Char::titlecase)}. You can turn reminders on later in Settings.")
     if (regularsCount > 0) SetupCard("Every week", "$regularsCount regular ${if (regularsCount == 1) "item" else "items"} will be added to your shopping list.")
     if (mealCount > 0) SetupCard("This week's dinners", "$mealCount ${if (mealCount == 1) "meal is" else "meals are"} ready in your meal plan.")
-    if (savingStoreSpot) SetupCard("Near-store reminder", "We'll ask for location so the shopping-list nudge can work when you are nearby.")
 }
 
 @Composable private fun SetupCard(title: String, text: String) { Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) { Column(modifier = Modifier.padding(PantryPalSpacing.sm), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+
+@Composable private fun IngredientsEntry(value: String, onChange: (String) -> Unit) {
+    OutlinedTextField(value, onChange, label = { Text("Shopping ingredients") }, supportingText = { Text("Separate with commas, e.g. 300 g rice, 2 peppers. Use the same name as your pantry item.") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+}

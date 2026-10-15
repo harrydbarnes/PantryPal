@@ -137,7 +137,7 @@ class FirebaseHouseholdSync(
         if (_state.value.working) return
         _state.update { it.copy(working = true, failed = false, status = message) }
         scope.launch {
-            try { mutex.withLock { block() } }
+            try { mutex.withLock { HouseholdMutationGate.mutex.withLock { block() } } }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { _state.update { it.copy(failed = true, status = error.message ?: "Household action failed. Try again.") } }
             finally { _state.update { it.copy(working = false) } }

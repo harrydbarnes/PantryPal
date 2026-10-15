@@ -1,6 +1,8 @@
 package com.example.pantrypal.ui.screens
 
-data class OnboardingMeal(val name: String, val dayOfWeek: Int)
+data class OnboardingMeal(val name: String, val dayOfWeek: Int, val ingredients: List<String> = emptyList())
+
+data class OnboardingStock(val name: String, val quantity: Double, val unit: String, val expiry: Long?)
 
 fun onboardingRegulars(value: String): List<String> =
     value.split(',')

@@ -72,7 +72,8 @@ data class BackupConsumption(
     val date: Long = 0,
     val quantity: Double = 0.0,
     val type: String = "FINISHED",
-    val wasteReason: String? = null
+    val wasteReason: String? = null,
+    val unit: String? = null
 )
 
 data class BackupShoppingSection(
@@ -134,7 +135,8 @@ data class BackupMeal(
     val dayOfWeek: Int = 1,
     val mealSlot: String = "Dinner",
     val recipeId: Long? = null,
-    val servings: Double? = null
+    val servings: Double? = null,
+    val lastCookedAt: Long? = null
 )
 
 data class BackupRecipe(

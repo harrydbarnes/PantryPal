@@ -22,7 +22,7 @@ Household sync is opt-in and shopping-list only. Pantry, meal plans, recipes, re
 
 ## Build and release
 
-The debug workflow builds an APK on pushes. **Release Android Bundle** creates a signed Android App Bundle and signed APK artifact.
+The build workflow publishes the normal debug APK and a separately signed **PantryPal Preview** APK (`pantrypal-preview-apk`). Preview installs alongside the current app with independent local data. See [side-by-side installation](docs/PREVIEW_INSTALLATION.md). **Release Android Bundle** creates the normal signed Android App Bundle and APK artifact.
 
 Release signing is configured through GitHub Actions secrets. Never commit the keystore or its passwords. Google sign-in in a release build also requires the release signing SHA-1 to be registered in Firebase.
 

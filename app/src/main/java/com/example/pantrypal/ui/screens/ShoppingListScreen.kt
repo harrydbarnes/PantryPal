@@ -127,6 +127,23 @@ fun ShoppingListScreen(
     onOpenHousehold: () -> Unit = {},
     household: HouseholdSyncUiState = HouseholdSyncUiState()
 ) {
+    val profile by viewModel.shoppingProfile.collectAsState()
+    val locations by viewModel.shoppingLocations.collectAsState()
+    ShopThemeHost(profile, locations) { themeControls ->
+        ShoppingListContent(viewModel, onScanReceipt, onOpenShoppingTools, onOpenHousehold, household, themeControls)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
+@Composable
+private fun ShoppingListContent(
+    viewModel: MainViewModel,
+    onScanReceipt: () -> Unit,
+    onOpenShoppingTools: () -> Unit,
+    onOpenHousehold: () -> Unit,
+    household: HouseholdSyncUiState,
+    themeControls: @Composable () -> Unit
+) {
     val layout by viewModel.shoppingLayoutState.collectAsState()
     val profile by viewModel.shoppingProfile.collectAsState()
     var newShopName by rememberSaveable { mutableStateOf("") }
@@ -267,7 +284,7 @@ fun ShoppingListScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("${currentWeekDetails?.displayName ?: "Week $selectedWeek"} · ${visibleItems.count { !it.isChecked }} left", style = MaterialTheme.typography.titleMedium)
-                            Text(dates, style = MaterialTheme.typography.bodySmall)
+                            if (!keyboardVisible) Text(dates, style = MaterialTheme.typography.bodySmall)
                         }
                         IconToggleButton(checked = shopMode, onCheckedChange = { shopMode = it }) {
                             Icon(Icons.Outlined.LightMode, contentDescription = stringResource(
@@ -287,7 +304,7 @@ fun ShoppingListScreen(
                         }
                         else if (hasFinishedRegulars) TextButton(enabled = !saving, onClick = { viewModel.prepareNextShop() }) { Text("Prepare next shop") }
                     }
-                    TextButton(onClick = onOpenHousehold, contentPadding = PaddingValues(0.dp)) {
+                    if (!keyboardVisible) TextButton(onClick = onOpenHousehold, contentPadding = PaddingValues(0.dp)) {
                         Icon(Icons.Outlined.Group, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(household.syncLabelRes))
@@ -304,6 +321,10 @@ fun ShoppingListScreen(
             if (loading) expressiveItem { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
             shoppingError?.let { message -> expressiveItem { Text(message, color = MaterialTheme.colorScheme.error) } }
             actionError?.let { message -> expressiveItem { Text(message, color = MaterialTheme.colorScheme.error) } }
+            // Keep the list in view while entering groceries. Restore preparation
+            // controls as soon as the keyboard closes, without changing their state.
+            if (!keyboardVisible) {
+            expressiveItem { themeControls() }
             if (lowStaples.isNotEmpty()) expressiveItem {
                 Text("Likely Running Low", style = MaterialTheme.typography.titleMedium)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -447,6 +468,7 @@ fun ShoppingListScreen(
                         TextButton(onClick = { showAddShop = true }) { Text("Add another shop") }
                     }
                 }
+            }
             }
             if (aisleMode) {
                 val groups = visibleItems.filterNot { it.isChecked }.groupBy { ShoppingAisles.aisleFor(it.name, aisles, layout, inventory.firstOrNull { stock -> normalizeShoppingName(stock.name) == normalizeShoppingName(it.name) }?.category, inventory.firstOrNull { stock -> normalizeShoppingName(stock.name) == normalizeShoppingName(it.name) }?.storageLocation, profile) }

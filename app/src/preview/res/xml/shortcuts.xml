@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <capability android:name="actions.intent.CREATE_ITEM_LIST">
+        <intent android:action="android.intent.action.INSERT"
+            android:targetPackage="com.example.pantrypal.preview" android:targetClass="com.example.pantrypal.MainActivity">
+            <parameter android:name="itemList.itemListElement.name" android:key="voice_item_names" />
+        </intent>
+    </capability>
+    <capability android:name="actions.intent.GET_ITEM_LIST">
+        <intent android:action="com.example.pantrypal.OPEN_SHOPPING"
+            android:targetPackage="com.example.pantrypal.preview" android:targetClass="com.example.pantrypal.MainActivity">
+            <parameter android:name="itemList.name" android:key="shopping_list_name" />
+        </intent>
+    </capability>
+</shortcuts>

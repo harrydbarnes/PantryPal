@@ -227,7 +227,7 @@ abstract class ShoppingListDao {
         val recurring = sections().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
         val before = snapshot().firstOrNull { !it.isChecked && it.name.equals(item.name, true) &&
             (it.weekId == null || it.weekId == weekId || it.sectionId in recurring) && convertShoppingQuantity(1.0, stock.unit, it.unit) != null }
-        val event = logConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = stock.quantity, type = ConsumptionType.FINISHED))
+        val event = logConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = stock.quantity, type = ConsumptionType.FINISHED, unit = stock.unit))
         val after = stock.copy(quantity = 0.0)
         updateStock(after)
         // Another batch still supplies this product; an existing request already supplies its replacement.

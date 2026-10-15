@@ -109,6 +109,15 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
+        create("preview") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            matchingFallbacks += listOf("debug")
+            // Distributed previews use the protected release certificate for reliable updates.
+            // Local/emulator builds can still use the ordinary debug certificate.
+            signingConfig = signingConfigs.getByName(if (releaseSigningConfigured) "release" else "debug")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

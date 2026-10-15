@@ -82,6 +82,7 @@ class ShoppingListDaoTest {
     @Test fun emptySwipeIsAtomicAndUndoRejectsNewerListEdits() = runBlocking {
         val (_, batch) = milk(2.0)
         val change = dao.markEmptyAndAdd(batch, "A")
+        assertEquals(change.before.unit, db.consumptionDao().getAllHistory().single().unit)
         assertEquals(0.0, db.inventoryDao().getById(batch)!!.quantity, 0.0)
         assertEquals(1, db.consumptionDao().getAllHistory().size)
         dao.undoEmpty(change)

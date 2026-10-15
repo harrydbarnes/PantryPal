@@ -84,7 +84,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun MealPlanScreen(
     viewModel: MainViewModel,
-    onOpenRecipes: () -> Unit = {}
+    onOpenRecipes: () -> Unit = {},
+    onCookMeal: (MealEntity) -> Unit = {}
 ) {
     val buildPreview by viewModel.shoppingBuildPreview.collectAsState()
     val saving by viewModel.saving.collectAsState()
@@ -360,6 +361,7 @@ fun MealPlanScreen(
                             onCopy = {
                                 copyingMeal = it
                             },
+                            onCook = onCookMeal,
                             onDelete = viewModel::deleteMeal
                         )
                     }
@@ -376,12 +378,12 @@ fun MealPlanScreen(
             saving = saving,
             error = error,
             onDismiss = { showEditor = false },
-            onSave = { name, day, slot, ingredients ->
+            onSave = { name, day, slot, ingredients, servings ->
                 val existing = editingMeal?.takeIf { it.mealId != 0L }
                 if (existing == null) {
                     viewModel.addMeal(name, displayedWeek, day, slot, ingredients) { showEditor = false }
                 } else {
-                    viewModel.updateMeal(existing, name, day, slot, ingredients) { showEditor = false }
+                    viewModel.updateMeal(existing, name, day, slot, ingredients, servings) { showEditor = false }
                 }
             }
         )
@@ -560,7 +562,8 @@ private fun DaySchedule(
     onAdd: () -> Unit,
     onEdit: (MealEntity) -> Unit,
     onCopy: (MealEntity) -> Unit,
-    onDelete: (MealEntity) -> Unit
+    onDelete: (MealEntity) -> Unit,
+    onCook: (MealEntity) -> Unit
 ) {
     Card(
         shape = MaterialTheme.shapes.large,
@@ -586,7 +589,7 @@ private fun DaySchedule(
             } else {
                 meals.forEachIndexed { index, meal ->
                     if (index > 0) Spacer(Modifier.height(8.dp))
-                    MealRow(meal, onEdit, onCopy, onDelete)
+                    MealRow(meal, onEdit, onCopy, onDelete, onCook)
                 }
             }
         }
@@ -598,7 +601,8 @@ private fun MealRow(
     meal: MealEntity,
     onEdit: (MealEntity) -> Unit,
     onCopy: (MealEntity) -> Unit,
-    onDelete: (MealEntity) -> Unit
+    onDelete: (MealEntity) -> Unit,
+    onCook: (MealEntity) -> Unit
 ) {
     val ingredientSummary = remember(meal.ingredients) { meal.ingredients.joinToString() }
 
@@ -624,6 +628,7 @@ private fun MealRow(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(meal.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                if (meal.lastCookedAt != null) Text("Cooked ${java.time.Instant.ofEpochMilli(meal.lastCookedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate()}", style = MaterialTheme.typography.labelSmall)
                 if (meal.ingredients.isNotEmpty()) {
                     Text(
                         ingredientSummary,
@@ -633,6 +638,9 @@ private fun MealRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+            }
+            IconButton(onClick = { onCook(meal) }) {
+                Icon(Icons.Default.Restaurant, contentDescription = "Cook ${meal.name}")
             }
             IconButton(onClick = { onCopy(meal) }) {
                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy ${meal.name} to other week")
@@ -679,13 +687,14 @@ private fun MealEditorDialog(
     onDismiss: () -> Unit,
     saving: Boolean,
     error: String?,
-    onSave: (String, Int, String, List<String>) -> Unit
+    onSave: (String, Int, String, List<String>, Double) -> Unit
 ) {
     var name by rememberSaveable(meal?.mealId) { mutableStateOf(meal?.name.orEmpty()) }
     var ingredients by rememberSaveable(meal?.mealId) { mutableStateOf(meal?.ingredients?.toList().orEmpty()) }
     var day by rememberSaveable(meal?.mealId) { mutableIntStateOf(meal?.dayOfWeek ?: 1) }
     var slot by rememberSaveable(meal?.mealId) { mutableStateOf(meal?.mealSlot ?: MealEntity.SLOT_DINNER) }
     var addIngredientDialogVisible by rememberSaveable(meal?.mealId) { mutableStateOf(false) }
+    var servingsText by rememberSaveable(meal?.mealId) { mutableStateOf((meal?.servings ?: MealEntity.DEFAULT_SERVINGS).toString()) }
     var additionalIngredient by rememberSaveable(meal?.mealId) { mutableStateOf("") }
 
     val ingredientChoices = remember(ingredientSuggestions, ingredients) {
@@ -750,6 +759,12 @@ private fun MealEditorDialog(
                         }
                     }
                 }
+                if (meal != null && meal.mealId != 0L) expressiveItem {
+                    OutlinedTextField(servingsText, { servingsText = it }, label = { Text("Planned servings") },
+                        supportingText = { Text("Changing servings scales measured ingredients from ${meal.servings} servings. Unmeasured ingredients need review.") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                }
                 expressiveItem {
                     Text("Shopping ingredients", style = MaterialTheme.typography.labelLarge)
                     Text(
@@ -798,9 +813,9 @@ private fun MealEditorDialog(
             if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
             Button(
                 onClick = {
-                    onSave(name, day, slot, ingredients)
+                    onSave(name, day, slot, ingredients, servingsText.toDouble())
                 },
-                enabled = name.isNotBlank() && !saving
+                enabled = name.isNotBlank() && !saving && servingsText.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true
             ) { Text(if (saving) "Saving…" else "Save") }
             }
         },

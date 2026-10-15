@@ -47,3 +47,16 @@ fun normalizedIngredients(raw: List<String>): List<String> = raw
 
 fun mealsForShopping(meals: List<MealEntity>, week: String): List<String> =
     meals.filter { it.week == week }.flatMap { it.ingredients }.map(String::trim).filter(String::isNotEmpty)
+
+/** Preserve unmeasured ingredients; scale only explicit quantities when planned portions change. */
+fun scaleMealIngredients(ingredients: List<String>, factor: Double): List<String> {
+    require(factor.isFinite() && factor > 0)
+    return ingredients.map { raw ->
+        val ingredient = com.example.pantrypal.domain.recipe.RecipeIngredientNormalizer.parse(raw)
+        ingredient.quantity?.let {
+            val quantity = it * factor
+            require(quantity.isFinite()) { "The scaled ingredient amount is too large. Review servings." }
+            shoppingIngredientText(ingredient.name, quantity, ingredient.unit ?: "pcs")
+        } ?: raw
+    }
+}
