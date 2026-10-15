@@ -115,11 +115,13 @@ jobs:
         run: bash .github/scripts/prepare-preview-signing.sh
       - name: Build signed side-by-side preview APK
         run: bash .github/scripts/gradle-with-bounded-retry.sh ./gradlew :app:assemblePreview --build-cache --configuration-cache --stacktrace
+      - name: Verify preview identity and signing certificate
+        run: bash .github/scripts/verify-preview-apk.sh
       - name: Upload PantryPal Preview APK
         uses: actions/upload-artifact@v7
         with:
           name: pantrypal-preview-apk
-          path: app/build/outputs/apk/preview/app-preview.apk
+          path: app/build/distribution/preview/
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
