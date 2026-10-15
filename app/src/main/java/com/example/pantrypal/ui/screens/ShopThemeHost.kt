@@ -24,6 +24,8 @@ import com.google.android.gms.location.*
 import kotlinx.coroutines.delay
 
 /** Device-local theme per aisle profile; coordinates never leave the existing location store. */
+// Foreground permission is checked on resume and before subscribing; revocation is caught below.
+@android.annotation.SuppressLint("MissingPermission")
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ShopThemeHost(
