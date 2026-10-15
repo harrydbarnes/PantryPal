@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -109,7 +110,7 @@ internal fun ShopThemeHost(
                         ShopPalette.entries.forEach { choice ->
                             FilterChip(selected = palette == choice, onClick = {
                                 palette = choice
-                                prefs.edit().putString("${prefix}_palette", choice.name).apply()
+                                prefs.edit { putString("${prefix}_palette", choice.name) }
                             }, label = { Text(choice.label) })
                         }
                     }
@@ -118,7 +119,7 @@ internal fun ShopThemeHost(
                             listOf(false to "While shopping", true to "Only near saved shop").forEach { (nearby, label) ->
                                 FilterChip(selected = nearbyOnly == nearby, onClick = {
                                     nearbyOnly = nearby
-                                    prefs.edit().putBoolean("${prefix}_nearby", nearby).apply()
+                                    prefs.edit { putBoolean("${prefix}_nearby", nearby) }
                                 }, label = { Text(label) })
                             }
                         }
@@ -129,7 +130,7 @@ internal fun ShopThemeHost(
                                 locations.forEach { location ->
                                     FilterChip(selected = spotId == location.id, onClick = {
                                         spotId = location.id
-                                        prefs.edit().putString("${prefix}_spot", location.id).apply()
+                                        prefs.edit { putString("${prefix}_spot", location.id) }
                                     }, label = { Text(location.name) })
                                 }
                             }
