@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Purpose-built silhouette, not a tinted rectangle from the colour bitmap. -->
+    <path android:fillColor="#00000000" android:strokeColor="#000000"
+        android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:pathData="M43,51 C43,23 66,23 66,51" />
+    <path android:fillColor="#000000"
+        android:pathData="M31,52 Q30,49 33,50 Q54,58 75,50 Q78,49 77,53 L74,72 Q73,79 66,79 L42,79 Q35,79 34,72 Z" />
+    <path android:fillColor="#000000"
+        android:pathData="M45,54 C39,47 33,44 34,37 C42,37 47,44 45,54 Z M45,48 C45,40 50,35 56,34 C57,42 52,47 45,48 Z M41,42 C33,40 29,34 31,28 C39,29 43,34 41,42 Z M64,53 C59,50 59,43 64,41 C70,38 76,43 74,49 L72,53 Z" />
+</vector>
