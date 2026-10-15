@@ -127,6 +127,23 @@ fun ShoppingListScreen(
     onOpenHousehold: () -> Unit = {},
     household: HouseholdSyncUiState = HouseholdSyncUiState()
 ) {
+    val profile by viewModel.shoppingProfile.collectAsState()
+    val locations by viewModel.shoppingLocations.collectAsState()
+    ShopThemeHost(profile, locations) { themeControls ->
+        ShoppingListContent(viewModel, onScanReceipt, onOpenShoppingTools, onOpenHousehold, household, themeControls)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
+@Composable
+private fun ShoppingListContent(
+    viewModel: MainViewModel,
+    onScanReceipt: () -> Unit,
+    onOpenShoppingTools: () -> Unit,
+    onOpenHousehold: () -> Unit,
+    household: HouseholdSyncUiState,
+    themeControls: @Composable () -> Unit
+) {
     val layout by viewModel.shoppingLayoutState.collectAsState()
     val profile by viewModel.shoppingProfile.collectAsState()
     var newShopName by rememberSaveable { mutableStateOf("") }
@@ -301,6 +318,7 @@ fun ShoppingListScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
+            expressiveItem { themeControls() }
             if (loading) expressiveItem { androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth()) }
             shoppingError?.let { message -> expressiveItem { Text(message, color = MaterialTheme.colorScheme.error) } }
             actionError?.let { message -> expressiveItem { Text(message, color = MaterialTheme.colorScheme.error) } }

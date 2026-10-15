@@ -303,6 +303,11 @@ private fun AppearanceSettingsCard(
             enabled = dynamicColorAvailable,
             onCheckedChange = onDynamicColorChange
         )
+        Text(
+            "Shop colours: open Shopping → Shop theme to choose colours for each shop profile, optionally only near a saved shop.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
