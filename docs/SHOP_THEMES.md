@@ -2,6 +2,8 @@
 
 Open **Shopping → Shop theme**. Choose a colour inspired by a shop; select **PantryPal** to restore the usual appearance, including wallpaper colours. Choices are local to this device and aisle profile. They do not change shared shopping data or item store filters.
 
+Available shops: Tesco, Aldi, Lidl, Sainsbury’s, Asda, Morrisons, Waitrose, M&S, Co-op, Iceland, The Food Warehouse and Farmfoods.
+
 **While shopping** applies the accent while this screen is open. **Only near saved shop** also requires selecting a location saved in **Settings → Nearby shopping nudges**. Saving a location does not require enabling background reminders. Location permission is requested only after tapping the permission button.
 
 The proximity option requests foreground fixes only while the shopping screen is resumed. It stops on navigation or backgrounding. It requires a fix less than 90 seconds old whose accuracy circle fits within the saved radius. Missing, stale, approximate or unavailable location keeps the usual theme. No retailer lookup or location upload is added.

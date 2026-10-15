@@ -14,7 +14,10 @@ enum class ShopPalette(val label: String, val light: Long, val dark: Long) {
     MORRISONS("Morrisons", 0xFF006747, 0xFF76DBAD),
     WAITROSE("Waitrose", 0xFF526500, 0xFFC2D773),
     M_AND_S("M&S", 0xFF4B6138, 0xFFB0D194),
-    CO_OP("Co-op", 0xFF00677E, 0xFF79D3ED);
+    CO_OP("Co-op", 0xFF00677E, 0xFF79D3ED),
+    ICELAND("Iceland", 0xFFA51C30, 0xFFFFB3BD),
+    FOOD_WAREHOUSE("The Food Warehouse", 0xFFA33216, 0xFFFFB59B),
+    FARMFOODS("Farmfoods", 0xFF00529B, 0xFF9ECBFF);
 
     fun applyTo(base: ColorScheme, darkTheme: Boolean): ColorScheme {
         if (this == NONE) return base
