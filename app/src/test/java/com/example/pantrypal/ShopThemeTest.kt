@@ -4,6 +4,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.compositeOver
 import com.example.pantrypal.ui.theme.ShopPalette
 import com.example.pantrypal.util.ShopThemeProximity
 import org.junit.Assert.*
@@ -24,7 +25,10 @@ class ShopThemeTest {
                     scheme.primaryContainer to scheme.onPrimaryContainer,
                     scheme.secondary to scheme.onSecondary,
                     scheme.secondaryContainer to scheme.onSecondaryContainer).forEach { (bg, fg) ->
-                    assertTrue("${palette.name} dark=$dark text contrast", contrast(bg, fg) >= 4.5f)
+                    listOf(1f, 0.82f, 0.78f).forEach { alpha ->
+                        assertTrue("${palette.name} dark=$dark alpha=$alpha text contrast",
+                            contrast(bg, fg.copy(alpha = alpha).compositeOver(bg)) >= 4.5f)
+                    }
                 }
                 assertTrue("${palette.name} control contrast", contrast(scheme.primary, scheme.surface) >= 3f)
                 assertEquals(base.error, scheme.error)

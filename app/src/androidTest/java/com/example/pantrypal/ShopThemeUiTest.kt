@@ -2,6 +2,8 @@ package com.example.pantrypal
 
 import android.content.Context
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -25,7 +27,9 @@ class ShopThemeUiTest {
     @Test fun manualThemeAndMissingLocationFallbackAreExplicit() {
         compose.setContent { MaterialTheme {
             ShopThemeHost("test", emptyList()) { controls ->
-                Column(Modifier.verticalScroll(rememberScrollState())) { controls() }
+                Surface(Modifier.fillMaxSize()) {
+                    Column(Modifier.verticalScroll(rememberScrollState())) { controls() }
+                }
             }
         } }
         compose.onNodeWithText("Shop theme").performClick()
@@ -46,11 +50,13 @@ class ShopThemeUiTest {
             .putString("shop_theme_test_palette", "SAINSBURYS").commit()
         compose.setContent { MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme()) {
             ShopThemeHost("test", emptyList()) { controls ->
+                Surface(Modifier.fillMaxSize()) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     controls()
                     androidx.compose.material3.Text("Shopping list", style = MaterialTheme.typography.titleLarge)
                     androidx.compose.material3.Button(onClick = {}) { androidx.compose.material3.Text("Finish shop") }
                     androidx.compose.material3.Text("Could not save. Try again.", color = MaterialTheme.colorScheme.error)
+                }
                 }
             }
         } }
