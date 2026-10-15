@@ -40,4 +40,23 @@ class ShopThemeUiTest {
         compose.onNodeWithText("PantryPal", substring = false).performScrollTo().performClick()
         compose.onNodeWithText("Shop theme").assertExists()
     }
+    @Test fun darkThemeKeepsActionsAndWarningsReadable() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences(AppPreferences.FILE_NAME, Context.MODE_PRIVATE).edit()
+            .putString("shop_theme_test_palette", "SAINSBURYS").commit()
+        compose.setContent { MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme()) {
+            ShopThemeHost("test", emptyList()) { controls ->
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    controls()
+                    androidx.compose.material3.Text("Shopping list", style = MaterialTheme.typography.titleLarge)
+                    androidx.compose.material3.Button(onClick = {}) { androidx.compose.material3.Text("Finish shop") }
+                    androidx.compose.material3.Text("Could not save. Try again.", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        } }
+        compose.onNodeWithText("Sainsbury’s colours · Theme").assertIsDisplayed()
+        compose.onNodeWithText("Finish shop").assertIsDisplayed()
+        captureReviewScreen(compose, "shop-theme-dark")
+    }
+
 }
