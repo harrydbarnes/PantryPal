@@ -71,6 +71,13 @@ test('record writes require membership, author and an atomic revision increment'
   spoof.update(state(db), {revision: 2, ...author()});
   await assertFails(spoof.commit());
 });
+test('protocol 4 cannot be reset to protocol 3 migration', async () => {
+  const db = user('owner');
+  await ready(db);
+  await assertFails(updateDoc(state(db), {
+    protocol: 3, phase: 'migrating', revision: 0, ...author()
+  }));
+});
 test('only tombstones older than 30 days can be compacted', async () => {
   const db = user('owner'); await ready(db);
   await env.withSecurityRulesDisabled(async ctx => setDoc(record(ctx.firestore()), {
