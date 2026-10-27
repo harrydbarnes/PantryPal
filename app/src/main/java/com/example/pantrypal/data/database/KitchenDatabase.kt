@@ -58,7 +58,7 @@ import com.google.gson.Gson
         com.example.pantrypal.data.entity.ReceiptImportEntity::class,
         com.example.pantrypal.data.entity.ShoppingIngestEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -221,6 +221,13 @@ abstract class KitchenDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meals ADD COLUMN lastCookedAt INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE consumption_history ADD COLUMN unit TEXT DEFAULT NULL")
+            }
+        }
+
         fun getDatabase(context: Context): KitchenDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -237,7 +244,8 @@ abstract class KitchenDatabase : RoomDatabase() {
                     MIGRATION_6_7,
                     MIGRATION_7_8,
                     MIGRATION_8_9,
-                    MIGRATION_9_10
+                    MIGRATION_9_10,
+                    MIGRATION_10_11
                 )
                 .addCallback(object : Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {

@@ -512,14 +512,17 @@ class KitchenRepository(
 
     /** Adds starter dinners once, even if onboarding is run again later. */
     suspend fun addOnboardingMeals(meals: List<MealEntity>) {
-        val existingWeekAMeals = mealDao.getAllMealsSnapshot()
-            .filter { it.week == MealEntity.WEEK_A }
-            .map { it.name }
-        onboardingNamesMissingFrom(existingWeekAMeals, meals.map { it.name }).forEach { name ->
-            val source = meals.first { it.name.trim().equals(name, ignoreCase = true) }
-            val meal = source.copy(name = name)
+        val existing = mealDao.getAllMealsSnapshot().toMutableList()
+        meals.forEach { source ->
+            val meal = source.copy(name = source.name.trim())
             requireValidMeal(meal)
-            mealDao.insertMeal(meal)
+            val previous = existing.firstOrNull { it.week == meal.week && normalizeShoppingName(it.name) == normalizeShoppingName(meal.name) }
+            if (previous == null) {
+                mealDao.insertMeal(meal)
+                existing += meal
+            } else if (previous.ingredients.isEmpty() && meal.ingredients.isNotEmpty()) {
+                mealDao.updateMeal(previous.copy(ingredients = meal.ingredients))
+            }
         }
     }
 
@@ -536,6 +539,13 @@ class KitchenRepository(
     }
 
 
+    suspend fun matchingProducts(name: String, unit: String): List<ItemEntity> = itemDao.getAllItemsSnapshot().filter {
+        it.name.trim().equals(name.trim(), ignoreCase = true) &&
+            com.example.pantrypal.util.convertShoppingQuantity(1.0, unit, it.defaultUnit) != null
+    }
+
+    suspend fun getProduct(id: Long): ItemEntity? = itemDao.getItemById(id)
+
     // Smart Restock Logic
     suspend fun getRestockSuggestions(currentTime: Long): List<ItemEntity> {
         val candidateIds = consumptionDao.getRestockCandidates(currentTime)
@@ -550,11 +560,10 @@ class KitchenRepository(
             itemDao.getItemsByIds(candidateIds.filterNot(inStockCandidateIds::contains))
         }
 
-        val inventoryTotals = inventoryDao.getAllInventorySnapshot()
-            .groupBy { it.itemId }
-            .mapValues { (_, batches) -> batches.sumOf { it.quantity } }
+        val batches = inventoryDao.getAllInventorySnapshot().groupBy { it.itemId }
         val usualAndLow = itemDao.getAllItemsSnapshot().filter { item ->
-            item.isUsual && (inventoryTotals[item.itemId] ?: 0.0) <= (item.lowStockThreshold ?: 0.0)
+            item.isUsual && com.example.pantrypal.util.stockQuantityInUnit(batches[item.itemId].orEmpty(), item.defaultUnit, currentTime)
+                ?.let { it <= (item.lowStockThreshold ?: 0.0) } == true
         }
 
         return (usualAndLow + consumedAndOutOfStock).distinctBy { it.itemId }

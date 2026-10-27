@@ -1,0 +1,2 @@
+id,severity,priority,category,component,files,description,status,verification
+BUG-001,high,P1,integration and data integrity,Firestore household sync rules,"firebase/firestore.rules; firebase/rules.test.mjs",Protocol 4 can be reset to protocol 3 migration,fixed and emulator verified; undeployed,Regression failed before fix; all 8 emulator tests passed after fix

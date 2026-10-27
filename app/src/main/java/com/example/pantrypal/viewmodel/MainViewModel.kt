@@ -133,6 +133,22 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         prefs.edit().putLong(AppPreferences.KEY_LAST_SHOPPING_CHANGE, changedAt).apply()
     }
 
+    fun reloadRestoredPreferences() {
+        val context = getApplication<Application>()
+        _appSettings.value = AppPreferences.readSettings(context)
+        _addItemDefaults.value = AppPreferences.readAddItemDefaults(context)
+        _shoppingLocations.value = ShoppingLocationStore.read(context)
+        _hasCompletedOnboarding.value = prefs.getBoolean(AppPreferences.KEY_ONBOARDING_COMPLETE, false)
+        _hasSeenMealPlanIntro.value = prefs.getBoolean(AppPreferences.KEY_MEAL_PLAN_INTRO_SEEN, false)
+        _hasSeenSettingsIntro.value = prefs.getBoolean(AppPreferences.KEY_SETTINGS_INTRO_SEEN, false)
+        _mealPlanStyle.value = prefs.getString("meal_plan_style", null)
+        setCurrentWeek(prefs.getString("current_week", MealEntity.WEEK_A) ?: MealEntity.WEEK_A)
+        setShoppingWeek(_currentWeek.value)
+        dismissShoppingBuildPreview()
+        _manualProductChoice.value = null
+        markShoppingChanged()
+    }
+
     fun setCurrentWeek(week: String) {
         _currentWeek.value = week
         prefs.edit()
@@ -389,8 +405,10 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
     // UI State for Inventory
     val inventoryState: StateFlow<List<InventoryUiModel>> = observe(repository.currentInventory, "inventory")
         .map { list ->
-            val totals = list.groupBy { it.itemId }.mapValues { (_, batches) -> batches.sumOf { it.quantity } }
-            list.filter { it.quantity > 0 }.map { it.toUiModel(totalQuantity = totals[it.itemId] ?: it.quantity) }
+            val totals = list.groupBy { it.itemId }.mapValues { (_, batches) -> com.example.pantrypal.util.stockQuantityInUnit(batches.map { batch ->
+                InventoryEntity(inventoryId = batch.inventoryId, itemId = batch.itemId, quantity = batch.quantity, unit = batch.unit, expirationDate = batch.expirationDate)
+            }, batches.first().defaultUnit) }
+            list.filter { it.quantity > 0 }.map { it.toUiModel(totalQuantity = totals[it.itemId]) }
         }.flowOn(Dispatchers.Default)
         .stateIn(
             scope = viewModelScope,
@@ -547,28 +565,34 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         action { repository.addOnboardingRegulars(regulars) }
     }
 
-    fun addOnboardingMeals(meals: List<Pair<String, Int>>) {
-        action {
-            repository.addOnboardingMeals(
-                meals.map { (name, dayOfWeek) ->
-                    MealEntity(
-                        name = name.trim(),
-                        week = MealEntity.WEEK_A,
-                        ingredients = emptyList(),
-                        dayOfWeek = dayOfWeek.coerceIn(1, 7),
-                        mealSlot = MealEntity.SLOT_DINNER
-                    )
-                }
-            )
+    fun saveOnboardingKitchen(
+        regulars: List<String>,
+        meals: List<com.example.pantrypal.ui.screens.OnboardingMeal>,
+        stock: com.example.pantrypal.ui.screens.OnboardingStock?,
+        onSaved: () -> Unit
+    ) = action(onSaved) {
+        repository.transaction {
+            repository.addOnboardingRegulars(regulars)
+            repository.addOnboardingMeals(meals.map { meal ->
+                MealEntity(name = meal.name.trim(), week = _currentWeek.value,
+                    ingredients = normalizedIngredients(meal.ingredients), dayOfWeek = meal.dayOfWeek.coerceIn(1, 7), mealSlot = MealEntity.SLOT_DINNER)
+            })
+            stock?.let {
+                val id = repository.insertItem(ItemEntity(name = it.name, defaultUnit = it.unit, category = "General"))
+                require(id != -1L) { "Could not save your first pantry item. Try again." }
+                repository.addInventory(InventoryEntity(itemId = id, quantity = it.quantity, unit = it.unit, expirationDate = it.expiry))
+            }
         }
     }
 
-    fun updateMeal(meal: MealEntity, name: String, dayOfWeek: Int, mealSlot: String, ingredients: List<String>, onSaved: () -> Unit = {}) {
+    fun updateMeal(meal: MealEntity, name: String, dayOfWeek: Int, mealSlot: String, ingredients: List<String>, servings: Double = meal.servings, onSaved: () -> Unit = {}) {
         action(onSaved) {
             repository.updateMeal(
                 meal.copy(
                     name = name.trim(),
-                    ingredients = normalizedIngredients(ingredients),
+                    ingredients = com.example.pantrypal.util.scaleMealIngredients(normalizedIngredients(ingredients), servings / meal.servings),
+                    servings = servings,
+                    recipeId = meal.recipeId.takeIf { normalizedIngredients(ingredients) == meal.ingredients },
                     dayOfWeek = dayOfWeek.coerceIn(1, 7),
                     mealSlot = mealSlot
                 )
@@ -586,7 +610,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     it.name.equals(meal.name, ignoreCase = true)
             }
             if (!alreadyExists) {
-                repository.insertMeal(meal.copy(mealId = 0, week = targetWeek))
+                repository.insertMeal(meal.copy(mealId = 0, week = targetWeek, lastCookedAt = null))
             }
         }
     }
@@ -603,7 +627,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                 .forEach { meal ->
                 val key = Triple(meal.name.lowercase(), meal.dayOfWeek, meal.mealSlot)
                 if (key !in targetKeys) {
-                    repository.insertMeal(meal.copy(mealId = 0, week = targetWeek))
+                    repository.insertMeal(meal.copy(mealId = 0, week = targetWeek, lastCookedAt = null))
                 }
             }
           }
@@ -691,6 +715,11 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         }
     }
 
+    data class ManualProductChoice(val name: String, val products: List<ItemEntity>, val choose: (Long?) -> Unit)
+    private val _manualProductChoice = MutableStateFlow<ManualProductChoice?>(null)
+    val manualProductChoice = _manualProductChoice.asStateFlow()
+    fun cancelManualProductChoice() { _manualProductChoice.value = null }
+
     fun addItem(
         name: String,
         quantity: Double,
@@ -705,11 +734,29 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         lowStockThreshold: Double? = null,
         storageLocation: String = InventoryEntity.LOCATION_PANTRY,
         isOpened: Boolean = false,
+        existingProductId: Long? = null,
+        forceNewProduct: Boolean = false,
         onSaved: () -> Unit = {}
     ) {
-        action(onSaved) {
+        action {
+          if (barcode.isNullOrBlank() && existingProductId == null && !forceNewProduct) {
+              val matches = repository.matchingProducts(name, unit)
+              if (matches.isNotEmpty()) {
+                  _manualProductChoice.value = ManualProductChoice(name, matches) { selected ->
+                      addItem(name, quantity, unit, category, isVeg, isGlutenFree, barcode, expirationDate,
+                          imageUrl, isUsual, lowStockThreshold, storageLocation, isOpened,
+                          existingProductId = selected, forceNewProduct = selected == null,
+                          onSaved = { _manualProductChoice.value = null; onSaved() })
+                  }
+                  return@action
+              }
+          }
           repository.transaction {
-            var itemId: Long = -1
+            var itemId: Long = existingProductId ?: -1L
+            if (existingProductId != null) {
+                val product = requireNotNull(repository.getProduct(existingProductId)) { "That product was removed. Cancel and choose again." }
+                require(product.name.trim().equals(name.trim(), ignoreCase = true) && com.example.pantrypal.util.convertShoppingQuantity(1.0, unit, product.defaultUnit) != null) { "The product changed. Cancel and choose again." }
+            }
 
             if (!barcode.isNullOrEmpty()) {
                  val existingItem = repository.getItemByBarcode(barcode)
@@ -733,6 +780,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                 itemId = repository.insertItem(item)
             }
 
+            require(itemId != -1L) { "That barcode was added elsewhere. Try saving again." }
             if (itemId != -1L) {
                 val inventory = InventoryEntity(
                     itemId = itemId,
@@ -743,7 +791,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     isOpened = isOpened
                 )
                 repository.addInventory(inventory)
-                if (isUsual || lowStockThreshold != null) {
+                if (existingProductId == null && (isUsual || lowStockThreshold != null)) {
                     repository.updateStockSettings(itemId, isUsual, lowStockThreshold)
                 }
                 val defaults = AddItemDefaults(
@@ -759,6 +807,7 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
                     .apply()
             }
           }
+          onSaved()
         }
     }
 
@@ -770,14 +819,14 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         return repository.getInventoryByBarcode(barcode)
     }
 
-    fun consumeItem(inventoryId: Long, itemId: Long, quantity: Double, type: ConsumptionType, reason: String? = null) = action {
+    fun consumeItem(inventoryId: Long, itemId: Long, quantity: Double, type: ConsumptionType, reason: String? = null, onSaved: () -> Unit = {}) = action(onSaved) {
         repository.stockOperations.consume(listOf(com.example.pantrypal.data.repository.StockOperations.Use(inventoryId, itemId, quantity)), type, _shoppingWeek.value, reason)
         markShoppingChanged()
     }
 
     fun consumeItems(items: List<InventoryWithItemMap>, type: ConsumptionType) = consumeItemAmounts(items.map { it to minOf(1.0, it.quantity) }, type)
 
-    fun consumeItemAmounts(items: List<Pair<InventoryWithItemMap, Double>>, type: ConsumptionType) = action {
+    fun consumeItemAmounts(items: List<Pair<InventoryWithItemMap, Double>>, type: ConsumptionType, onSaved: () -> Unit = {}) = action(onSaved) {
         repository.stockOperations.consume(items.map { (item, amount) -> com.example.pantrypal.data.repository.StockOperations.Use(item.inventoryId, item.itemId, amount) }, type, _shoppingWeek.value)
         markShoppingChanged()
     }
@@ -953,16 +1002,18 @@ data class InventoryUiModel(
     val isOpened: Boolean,
     val isUsual: Boolean,
     val lowStockThreshold: Double?,
+    val stockUnit: String = unit,
     val tags: List<String>,
     val imageUrl: String? = null,
     val isRestockNeeded: Boolean = false,
     val addedDate: Long
 )
 
-fun InventoryWithItemMap.toUiModel(totalQuantity: Double = quantity): InventoryUiModel {
+fun InventoryWithItemMap.toUiModel(totalQuantity: Double? = com.example.pantrypal.util.convertShoppingQuantity(quantity, unit, defaultUnit)): InventoryUiModel {
     val tags = mutableListOf<String>()
     if (isVegetarian) tags.add("Veg")
     if (isGlutenFree) tags.add("GF")
+    if (totalQuantity == null) tags.add("Check stock units")
 
     val status = classifyExpiry(expirationDate)
     return InventoryUiModel(
@@ -980,9 +1031,10 @@ fun InventoryWithItemMap.toUiModel(totalQuantity: Double = quantity): InventoryU
         isOpened = isOpened,
         isUsual = isUsual,
         lowStockThreshold = lowStockThreshold,
+        stockUnit = defaultUnit,
         tags = tags,
         imageUrl = imageUrl,
-        isRestockNeeded = lowStockThreshold?.let { totalQuantity <= it } == true,
+        isRestockNeeded = lowStockThreshold?.let { threshold -> totalQuantity?.let { it <= threshold } } == true,
         addedDate = addedDate
     )
 }

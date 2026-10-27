@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PantryPal Preview</string>
+    <string name="pantry_widget_name">PantryPal Preview</string>
+    <string name="widget_quick_add_title">PantryPal Preview quick add</string>
+</resources>

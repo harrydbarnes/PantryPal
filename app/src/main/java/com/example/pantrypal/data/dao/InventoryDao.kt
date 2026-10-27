@@ -16,8 +16,8 @@ interface InventoryDao {
     @Query("SELECT * FROM inventory WHERE inventoryId = :id")
     suspend fun getById(id: Long): InventoryEntity?
 
-    @Query("SELECT COALESCE(SUM(quantity), 0) FROM inventory WHERE itemId = :id")
-    suspend fun totalQuantity(id: Long): Double
+    @Query("SELECT * FROM inventory WHERE itemId = :id")
+    suspend fun getBatchesForItem(id: Long): List<InventoryEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInventory(inventory: InventoryEntity): Long
@@ -34,10 +34,10 @@ interface InventoryDao {
     @Query("SELECT * FROM inventory")
     suspend fun getAllInventorySnapshot(): List<InventoryEntity>
 
-    @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.lowStockThreshold, items.imageUrl, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE inventory.expirationDate IS NOT NULL AND inventory.expirationDate < :dueSoonCutoff ORDER BY inventory.expirationDate ASC")
+    @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.lowStockThreshold, items.imageUrl, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE inventory.quantity > 0 AND inventory.expirationDate IS NOT NULL AND inventory.expirationDate < :dueSoonCutoff ORDER BY inventory.expirationDate ASC")
     fun getExpiringItems(dueSoonCutoff: Long): Flow<List<InventoryWithItemMap>>
 
-    @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.lowStockThreshold, items.imageUrl, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE inventory.expirationDate IS NOT NULL AND inventory.expirationDate <= :dueSoonCutoff ORDER BY inventory.expirationDate ASC LIMIT :limit")
+    @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.lowStockThreshold, items.imageUrl, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE inventory.quantity > 0 AND inventory.expirationDate IS NOT NULL AND inventory.expirationDate <= :dueSoonCutoff ORDER BY inventory.expirationDate ASC LIMIT :limit")
     suspend fun getExpiringItemsSnapshot(dueSoonCutoff: Long, limit: Int): List<InventoryWithItemMap>
 
     @Query("SELECT inventory.*, items.name, items.barcode, items.defaultUnit, items.category, items.isVegetarian, items.isGlutenFree, items.isUsual, items.lowStockThreshold, items.imageUrl, items.createdAt FROM inventory INNER JOIN items ON inventory.itemId = items.itemId WHERE items.barcode = :barcode")

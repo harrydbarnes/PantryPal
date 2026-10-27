@@ -1,0 +1,19 @@
+{
+  "scope": "targeted initial review; incomplete",
+  "findings": [
+    {
+      "id": "BUG-001",
+      "severity": "high",
+      "priority": "P1",
+      "category": "integration and data integrity",
+      "component": "Firestore household sync rules",
+      "files": ["firebase/firestore.rules", "firebase/rules.test.mjs"],
+      "description": "A household member can reset protocol 4 state to protocol 3 migration and revision zero.",
+      "root_cause": "The migration guard accepts all protocol versions except 3.",
+      "impact": "Possible sync disruption and inconsistent revision history; data loss is not runtime-confirmed.",
+      "fix": "Allow protocol 3 migration only from legacy protocol 1 or 2.",
+      "verification": "Regression failed against the original rule; all 8 Firestore emulator tests passed with the fix.",
+      "status": "fixed and emulator verified; undeployed"
+    }
+  ]
+}

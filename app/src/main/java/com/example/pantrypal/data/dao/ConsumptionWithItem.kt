@@ -11,5 +11,6 @@ data class ConsumptionWithItem(
     val wasteReason: String?,
     // Item fields
     val name: String,
+    val unit: String? = null,
     val category: String
 )

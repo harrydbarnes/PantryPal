@@ -76,7 +76,8 @@ fun ConsumptionEntity.toBackupConsumption(): BackupConsumption = BackupConsumpti
     date = date,
     quantity = quantity,
     type = type.name,
-    wasteReason = wasteReason
+    wasteReason = wasteReason,
+    unit = unit
 )
 
 fun BackupConsumption.toEntity(): ConsumptionEntity = ConsumptionEntity(
@@ -85,7 +86,8 @@ fun BackupConsumption.toEntity(): ConsumptionEntity = ConsumptionEntity(
     date = date,
     quantity = quantity,
     type = ConsumptionType.valueOf(type),
-    wasteReason = wasteReason
+    wasteReason = wasteReason,
+    unit = unit
 )
 
 fun ShoppingSectionEntity.toBackupShoppingSection(): BackupShoppingSection =
@@ -168,7 +170,8 @@ fun MealEntity.toBackupMeal(): BackupMeal = BackupMeal(
     dayOfWeek = dayOfWeek,
     mealSlot = mealSlot,
     recipeId = recipeId,
-    servings = servings
+    servings = servings,
+    lastCookedAt = lastCookedAt
 )
 
 fun BackupMeal.toEntity(): MealEntity = MealEntity(
@@ -179,7 +182,8 @@ fun BackupMeal.toEntity(): MealEntity = MealEntity(
     dayOfWeek = dayOfWeek,
     mealSlot = mealSlot,
     recipeId = recipeId,
-    servings = servings ?: MealEntity.DEFAULT_SERVINGS
+    servings = servings ?: MealEntity.DEFAULT_SERVINGS,
+    lastCookedAt = lastCookedAt
 )
 
 fun RecipeEntity.toBackupRecipe(): BackupRecipe = BackupRecipe(

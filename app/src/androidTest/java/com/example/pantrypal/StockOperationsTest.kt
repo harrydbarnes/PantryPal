@@ -61,4 +61,84 @@ class StockOperationsTest {
         assertTrue(db.itemDao().getAllItemsSnapshot().isEmpty())
         assertTrue(db.shoppingDao().getAllShoppingItemsSnapshot().single().isChecked)
     }
+    @Test fun mixedUnitConsumptionTriggersRestockAndEmptyBatchesDoNotExpire() = runBlocking {
+        val id = db.itemDao().insertItem(ItemEntity(name = "Flour", defaultUnit = "kg", category = "General", isUsual = true, lowStockThreshold = 2.0))
+        db.inventoryDao().insertInventory(InventoryEntity(itemId = id, quantity = 1.0, unit = "kg"))
+        val batch = db.inventoryDao().insertInventory(InventoryEntity(itemId = id, quantity = 500.0, unit = "g", expirationDate = System.currentTimeMillis()))
+        stock.consume(listOf(StockOperations.Use(batch, id, 500.0)), ConsumptionType.FINISHED, "A")
+        assertEquals(1, db.shoppingDao().getAllShoppingItemsSnapshot().size)
+        assertTrue(db.inventoryDao().getExpiringItemsSnapshot(Long.MAX_VALUE, 10).isEmpty())
+    }
+
+    @Test fun connectedBackupRestoreIsRejectedWithoutChangingData() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val prefs = context.getSharedPreferences("firebase_household", android.content.Context.MODE_PRIVATE)
+        val kitchen = com.example.pantrypal.data.repository.KitchenRepository(db.itemDao(), db.inventoryDao(),
+            db.consumptionDao(), db.shoppingDao(), db.mealDao(), db.mealWeekDao(), db.shoppingSectionDao(), db.shoppingHistoryDao(), db)
+        val features = com.example.pantrypal.data.repository.PantryFeaturesRepository(context, db, kitchen)
+        prefs.edit().putString("household_id", "connected-test-household").commit()
+        try {
+            db.itemDao().insertItem(ItemEntity(name = "Keep me", defaultUnit = "pcs", category = "General"))
+            try { features.restoreBackupJson("{}"); fail("Connected restore must be rejected") }
+            catch (error: IllegalStateException) { assertTrue(error.message!!.contains("Disconnect")) }
+            assertTrue(features.importHouseholdSnapshot("{}").isFailure)
+            assertEquals("Keep me", db.itemDao().getAllItemsSnapshot().single().name)
+        } finally { prefs.edit().clear().commit() }
+    }
+
+    @Test fun starterMealsRespectRotationAndCompleteOldIngredientlessMeals() = runBlocking {
+        val kitchen = com.example.pantrypal.data.repository.KitchenRepository(db.itemDao(), db.inventoryDao(),
+            db.consumptionDao(), db.shoppingDao(), db.mealDao(), db.mealWeekDao(), db.shoppingSectionDao(), db.shoppingHistoryDao(), db)
+        db.mealDao().insertMeal(MealEntity(name = "Rice bowl", week = "A", ingredients = emptyList()))
+        db.mealDao().insertMeal(MealEntity(name = "Rice bowl", week = "B", ingredients = emptyList()))
+        kitchen.addOnboardingMeals(listOf(MealEntity(name = "Rice bowl", week = "B", ingredients = listOf("300 g rice"))))
+        kitchen.addOnboardingMeals(listOf(MealEntity(name = "Rice bowl", week = "B", ingredients = listOf("300 g rice"))))
+        val meals = db.mealDao().getAllMealsSnapshot()
+        assertEquals(2, meals.size)
+        assertTrue(meals.single { it.week == "A" }.ingredients.isEmpty())
+        assertEquals(listOf("300 g rice"), meals.single { it.week == "B" }.ingredients)
+    }
+
+    @Test fun cookingCommitsUsageAndCookedTimestampTogetherAndRejectsStaleReview() = runBlocking {
+        val kitchen = com.example.pantrypal.data.repository.KitchenRepository(db.itemDao(), db.inventoryDao(),
+            db.consumptionDao(), db.shoppingDao(), db.mealDao(), db.mealWeekDao(), db.shoppingSectionDao(), db.shoppingHistoryDao(), db)
+        val features = com.example.pantrypal.data.repository.PantryFeaturesRepository(ApplicationProvider.getApplicationContext(), db, kitchen)
+        val id = db.itemDao().insertItem(ItemEntity(name = "Rice", defaultUnit = "g", category = "General"))
+        val batch = db.inventoryDao().insertInventory(InventoryEntity(itemId = id, quantity = 500.0, unit = "g"))
+        db.mealDao().insertMeal(MealEntity(name = "Rice bowl", week = "B", ingredients = listOf("600 g rice"), servings = 4.0))
+        val review = features.prepareMealCooking(db.mealDao().getAllMealsSnapshot().single())
+        val plan = com.example.pantrypal.util.planCooking(review.recipe, review.stock, 0.5)
+        val uses = plan.lines.map { it.stock to it.suggestedQuantity }
+        features.recordCooking(review, uses, false)
+        assertEquals(200.0, db.inventoryDao().getById(batch)!!.quantity, 0.0)
+        assertEquals(300.0, db.consumptionDao().getAllHistory().single().quantity, 0.0)
+        assertNotNull(db.mealDao().getAllMealsSnapshot().single().lastCookedAt)
+        try { features.recordCooking(review, uses, false); fail("Stale cooking review must not deduct twice") }
+        catch (_: IllegalStateException) { }
+        assertEquals(200.0, db.inventoryDao().getById(batch)!!.quantity, 0.0)
+        val backup = features.exportBackupJson()
+        assertTrue(features.restoreBackupJson(backup) is com.example.pantrypal.data.backup.BackupDecodeResult.Success)
+        assertEquals("g", db.consumptionDao().getAllHistory().single().unit)
+        assertNotNull(db.mealDao().getAllMealsSnapshot().single().lastCookedAt)
+    }
+
+    @Test fun failedCookedTimestampRollsBackUsageAndLogOnlyKeepsStock() = runBlocking {
+        val kitchen = com.example.pantrypal.data.repository.KitchenRepository(db.itemDao(), db.inventoryDao(),
+            db.consumptionDao(), db.shoppingDao(), db.mealDao(), db.mealWeekDao(), db.shoppingSectionDao(), db.shoppingHistoryDao(), db)
+        val features = com.example.pantrypal.data.repository.PantryFeaturesRepository(ApplicationProvider.getApplicationContext(), db, kitchen)
+        val id = db.itemDao().insertItem(ItemEntity(name = "Rice", defaultUnit = "g", category = "General"))
+        val batch = db.inventoryDao().insertInventory(InventoryEntity(itemId = id, quantity = 500.0, unit = "g"))
+        db.mealDao().insertMeal(MealEntity(name = "Rice bowl", week = "B", ingredients = listOf("300 g rice")))
+        val review = features.prepareMealCooking(db.mealDao().getAllMealsSnapshot().single())
+        val uses = com.example.pantrypal.util.planCooking(review.recipe, review.stock, 1.0).lines.map { it.stock to it.suggestedQuantity }
+        db.openHelper.writableDatabase.execSQL("CREATE TRIGGER fail_cooked BEFORE UPDATE ON meals BEGIN SELECT RAISE(ABORT, 'injected meal failure'); END")
+        try { features.recordCooking(review, uses, false); fail() } catch (_: android.database.sqlite.SQLiteException) { }
+        assertEquals(500.0, db.inventoryDao().getById(batch)!!.quantity, 0.0)
+        assertTrue(db.consumptionDao().getAllHistory().isEmpty())
+        db.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_cooked")
+        features.recordCooking(review, emptyList(), true)
+        assertEquals(500.0, db.inventoryDao().getById(batch)!!.quantity, 0.0)
+        assertNotNull(db.mealDao().getAllMealsSnapshot().single().lastCookedAt)
+    }
+
 }

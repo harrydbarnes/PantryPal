@@ -31,7 +31,7 @@ class ExpirationWorker(
         if (expiringItems.isNotEmpty()) {
             val count = expiringItems.size
             val expiredCount = expiringItems.count {
-                it.expirationDate?.let { date -> date < now } == true
+                it.expirationDate?.let { date -> classifyExpiry(date, now) == ExpiryStatus.EXPIRED } == true
             }
             val contentText = if (count == 1) {
                 if (expiredCount == 1) {

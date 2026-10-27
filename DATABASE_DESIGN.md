@@ -66,3 +66,9 @@ Room column defaults are declared on the entities and in migration SQL so migrat
 `BackupDocument` is a versioned JSON contract containing every table plus preferences. Import validates identifiers, references, quantities, currencies, and recipe ratings before a dependency-ordered transactional replace. The user chooses files through Android's Storage Access Framework; PantryPal does not request broad storage permission.
 
 `HouseholdSnapshotEnvelope` wraps the same backup with revision metadata and a SHA-256 integrity checksum. The checksum detects accidental change but is not encryption or proof of sender identity. Record versions, tombstones, deterministic merge rules, and an isolated transport interface define a future real-time path without coupling Room data to a backend.
+
+## Migration 10 → 11: cooking records and usage units
+
+Adds nullable `meals.lastCookedAt` and `consumption_history.unit`. Existing stock, history and plans are preserved; historical usage units remain unknown rather than being guessed. New consumption records retain the batch unit. Both columns round-trip in the complete backup contract with null defaults for older files.
+
+Cooking confirmation checks the reviewed meal/recipe and selected stock snapshots, then writes stock, consumption, restock and cooked timestamps in one Room transaction. A failed write rolls everything back; a stale review must be reopened. Recording cooking without stock changes only updates the cooked timestamp.

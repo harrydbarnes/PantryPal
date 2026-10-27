@@ -16,18 +16,21 @@ class StockOperations(private val db: KitchenDatabase) {
             require(stock.itemId == use.itemId) { "The stock item has changed. Refresh and try again." }
             val amount = minOf(use.quantity, stock.quantity)
             if (amount <= 0) return@forEach
-            db.consumptionDao().insertConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = amount, type = type, wasteReason = reason))
+            db.consumptionDao().insertConsumption(ConsumptionEntity(itemId = stock.itemId, quantity = amount, type = type, wasteReason = reason, unit = stock.unit))
             db.inventoryDao().updateInventory(stock.copy(quantity = stock.quantity - amount))
             if (type == ConsumptionType.FINISHED) {
                 val item = db.itemDao().getItemById(stock.itemId)
-                if (item != null && item.isUsual && db.inventoryDao().totalQuantity(item.itemId) <= (item.lowStockThreshold ?: 0.0)) restock(item, week)
+                if (item != null && item.isUsual && com.example.pantrypal.util.stockQuantityInUnit(db.inventoryDao().getBatchesForItem(item.itemId), item.defaultUnit)
+                        ?.let { it <= (item.lowStockThreshold ?: 0.0) } == true) restock(item, week)
             }
         }
     }
 
     suspend fun restock(item: ItemEntity, week: String) = db.withTransaction {
+        val recurring = db.shoppingListDao().sections().filter { it.recursEveryWeek }.map { it.sectionId }.toSet()
         val listed = db.shoppingDao().getAllShoppingItemsSnapshot().any {
-            !it.isChecked && normalizeShoppingName(it.name) == normalizeShoppingName(item.name) && (it.weekId == null || it.weekId == week)
+            !it.isChecked && normalizeShoppingName(it.name) == normalizeShoppingName(item.name) && (it.weekId == null || it.weekId == week || it.sectionId in recurring) &&
+                com.example.pantrypal.util.convertShoppingQuantity(1.0, item.defaultUnit, it.unit) != null
         }
         if (!listed) db.shoppingListDao().upsertShoppingItem(item.name,
             (item.lowStockThreshold ?: 1.0).coerceAtLeast(1.0), "RESTOCK", week, unit = item.defaultUnit)

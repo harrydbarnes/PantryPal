@@ -149,6 +149,7 @@ object BackupValidator {
             if (!consumption.quantity.isFinite() || consumption.quantity <= 0) {
                 errors += "consumption[$index] has an invalid quantity."
             }
+            if (consumption.unit?.isBlank() == true) errors += "consumption[$index] has a blank unit."
             if (consumption.type !in setOf("FINISHED", "WASTED")) {
                 errors += "consumption[$index] has unsupported type '${consumption.type}'."
             }
