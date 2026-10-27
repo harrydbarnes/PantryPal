@@ -5,9 +5,9 @@
 | Existing debug/release | `com.example.pantrypal` | PantryPal |
 | Preview | `com.example.pantrypal.preview` | PantryPal Preview |
 
-Install the preview APK from the `pantrypal-preview-apk` CI artifact. It installs as a second app and starts with its own pantry, preferences, permissions, widgets and sign-in. The preview launcher icon has a purple P badge. Future signed preview APKs update this preview installation.
+Run the **Build Android APK** workflow manually with **Build a signed Preview APK** enabled, then install the preview APK from the `pantrypal-preview-apk` artifact. It installs as a second app and starts with its own pantry, preferences, permissions, widgets and sign-in. The preview launcher icon has a purple P badge. Future signed preview APKs update this preview installation.
 
-The normal debug/release packages retain their existing identities. The preview has separate provider authorities, and its voice shortcuts target the preview package. CI installs both packages, launches both and checks that the same private filename has independent contents in each app.
+The normal debug/release packages retain their existing identities. The preview has separate provider authorities, and its voice shortcuts target the preview package. Android emulator CI installs both packages, launches both and checks that the same private filename has independent contents in each app.
 
 To try existing kitchen data, export a complete backup from PantryPal and restore that file in the disconnected preview app. Nothing is copied automatically. The apps use the same Firebase project: explicitly joining the same shopping household will share shopping changes between them.
 
