@@ -194,10 +194,12 @@ jobs:
           java-version: '21'
           distribution: temurin
       - uses: gradle/actions/setup-gradle@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '22'
-      - run: npm install --ignore-scripts
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: firebase/package-lock.json
+      - run: npm ci --ignore-scripts
         working-directory: firebase
       - name: Enable emulator acceleration
         run: |
@@ -226,20 +228,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: firebase/package-lock.json
       - uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: temurin
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
         working-directory: firebase
       - run: npm test
         working-directory: firebase
-      - name: Save resolved dependency lock
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: firebase-test-lock
-          path: firebase/package-lock.json
