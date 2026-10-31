@@ -30,6 +30,15 @@ on:
       - '.github/workflows/android_build.yml'
       - '.github/scripts/**'
   workflow_dispatch:
+    inputs:
+      full_suite:
+        description: Run both Android emulator versions and release assembly
+        type: boolean
+        default: true
+      preview_apk:
+        description: Build a signed Preview APK
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,7 +48,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.filter.outputs.android }}
+      firebase: ${{ steps.filter.outputs.firebase }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != pull_request ]]; then
+            echo "android=true" >> "$GITHUB_OUTPUT"
+            echo "firebase=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only -z "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-files"
+          python3 - <<'PYTHON'
+          import os
+          from pathlib import Path
+          paths = Path(os.environ['RUNNER_TEMP'], 'changed-files').read_bytes().split(b'\0')
+          paths = [os.fsdecode(p) for p in paths if p]
+          shared = lambda p: p.startswith(('.github/scripts/', 'gradle/')) or p in ('.github/workflows/android_build.yml', 'gradlew', 'gradlew.bat', 'gradle.properties') or ('/' not in p and p.endswith('.gradle.kts'))
+          android = any(p.startswith('app/') or shared(p) for p in paths)
+          firebase = any(p.startswith('firebase/') or p == 'firebase.json' or shared(p) for p in paths)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f"android={str(android).lower()}\nfirebase={str(firebase).lower()}\n")
+          PYTHON
+
   build:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -57,7 +102,11 @@ jobs:
       uses: gradle/actions/setup-gradle@v6
 
     - name: Test and build debug APK
-      run: bash .github/scripts/gradle-with-bounded-retry.sh ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintDebug --build-cache --configuration-cache --stacktrace
+      run: bash .github/scripts/gradle-with-bounded-retry.sh ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --build-cache --configuration-cache --stacktrace
+
+    - name: Build release APK
+      if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_suite)
+      run: bash .github/scripts/gradle-with-bounded-retry.sh ./gradlew :app:assembleRelease --build-cache --configuration-cache --stacktrace
 
     - name: Print lint diagnostics
       if: failure()
@@ -94,7 +143,7 @@ jobs:
         PYTHON
 
   preview-apk:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'workflow_dispatch' && inputs.preview_apk
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -130,10 +179,12 @@ jobs:
         run: rm -f "$PANTRYPAL_RELEASE_KEYSTORE"
 
   shopping-sync-tests:
+    needs: changes
+    if: needs.changes.outputs.android == 'true' || needs.changes.outputs.firebase == 'true'
     strategy:
       fail-fast: false
       matrix:
-        api-level: [35, 36]
+        api-level: ${{ fromJSON((github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_suite)) && '[35,36]' || '[35]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -169,6 +220,8 @@ jobs:
             app/build/review-profile/
 
   firestore-rules:
+    needs: changes
+    if: needs.changes.outputs.firebase == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
