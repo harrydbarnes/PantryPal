@@ -49,14 +49,23 @@
 # as strings, so keep the names stable across a release update.
 -keepnames class com.example.pantrypal.util.ExpirationWorker
 -keepnames class com.example.pantrypal.util.ShoppingReminderWorker
+-keepnames class com.example.pantrypal.widget.WidgetUpdateWorker
+-keepnames class com.example.pantrypal.integration.KeepApiSyncWorker
 
 # Preserve fields explicitly mapped by Gson annotations in any future model.
 -keepclassmembers,allowoptimization class * {
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
-# Shopping protocol v2 JSON must survive release optimisation.
+# Shopping sync JSON and Gson-persisted UI drafts must survive release optimisation.
 -keepclassmembers,allowoptimization class com.example.pantrypal.data.household.ShoppingRecord { <fields>; }
 -keepclassmembers,allowoptimization class com.example.pantrypal.data.household.ShoppingWireState { <fields>; }
--keepclassmembers,allowoptimization class com.example.pantrypal.data.entity.ShoppingItemEntity { <fields>; }
+-keepclassmembers,allowoptimization class com.example.pantrypal.data.entity.ShoppingListEntity { <fields>; }
+-keepclassmembers,allowoptimization enum com.example.pantrypal.data.entity.StoreTag { <fields>; }
 -keepclassmembers,allowoptimization class com.example.pantrypal.data.entity.ShoppingSectionEntity { <fields>; }
+-keepclassmembers,allowoptimization class com.example.pantrypal.data.entity.MealWeekEntity { <fields>; }
+-keepclassmembers,allowoptimization class com.example.pantrypal.data.entity.MealEntity { <fields>; }
+-keepclassmembers,allowoptimization class com.example.pantrypal.data.dao.InventoryWithItemMap { <fields>; }
+-keepclassmembers,allowoptimization class com.example.pantrypal.viewmodel.ShoppingBuildPreview { <fields>; }
+-keepclassmembers,allowoptimization class com.example.pantrypal.util.ShoppingReconciliationLine { <fields>; }
+-keepclassmembers,allowoptimization enum com.example.pantrypal.util.ShoppingNeedStatus { <fields>; }
