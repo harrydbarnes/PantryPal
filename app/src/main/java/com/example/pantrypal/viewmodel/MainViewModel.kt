@@ -977,14 +977,6 @@ class MainViewModel(private val repository: KitchenRepository, application: Appl
         repository.prepareNextShop()
         markShoppingChanged()
     }
-
-    // Export
-    fun exportData() {
-        viewModelScope.launch {
-            val data = repository.getAllDataForExport()
-            println("Exporting: $data")
-        }
-    }
 }
 
 data class InventoryUiModel(

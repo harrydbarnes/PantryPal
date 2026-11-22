@@ -41,20 +41,9 @@ class PantryPalApplication : Application(), Configuration.Provider {
         super.onCreate()
         householdSync
         database.invalidationTracker.addObserver(object : androidx.room.InvalidationTracker.Observer(
-            "shopping_layout",
             "shopping_list",
             "inventory",
-            "items",
-            "consumption_history",
-            "meals",
-            "meal_weeks",
-            "shopping_sections",
-            "shopping_history",
-            "shopping_ingest_state",
-            "price_history",
-            "weekly_budgets",
-            "recipes",
-            "recipe_ingredients"
+            "items"
         ) {
             override fun onInvalidated(tables: Set<String>) {
                 PantryPalWidgetProvider.updateWidgets(this@PantryPalApplication)

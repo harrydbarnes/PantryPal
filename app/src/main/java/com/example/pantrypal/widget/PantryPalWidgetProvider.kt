@@ -28,6 +28,10 @@ class PantryPalWidgetProvider : AppWidgetProvider() {
         private const val UNIQUE_WORK_NAME = "pantry_pal_widget_update"
 
         fun updateWidgets(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            val component = ComponentName(context, PantryPalWidgetProvider::class.java)
+            if (manager.getAppWidgetIds(component).isEmpty()) return
+
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_WORK_NAME,
                 ExistingWorkPolicy.KEEP,
@@ -42,6 +46,11 @@ class PantryPalWidgetProvider : AppWidgetProvider() {
         }
 
         internal suspend fun updateWidgetsNow(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            val component = ComponentName(context, PantryPalWidgetProvider::class.java)
+            val widgetIds = manager.getAppWidgetIds(component)
+            if (widgetIds.isEmpty()) return
+
             val app = context.applicationContext as PantryPalApplication
             val database = app.database
             val openCount = database.shoppingDao().countOpenShoppingItems()
@@ -49,9 +58,7 @@ class PantryPalWidgetProvider : AppWidgetProvider() {
                 expiringCutoffMillis(),
                 3
             )
-            val manager = AppWidgetManager.getInstance(context)
-            val component = ComponentName(context, PantryPalWidgetProvider::class.java)
-            manager.getAppWidgetIds(component).forEach { widgetId ->
+            widgetIds.forEach { widgetId ->
                 manager.updateAppWidget(widgetId, createViews(context, openCount, expiring.map { it.name }))
             }
         }
